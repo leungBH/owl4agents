@@ -1,0 +1,8 @@
+@prefix : <http://example.org/malformed-rdf#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+
+<http://example.org/malformed-rdf> a owl:Ontology .
+
+:SomeClass a owl:Class ;
+  rdfs:label "Missing rdfs prefix declaration" .
+  :invalidProperty "value" .

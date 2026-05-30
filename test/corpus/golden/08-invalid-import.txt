@@ -1,0 +1,2 @@
+This is not a valid OWL/RDF ontology file.
+It contains arbitrary text that cannot be parsed by OWL API or any RDF parser.

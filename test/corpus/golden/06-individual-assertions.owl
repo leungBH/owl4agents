@@ -1,0 +1,62 @@
+@prefix : <http://example.org/individual-assertions#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+<http://example.org/individual-assertions> a owl:Ontology ;
+  rdfs:label "Individual Assertions Ontology" ;
+  rdfs:comment "Tests individual type assertions, object property assertions, and data property assertions." .
+
+:Person a owl:Class ;
+  rdfs:label "Person" .
+
+:Organization a owl:Class ;
+  rdfs:label "Organization" .
+
+:Student a owl:Class ;
+  rdfs:label "Student" ;
+  rdfs:subClassOf :Person .
+
+:Professor a owl:Class ;
+  rdfs:label "Professor" ;
+  rdfs:subClassOf :Person .
+
+:University a owl:Class ;
+  rdfs:label "University" ;
+  rdfs:subClassOf :Organization .
+
+:worksFor a owl:ObjectProperty ;
+  rdfs:label "works for" ;
+  rdfs:domain :Person ;
+  rdfs:range :Organization .
+
+:teaches a owl:ObjectProperty ;
+  rdfs:label "teaches" ;
+  rdfs:domain :Professor ;
+  rdfs:range :Student .
+
+:hasName a owl:DatatypeProperty ;
+  rdfs:label "has name" ;
+  rdfs:domain :Person ;
+  rdfs:range xsd:string .
+
+:hasAge a owl:DatatypeProperty ;
+  rdfs:label "has age" ;
+  rdfs:domain :Person ;
+  rdfs:range xsd:integer .
+
+:alice a :Student ;
+  rdfs:label "Alice" ;
+  :hasName "Alice Smith" ;
+  :hasAge 22 .
+
+:bob a :Professor ;
+  rdfs:label "Bob" ;
+  :hasName "Bob Johnson" ;
+  :hasAge 45 ;
+  :worksFor :stanford ;
+  :teaches :alice .
+
+:stanford a :University ;
+  rdfs:label "Stanford University" .

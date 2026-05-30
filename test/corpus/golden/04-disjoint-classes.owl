@@ -1,0 +1,25 @@
+@prefix : <http://example.org/disjoint-classes#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+
+<http://example.org/disjoint-classes> a owl:Ontology ;
+  rdfs:label "Disjoint Classes Ontology" ;
+  rdfs:comment "Tests disjoint class axioms." .
+
+:Cat a owl:Class ;
+  rdfs:label "Cat" .
+
+:Dog a owl:Class ;
+  rdfs:label "Dog" .
+
+[] a owl:AllDisjointClasses ;
+  owl:members ( :Cat :Dog ) .
+
+:LivingThing a owl:Class ;
+  rdfs:label "Living Thing" .
+
+:NonLivingThing a owl:Class ;
+  rdfs:label "Non-Living Thing" .
+
+:LivingThing owl:disjointWith :NonLivingThing .

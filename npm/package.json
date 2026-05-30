@@ -1,0 +1,20 @@
+{
+  "name": "owl4agents",
+  "version": "0.1.0",
+  "description": "Local OWL ontology reasoning and MCP server for LLM agents",
+  "keywords": ["owl", "ontology", "mcp", "agents", "sparql"],
+  "license": "Apache-2.0",
+  "bin": {
+    "owl4agents": "./bin/owl4agents.js"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "files": [
+    "bin/"
+  ],
+  "repository": {
+    "type": "git",
+    "url": ""
+  }
+}

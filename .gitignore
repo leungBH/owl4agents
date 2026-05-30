@@ -1,0 +1,34 @@
+# 隐藏文件夹（工具/IDE生成的配置目录）
+.claude/
+.codex/
+.trae/
+openspec/
+doc/
+reports/
+temp/
+
+# Gradle
+.gradle/
+.gradle-local/
+build/
+*.zip
+# Do NOT ignore gradlew / gradlew.bat — they are required for reproducible builds
+# Do NOT ignore gradle-wrapper.jar — it must be committed for wrapper to work
+
+# IDE
+.idea/
+*.iml
+.vscode/settings.json
+
+# Java
+*.class
+# Ignore built jars but NOT the Gradle wrapper jar
+modules/**/build/libs/*.jar
+*.war
+
+# OS
+.DS_Store
+Thumbs.db
+
+# owl4agents local workspace (created at runtime)
+.owl4agents/

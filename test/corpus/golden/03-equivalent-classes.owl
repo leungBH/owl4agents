@@ -1,0 +1,24 @@
+@prefix : <http://example.org/equivalent-classes#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+
+<http://example.org/equivalent-classes> a owl:Ontology ;
+  rdfs:label "Equivalent Classes Ontology" ;
+  rdfs:comment "Tests equivalent class axioms." .
+
+:Person a owl:Class ;
+  rdfs:label "Person" .
+
+:Human a owl:Class ;
+  rdfs:label "Human" .
+
+:Person owl:equivalentClass :Human .
+
+:Employee a owl:Class ;
+  rdfs:label "Employee" .
+
+:Worker a owl:Class ;
+  rdfs:label "Worker" .
+
+:Employee owl:equivalentClass :Worker .
