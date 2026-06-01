@@ -87,16 +87,15 @@ public class EntityIndex {
     }
 
     private String getLabel(OWLEntity entity, OWLOntology ontology) {
-        // EntitySearcher.getAnnotationAssertionAxioms returns Collection<OWLAnnotationAssertionAxiom>
-        // OWL API 4.5.x uses Guava Optional for asLiteral()
+        // OWL API 5.x: EntitySearcher.getAnnotationAssertionAxioms returns Stream
         Optional<OWLAnnotationAssertionAxiom> firstLabel = EntitySearcher.getAnnotationAssertionAxioms(
-            entity.getIRI(), ontology).stream()
+            entity.getIRI(), ontology)
             .filter(ax -> ax.getProperty().isLabel())
             .findFirst();
 
         if (firstLabel.isPresent()) {
             OWLAnnotationValue value = firstLabel.get().getValue();
-            com.google.common.base.Optional<OWLLiteral> literalOpt = value.asLiteral();
+            Optional<OWLLiteral> literalOpt = value.asLiteral();
             if (literalOpt.isPresent()) {
                 return literalOpt.get().getLiteral();
             }
@@ -105,15 +104,14 @@ public class EntityIndex {
     }
 
     private String getComment(OWLEntity entity, OWLOntology ontology) {
-        // EntitySearcher.getAnnotationAssertionAxioms returns Collection<OWLAnnotationAssertionAxiom>
         Optional<OWLAnnotationAssertionAxiom> firstComment = EntitySearcher.getAnnotationAssertionAxioms(
-            entity.getIRI(), ontology).stream()
+            entity.getIRI(), ontology)
             .filter(ax -> ax.getProperty().isComment())
             .findFirst();
 
         if (firstComment.isPresent()) {
             OWLAnnotationValue value = firstComment.get().getValue();
-            com.google.common.base.Optional<OWLLiteral> literalOpt = value.asLiteral();
+            Optional<OWLLiteral> literalOpt = value.asLiteral();
             if (literalOpt.isPresent()) {
                 return literalOpt.get().getLiteral();
             }

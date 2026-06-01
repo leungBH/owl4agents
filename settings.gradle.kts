@@ -6,6 +6,8 @@ include(
     "modules:ontology-query",
     "modules:ontology-retrieval",
     "modules:ontology-storage",
+    "modules:ontology-reasoner",
+    "modules:ontology-validation",
     "modules:ontology-cli",
     "modules:ontology-mcp",
     "modules:ontology-distribution"

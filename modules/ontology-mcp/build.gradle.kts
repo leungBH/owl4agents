@@ -8,6 +8,8 @@ dependencies {
     implementation(project(":modules:ontology-owlapi"))
     implementation(project(":modules:ontology-query"))
     implementation(project(":modules:ontology-retrieval"))
+    implementation(project(":modules:ontology-reasoner"))
+    implementation(project(":modules:ontology-validation"))
 
     // Apache Jena for SPARQL execution
     implementation("org.apache.jena:apache-jena-libs:5.3.0")

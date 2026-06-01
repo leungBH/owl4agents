@@ -1,0 +1,163 @@
+@prefix : <http://example.org/relation-assertions#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+<http://example.org/relation-assertions> a owl:Ontology ;
+  rdfs:label "Relation Assertion Ontology" ;
+  rdfs:comment "Ontology with explicit object property relations between named individuals for testing relation assertion checking and relation discovery between entities." .
+
+# Classes
+:Person a owl:Class ;
+  rdfs:label "Person" .
+
+:Place a owl:Class ;
+  rdfs:label "Place" .
+
+:Country a owl:Class ;
+  rdfs:label "Country" ;
+  rdfs:subClassOf :Place .
+
+:City a owl:Class ;
+  rdfs:label "City" ;
+  rdfs:subClassOf :Place .
+
+:Company a owl:Class ;
+  rdfs:label "Company" .
+
+:Department a owl:Class ;
+  rdfs:label "Department" .
+
+# Object properties with various characteristics
+:livesIn a owl:ObjectProperty ;
+  rdfs:label "lives in" ;
+  rdfs:domain :Person ;
+  rdfs:range :Place .
+
+:worksAt a owl:ObjectProperty ;
+  rdfs:label "works at" ;
+  rdfs:domain :Person ;
+  rdfs:range :Company .
+
+:belongsTo a owl:ObjectProperty ;
+  rdfs:label "belongs to" ;
+  rdfs:domain :Person ;
+  rdfs:range :Department .
+
+:isPartOf a owl:ObjectProperty ;
+  rdfs:label "is part of" ;
+  rdfs:domain :Department ;
+  rdfs:range :Company .
+
+:isLocatedIn a owl:ObjectProperty ;
+  rdfs:label "is located in" ;
+  rdfs:domain :Company ;
+  rdfs:range :City .
+
+:hasCitizenship a owl:ObjectProperty ;
+  rdfs:label "has citizenship" ;
+  rdfs:domain :Person ;
+  rdfs:range :Country .
+
+:isFriendOf a owl:ObjectProperty ;
+  rdfs:label "is friend of" ;
+  rdfs:domain :Person ;
+  rdfs:range :Person ;
+  a owl:SymmetricProperty .
+
+:isMentorOf a owl:ObjectProperty ;
+  rdfs:label "is mentor of" ;
+  rdfs:domain :Person ;
+  rdfs:range :Person ;
+  owl:inverseOf :hasMentor .
+
+:hasMentor a owl:ObjectProperty ;
+  rdfs:label "has mentor" ;
+  rdfs:domain :Person ;
+  rdfs:range :Person .
+
+# Transitive property for inferred relation testing
+:isAncestorOf a owl:ObjectProperty ;
+  rdfs:label "is ancestor of" ;
+  rdfs:domain :Person ;
+  rdfs:range :Person ;
+  a owl:TransitiveProperty .
+
+:isParentOf a owl:ObjectProperty ;
+  rdfs:label "is parent of" ;
+  rdfs:domain :Person ;
+  rdfs:range :Person ;
+  rdfs:subPropertyOf :isAncestorOf .
+
+# Individuals with explicit relation assertions
+:alice a :Person ;
+  rdfs:label "Alice" ;
+  :livesIn :paris ;
+  :worksAt :techCorp ;
+  :belongsTo :engineering ;
+  :hasCitizenship :france ;
+  :isFriendOf :bob ;
+  :isMentorOf :charlie ;
+  :isParentOf :david .
+
+:bob a :Person ;
+  rdfs:label "Bob" ;
+  :livesIn :paris ;
+  :worksAt :techCorp ;
+  :belongsTo :marketing ;
+  :hasCitizenship :france ;
+  :isFriendOf :alice .
+
+:charlie a :Person ;
+  rdfs:label "Charlie" ;
+  :livesIn :london ;
+  :worksAt :techCorp ;
+  :belongsTo :engineering ;
+  :hasCitizenship :uk ;
+  :hasMentor :alice .
+
+:david a :Person ;
+  rdfs:label "David" ;
+  :livesIn :paris ;
+  :hasCitizenship :france .
+
+:eve a :Person ;
+  rdfs:label "Eve" ;
+  :livesIn :london ;
+  :worksAt :dataInc ;
+  :hasCitizenship :uk .
+
+# Place and organization individuals
+:paris a :City ;
+  rdfs:label "Paris" .
+
+:london a :City ;
+  rdfs:label "London" .
+
+:france a :Country ;
+  rdfs:label "France" .
+
+:uk a :Country ;
+  rdfs:label "United Kingdom" .
+
+:techCorp a :Company ;
+  rdfs:label "Tech Corp" ;
+  :isLocatedIn :paris .
+
+:dataInc a :Company ;
+  rdfs:label "Data Inc" ;
+  :isLocatedIn :london .
+
+:engineering a :Department ;
+  rdfs:label "Engineering" ;
+  :isPartOf :techCorp .
+
+:marketing a :Department ;
+  rdfs:label "Marketing" ;
+  :isPartOf :techCorp .
+
+# Transitive chain for inferred relation testing:
+# alice isParentOf david (explicit)
+# isParentOf rdfs:subPropertyOf isAncestorOf (transitive)
+# So alice isAncestorOf david should be inferred

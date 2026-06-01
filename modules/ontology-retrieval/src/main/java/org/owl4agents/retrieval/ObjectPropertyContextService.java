@@ -48,7 +48,7 @@ public class ObjectPropertyContextService {
         List<String> subProperties = getSubProperties(prop);
         List<String> characteristics = getCharacteristics(prop);
 
-        ObjectPropertyContext context = new ObjectPropertyContext(
+        ObjectPropertyContext context = ObjectPropertyContext.explicit(
             indexEntry.iri(),
             indexEntry.prefixedName(),
             indexEntry.label(),
@@ -65,30 +65,30 @@ public class ObjectPropertyContextService {
     }
 
     private List<String> getDomain(OWLObjectProperty prop) {
-        // EntitySearcher.getDomains returns Collection<OWLClassExpression>
-        return EntitySearcher.getDomains(prop, ontology).stream()
+        // OWL API 5.x: EntitySearcher.getDomains returns Stream<OWLClassExpression>
+        return EntitySearcher.getDomains(prop, ontology)
             .filter(expr -> expr instanceof OWLClass)
             .map(expr -> ((OWLClass) expr).getIRI().toString())
             .collect(Collectors.toList());
     }
 
     private List<String> getRange(OWLObjectProperty prop) {
-        return EntitySearcher.getRanges(prop, ontology).stream()
+        return EntitySearcher.getRanges(prop, ontology)
             .filter(expr -> expr instanceof OWLClass)
             .map(expr -> ((OWLClass) expr).getIRI().toString())
             .collect(Collectors.toList());
     }
 
     private List<String> getInverseProperties(OWLObjectProperty prop) {
-        // EntitySearcher.getInverses returns Collection<OWLObjectPropertyExpression>
-        return EntitySearcher.getInverses(prop, ontology).stream()
+        // OWL API 5.x: EntitySearcher.getInverses returns Stream<OWLObjectPropertyExpression>
+        return EntitySearcher.getInverses(prop, ontology)
             .filter(expr -> expr instanceof OWLObjectProperty)
             .map(expr -> ((OWLObjectProperty) expr).getIRI().toString())
             .collect(Collectors.toList());
     }
 
     private List<String> getSuperProperties(OWLObjectProperty prop) {
-        return EntitySearcher.getSuperProperties(prop, ontology).stream()
+        return EntitySearcher.getSuperProperties(prop, ontology)
             .filter(expr -> expr instanceof OWLObjectProperty)
             .map(expr -> ((OWLObjectProperty) expr).getIRI().toString())
             .filter(iri -> !iri.contains("owl#topObjectProperty"))
@@ -96,7 +96,7 @@ public class ObjectPropertyContextService {
     }
 
     private List<String> getSubProperties(OWLObjectProperty prop) {
-        return EntitySearcher.getSubProperties(prop, ontology).stream()
+        return EntitySearcher.getSubProperties(prop, ontology)
             .filter(expr -> expr instanceof OWLObjectProperty)
             .map(expr -> ((OWLObjectProperty) expr).getIRI().toString())
             .filter(iri -> !iri.contains("owl#bottomObjectProperty"))

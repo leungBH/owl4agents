@@ -9,6 +9,8 @@ dependencies {
     implementation(project(":modules:ontology-owlapi"))
     implementation(project(":modules:ontology-query"))
     implementation(project(":modules:ontology-retrieval"))
+    implementation(project(":modules:ontology-reasoner"))
+    implementation(project(":modules:ontology-validation"))
     implementation(project(":modules:ontology-cli"))
     implementation(project(":modules:ontology-mcp"))
 
@@ -18,6 +20,8 @@ dependencies {
     testImplementation(project(":modules:ontology-owlapi"))
     testImplementation(project(":modules:ontology-query"))
     testImplementation(project(":modules:ontology-retrieval"))
+    testImplementation(project(":modules:ontology-reasoner"))
+    testImplementation(project(":modules:ontology-validation"))
     testImplementation(project(":modules:ontology-cli"))
     testImplementation(project(":modules:ontology-mcp"))
 }

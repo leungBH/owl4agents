@@ -80,7 +80,7 @@ public class QaContextService {
                         // Convert data property to object property context shape for QA output
                         // Data property context is included via propertyContext
                         DataPropertyContext dpCtx = ((ServiceResult.Success<DataPropertyContext>) ctx).data();
-                        propertyContextList.add(new ObjectPropertyContext(
+                        propertyContextList.add(ObjectPropertyContext.explicit(
                             dpCtx.iri(), dpCtx.prefixedName(), dpCtx.label(), dpCtx.comment(),
                             dpCtx.domain(), dpCtx.range(), List.of(), List.of(), dpCtx.subProperties(),
                             List.of("data_property")));
@@ -112,7 +112,7 @@ public class QaContextService {
         ContextBounds bounds = new ContextBounds(maxEntitiesValue, maxDepthValue,
             determineIncludedSections(classContextList, propertyContextList, individualContextList));
 
-        QaContext qaContext = new QaContext(
+        QaContext qaContext = QaContext.explicit(
             question, matchedEntities, classContextList, propertyContextList,
             individualContextList, sparqlEvidence, naturalLanguageContext, bounds, warnings
         );

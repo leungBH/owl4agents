@@ -1,0 +1,56 @@
+@prefix : <http://example.org/inconsistent#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+<http://example.org/inconsistent> a owl:Ontology ;
+  rdfs:label "Inconsistent Ontology" ;
+  rdfs:comment "Intentionally inconsistent ontology with conflicting subclass and disjointness axioms. Used for testing consistency checking, unsat detection, and inconsistency explanation." .
+
+# Base classes
+:LivingBeing a owl:Class ;
+  rdfs:label "Living Being" .
+
+:Animal a owl:Class ;
+  rdfs:label "Animal" ;
+  rdfs:subClassOf :LivingBeing .
+
+:Plant a owl:Class ;
+  rdfs:label "Plant" ;
+  rdfs:subClassOf :LivingBeing .
+
+# Conflict 1: Animal and Plant are declared disjoint
+[] a owl:AllDisjointClasses ;
+  owl:members ( :Animal :Plant ) .
+
+# Conflict 2: Creature is both a subclass of Animal and Plant
+# This makes Creature unsatisfiable since Animal and Plant are disjoint
+:Creature a owl:Class ;
+  rdfs:label "Creature" ;
+  rdfs:subClassOf :Animal ;
+  rdfs:subClassOf :Plant .
+
+# Conflict 3: An individual that is both an Animal and a Plant
+# This makes the ontology inconsistent (not just unsat classes)
+:chimera a :Animal , :Plant ;
+  rdfs:label "Chimera" .
+
+# Additional conflict: Mushroom is declared both LivingBeing and NonLivingThing
+:NonLivingThing a owl:Class ;
+  rdfs:label "Non-Living Thing" ;
+  owl:disjointWith :LivingBeing .
+
+:Mushroom a owl:Class ;
+  rdfs:label "Mushroom" ;
+  rdfs:subClassOf :LivingBeing ;
+  rdfs:subClassOf :NonLivingThing .
+
+# Object property for further testing
+:hasCharacteristic a owl:ObjectProperty ;
+  rdfs:label "has characteristic" ;
+  rdfs:domain :LivingBeing ;
+  rdfs:range :Characteristic .
+
+:Characteristic a owl:Class ;
+  rdfs:label "Characteristic" .

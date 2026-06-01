@@ -18,6 +18,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Instant;
+import java.util.Optional;
 
 /**
  * OWL/RDF file import through OWL API.
@@ -113,8 +114,8 @@ public class OntologyImporter {
     }
 
     private String extractDisplayName(OWLOntology ontology, OntologyId ontologyId) {
-        // OWL API 4.5.x uses com.google.common.base.Optional, not java.util.Optional
-        com.google.common.base.Optional<IRI> ontologyIRI = ontology.getOntologyID().getOntologyIRI();
+        // OWL API 5.1.20 uses java.util.Optional for getOntologyIRI()
+        Optional<IRI> ontologyIRI = ontology.getOntologyID().getOntologyIRI();
         if (ontologyIRI.isPresent()) {
             return ontologyIRI.get().getShortForm();
         }

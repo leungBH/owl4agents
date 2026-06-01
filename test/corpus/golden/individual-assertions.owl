@@ -1,0 +1,149 @@
+@prefix : <http://example.org/v2-individual-assertions#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+<http://example.org/v2-individual-assertions> a owl:Ontology ;
+  rdfs:label "V2 Individual Assertions Ontology" ;
+  rdfs:comment "Tests sameAs, differentFrom, object/data property assertions, membership checks, and individual retrieval for v0.2 reasoning and semantic-deepening capabilities." .
+
+# Classes
+:Person a owl:Class ;
+  rdfs:label "Person" .
+
+:Student a owl:Class ;
+  rdfs:label "Student" ;
+  rdfs:subClassOf :Person .
+
+:Employee a owl:Class ;
+  rdfs:label "Employee" ;
+  rdfs:subClassOf :Person .
+
+:Manager a owl:Class ;
+  rdfs:label "Manager" ;
+  rdfs:subClassOf :Employee .
+
+:Organization a owl:Class ;
+  rdfs:label "Organization" .
+
+:City a owl:Class ;
+  rdfs:label "City" .
+
+:Country a owl:Class ;
+  rdfs:label "Country" .
+
+# Object properties
+:worksFor a owl:ObjectProperty ;
+  rdfs:label "works for" ;
+  rdfs:domain :Person ;
+  rdfs:range :Organization .
+
+:manages a owl:ObjectProperty ;
+  rdfs:label "manages" ;
+  rdfs:domain :Manager ;
+  rdfs:range :Employee .
+
+:locatedIn a owl:ObjectProperty ;
+  rdfs:label "located in" ;
+  rdfs:domain :Organization ;
+  rdfs:range :City .
+
+:hasCitizenship a owl:ObjectProperty ;
+  rdfs:label "has citizenship" ;
+  rdfs:domain :Person ;
+  rdfs:range :Country .
+
+:hasColleague a owl:ObjectProperty ;
+  rdfs:label "has colleague" ;
+  rdfs:domain :Person ;
+  rdfs:range :Person .
+
+:hasSpouse a owl:ObjectProperty ;
+  rdfs:label "has spouse" ;
+  rdfs:domain :Person ;
+  rdfs:range :Person ;
+  a owl:FunctionalProperty , owl:SymmetricProperty .
+
+# Data properties
+:hasName a owl:DatatypeProperty ;
+  rdfs:label "has name" ;
+  rdfs:domain :Person ;
+  rdfs:range xsd:string ;
+  a owl:FunctionalProperty .
+
+:hasAge a owl:DatatypeProperty ;
+  rdfs:label "has age" ;
+  rdfs:domain :Person ;
+  rdfs:range xsd:integer ;
+  a owl:FunctionalProperty .
+
+:hasStartDate a owl:DatatypeProperty ;
+  rdfs:label "has start date" ;
+  rdfs:domain :Employee ;
+  rdfs:range xsd:date .
+
+# sameAs declarations
+:alice a :Employee ;
+  rdfs:label "Alice" ;
+  :hasName "Alice Smith" ;
+  :hasAge 30 ;
+  :worksFor :acme ;
+  :hasSpouse :bob ;
+  :hasColleague :charlie ;
+  owl:sameAs :aliceAlt , :asmith .
+
+:aliceAlt a :Employee ;
+  rdfs:label "Alice Alternative" ;
+  :hasName "Alice S." .
+
+:asmith a :Person ;
+  rdfs:label "A. Smith" .
+
+# differentFrom declarations
+:bob a :Manager ;
+  rdfs:label "Bob" ;
+  :hasName "Bob Johnson" ;
+  :hasAge 45 ;
+  :worksFor :acme ;
+  :manages :alice ;
+  owl:differentFrom :alice , :charlie .
+
+:charlie a :Employee ;
+  rdfs:label "Charlie" ;
+  :hasName "Charlie Brown" ;
+  :hasAge 35 ;
+  :worksFor :acme ;
+  :hasColleague :alice ;
+  :hasColleague :bob ;
+  owl:differentFrom :alice , :bob .
+
+# AllDifferent axiom for a group of students
+[] a owl:AllDifferent ;
+  owl:members ( :student1 :student2 :student3 ) .
+
+:student1 a :Student ;
+  rdfs:label "Student One" ;
+  :hasAge 20 .
+
+:student2 a :Student ;
+  rdfs:label "Student Two" ;
+  :hasAge 21 .
+
+:student3 a :Student ;
+  rdfs:label "Student Three" ;
+  :hasAge 22 .
+
+# Organization and location
+:acme a :Organization ;
+  rdfs:label "Acme Corp" ;
+  :locatedIn :newYork .
+
+:newYork a :City ;
+  rdfs:label "New York" .
+
+:usa a :Country ;
+  rdfs:label "United States" .
+
+:alice :hasCitizenship :usa .
+:bob :hasCitizenship :usa .

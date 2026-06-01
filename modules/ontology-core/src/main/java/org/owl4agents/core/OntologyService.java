@@ -5,116 +5,119 @@ import org.owl4agents.core.evidence.EvidenceMetadata;
 
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 /**
- * The shared application service interface for v0.1 owl4agents operations.
+ * The shared application service interface for v0.1 and v0.2 owl4agents operations.
  * Both CLI and MCP adapters route through this interface.
- * All operations are readonly except for workspace initialization and ontology import.
+ * All operations are readonly except for workspace initialization, ontology import, and reasoner lifecycle.
  */
 public interface OntologyService {
 
     // ── Workspace operations ──
 
-    /**
-     * Initialize a workspace with the given ID.
-     * If the workspace already exists, it is left intact and reported as already initialized.
-     */
     ServiceResult<Void> initWorkspace(WorkspaceId workspaceId);
 
-    /**
-     * Import a local OWL/RDF file into the workspace.
-     * The original source file is preserved without overwriting it.
-     * The ontology is stored under the given user-provided ontology ID.
-     */
     ServiceResult<Void> importOntology(OntologyId ontologyId, Path sourceFilePath);
 
-    /**
-     * List all imported ontologies in the workspace catalog.
-     */
     ServiceResult<List<CatalogEntry>> listOntologies(WorkspaceId workspaceId);
 
     // ── Ontology summary ──
 
-    /**
-     * Get an ontology summary containing ontology IRI, version IRI, imports,
-     * profile information, and entity counts.
-     */
     ServiceResult<OntologySummary> getSummary(OntologyId ontologyId);
 
     // ── Entity search ──
 
-    /**
-     * Search ontology entities by text query.
-     * Matches by IRI, prefixed name, label, comment, type, and alias index.
-     */
     ServiceResult<SearchResult> searchEntities(OntologyId ontologyId, String query);
 
-    // ── Entity context ──
+    // ── Entity context (v0.1) ──
 
-    /**
-     * Get readonly class context including subclasses, superclasses,
-     * equivalent classes, disjoint classes, and basic restrictions.
-     */
     ServiceResult<ClassContext> getClassContext(OntologyId ontologyId, EntityId classIri);
 
-    /**
-     * Get readonly object property context including domain, range,
-     * inverse properties, and hierarchy.
-     */
     ServiceResult<ObjectPropertyContext> getObjectPropertyContext(OntologyId ontologyId, EntityId propertyIri);
 
-    /**
-     * Get readonly data property context including domain, range,
-     * datatype, and hierarchy.
-     */
     ServiceResult<DataPropertyContext> getDataPropertyContext(OntologyId ontologyId, EntityId propertyIri);
 
-    /**
-     * Get readonly individual context including explicit types,
-     * object property assertions, and data property assertions.
-     */
     ServiceResult<IndividualContext> getIndividualContext(OntologyId ontologyId, EntityId individualIri);
 
-    /**
-     * Get readonly entity context dispatching to the appropriate
-     * class, property, or individual context based on entity type.
-     */
     ServiceResult<EntityContext> getEntityContext(OntologyId ontologyId, EntityId entityIri);
 
-    // ── SPARQL ──
+    // ── SPARQL (v0.1 + v0.2 scope extension) ──
 
-    /**
-     * Validate a SPARQL query without executing it.
-     */
     ServiceResult<ValidationResult> validateSparql(String query);
 
-    /**
-     * Execute a readonly SPARQL SELECT query over an imported ontology.
-     */
     ServiceResult<SelectResult> executeSelect(OntologyId ontologyId, String query, GraphScope scope);
 
-    /**
-     * Execute a readonly SPARQL ASK query over an imported ontology.
-     */
     ServiceResult<AskResult> executeAsk(OntologyId ontologyId, String query, GraphScope scope);
 
-    /**
-     * Execute a readonly SPARQL CONSTRUCT query over an imported ontology.
-     */
     ServiceResult<ConstructResult> executeConstruct(OntologyId ontologyId, String query, GraphScope scope);
 
-    /**
-     * Execute a readonly SPARQL DESCRIBE query over an imported ontology.
-     */
     ServiceResult<DescribeResult> executeDescribe(OntologyId ontologyId, String query, GraphScope scope);
 
-    // ── QA context ──
+    // ── QA context (v0.1) ──
 
-    /**
-     * Generate ontology-grounded QA context from a question and ontology.
-     * Returns matched entities, relevant context, and evidence metadata.
-     */
     ServiceResult<QaContext> getQaContext(OntologyId ontologyId, String question,
                                           Optional<Integer> maxEntities, Optional<Integer> maxDepth);
+
+    // ── Reasoner operations (v0.2) ──
+
+    ServiceResult<ReasonerListResult> listReasoners();
+
+    ServiceResult<ReasoningReport> runReasoner(OntologyId ontologyId, Optional<String> reasonerName);
+
+    ServiceResult<ClassificationResult> classify(OntologyId ontologyId, Optional<String> reasonerName);
+
+    ServiceResult<RealizationResult> realize(OntologyId ontologyId, Optional<String> reasonerName);
+
+    ServiceResult<ConsistencyResult> checkConsistency(OntologyId ontologyId, Optional<String> reasonerName);
+
+    ServiceResult<List<String>> getUnsatClasses(OntologyId ontologyId);
+
+    ServiceResult<InconsistencyExplanation> explainInconsistency(OntologyId ontologyId, Optional<String> reasonerName);
+
+    ServiceResult<UnsatClassExplanation> explainUnsatClass(OntologyId ontologyId, String classIRI, Optional<String> reasonerName);
+
+    ServiceResult<ReasoningReport> getReasoningReport(OntologyId ontologyId);
+
+    ServiceResult<InferredFactsResult> getInferredFacts(OntologyId ontologyId, Optional<String> entityIRI);
+
+    ServiceResult<EntailmentResult> checkEntailment(OntologyId ontologyId, String axiomType,
+                                                     Map<String, String> parameters, Optional<String> reasonerName);
+
+    // ── Consistency-analysis (v0.2) ──
+
+    ServiceResult<ClassCompatibilityResult> checkClassCompatibility(OntologyId ontologyId, String class1IRI, String class2IRI);
+
+    ServiceResult<MembershipResult> checkIndividualMembership(OntologyId ontologyId, String individualIRI, String classIRI, Optional<String> reasonerName);
+
+    ServiceResult<RelationAssertionResult> checkRelationAssertion(OntologyId ontologyId, String sourceIRI, String propertyIRI, String targetIRI, Optional<String> reasonerName);
+
+    ServiceResult<ScopeDescription> getScope(OntologyId ontologyId);
+
+    // ── Semantic-deepening (v0.2) ──
+
+    ServiceResult<ImportClosureResult> getImportClosure(OntologyId ontologyId);
+
+    ServiceResult<ClassRestrictionsResult> getClassRestrictions(OntologyId ontologyId, String classIRI, Optional<Boolean> includeInferred);
+
+    ServiceResult<PropertyCharacteristicsResult> getPropertyCharacteristics(OntologyId ontologyId, String propertyIRI, Optional<Boolean> includeInferred);
+
+    ServiceResult<PropertyAxiomsResult> getEquivalentProperties(OntologyId ontologyId, String propertyIRI, Optional<Boolean> includeInferred);
+
+    ServiceResult<PropertyAxiomsResult> getDisjointProperties(OntologyId ontologyId, String propertyIRI, Optional<Boolean> includeInferred);
+
+    ServiceResult<DatatypeConstraintsResult> getDatatypeConstraints(OntologyId ontologyId, String datatypeIRI);
+
+    ServiceResult<LiteralValidationResult> validateLiteral(OntologyId ontologyId, String literalValue, String datatypeIRI, Optional<String> propertyIRI);
+
+    ServiceResult<PropertyAxiomsResult> findRelationsBetweenEntities(OntologyId ontologyId, String sourceIRI, String targetIRI, Optional<Boolean> includeInferred);
+
+    ServiceResult<PropertyAxiomsResult> getObjectPropertyAssertions(OntologyId ontologyId, String individualIRI, Optional<Boolean> includeInferred);
+
+    ServiceResult<PropertyAxiomsResult> getDataPropertyAssertions(OntologyId ontologyId, String individualIRI, Optional<Boolean> includeInferred);
+
+    ServiceResult<PropertyAxiomsResult> getSameIndividuals(OntologyId ontologyId, String individualIRI, Optional<Boolean> includeInferred);
+
+    ServiceResult<PropertyAxiomsResult> getDifferentIndividuals(OntologyId ontologyId, String individualIRI, Optional<Boolean> includeInferred);
 }

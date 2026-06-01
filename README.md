@@ -1,17 +1,17 @@
 # owl4agents
 
-Local OWL ontology reader, SPARQL query layer, and readonly MCP server for LLM agents.
+Local OWL ontology runtime, reasoner integration, SPARQL query layer, and readonly MCP server for LLM agents.
 
-`owl4agents` is a local-first OWL/RDF ontology runtime for researchers and agent developers. It imports, manages, queries, and retrieves structured semantic context from OWL ontologies, then exposes those capabilities through both CLI commands and an MCP server.
+`owl4agents` is a local-first OWL/RDF ontology runtime for researchers and agent developers. It imports, manages, reasons over, queries, and retrieves structured semantic context from OWL ontologies, then exposes those capabilities through both CLI commands and an MCP server.
 
-> Status: v0.1 ready for release. The local ontology reader, workspace/catalog, OWL API import/summary, entity search/context, readonly SPARQL, QA context, CLI, readonly MCP server, Gradle wrapper, and local npm launcher are implemented and verified.
+> Status: v0.2 ready for release. v0.2 adds HermiT/ELK/Openllet reasoner integration, classification, realization, consistency checks, inferred facts, semantic-deepening tools, readonly MCP reasoning tools, and v0.1 regression coverage. Verified on Windows with JDK 22 via `.\gradlew.bat clean buildVerification`.
 
-## v0.1 Quick Start
+## v0.2 Quick Start
 
 ### Requirements
 
 - Windows, macOS, or Linux
-- Java 22 for the current v0.1 build, with `JAVA_HOME` pointing to the JDK
+- Java 22 for the current v0.2 build, with `JAVA_HOME` pointing to the JDK
 - Node.js 18+ for the npm launcher and MCP client entry point
 
 On Windows, prefer `JAVA_HOME` over the Oracle `javapath` shim. The local npm launcher and MCP wrapper use `JAVA_HOME\bin\java.exe` when it is available.
@@ -37,7 +37,7 @@ modules/ontology-cli/build/libs/owl4agents.jar
 
 ### CLI from Source
 
-Use the local npm launcher during v0.1 development:
+Use the local npm launcher during v0.2 development:
 
 ```powershell
 node npm/bin/owl4agents.js init
@@ -48,6 +48,10 @@ node npm/bin/owl4agents.js search pizza Pizza
 node npm/bin/owl4agents.js entity pizza "http://www.co-ode.org/ontologies/pizza/pizza.owl#Pizza"
 node npm/bin/owl4agents.js query pizza --ask "ASK { ?s ?p ?o }"
 node npm/bin/owl4agents.js context pizza "Which toppings are related to pizza?"
+node npm/bin/owl4agents.js list-reasoners
+node npm/bin/owl4agents.js consistency pizza --reasoner hermit
+node npm/bin/owl4agents.js classify pizza --reasoner auto
+node npm/bin/owl4agents.js realize pizza --reasoner hermit
 ```
 
 Or run the fat jar directly:
@@ -56,6 +60,7 @@ Or run the fat jar directly:
 java -jar modules/ontology-cli/build/libs/owl4agents.jar init
 java -jar modules/ontology-cli/build/libs/owl4agents.jar import test/corpus/smoke/pizza.owl pizza
 java -jar modules/ontology-cli/build/libs/owl4agents.jar summary pizza
+java -jar modules/ontology-cli/build/libs/owl4agents.jar consistency pizza --reasoner hermit
 ```
 
 To keep a workspace outside the default user home location:
@@ -73,7 +78,7 @@ The default workspace is:
 
 ### Deploy for Local Agents
 
-For v0.1, the supported deployment mode is source checkout plus local launcher. Publishing a self-contained npm package is planned for a later release.
+For v0.2, the supported deployment mode is source checkout plus local launcher. Publishing a self-contained npm package is planned for a later release.
 
 1. Clone or copy this repository.
 2. Install Java 22 and Node.js 18+.
@@ -129,9 +134,9 @@ On Windows, if your client has trouble with stdin/stdout through Node, use the b
 }
 ```
 
-v0.1 MCP is readonly. Import ontologies with the CLI first, then let agents query them through MCP.
+v0.2 MCP is readonly. Import ontologies with the CLI first, then let agents query and reason over them through MCP.
 
-Useful v0.1 MCP tools include:
+Useful v0.2 MCP tools include:
 
 | Tool | Purpose |
 | --- | --- |
@@ -148,6 +153,20 @@ Useful v0.1 MCP tools include:
 | `ontology_sparql_construct` | Execute readonly `CONSTRUCT` |
 | `ontology_sparql_describe` | Execute readonly `DESCRIBE` |
 | `ontology_get_qa_context` | Build ontology-grounded context for an agent question |
+| `ontology_list_reasoners` | List available reasoners and capabilities |
+| `ontology_run_reasoner` | Run selected reasoning tasks |
+| `ontology_check_consistency` | Check ontology consistency with a reasoner |
+| `ontology_classify` | Compute inferred class hierarchy |
+| `ontology_realize_instances` | Infer individual class memberships |
+| `ontology_get_inferred_facts` | Return inferred facts for an entity or graph scope |
+| `ontology_check_entailment` | Check whether a supported structured OWL axiom is entailed |
+| `ontology_get_class_restrictions` | Inspect class restrictions |
+| `ontology_get_property_characteristics` | Inspect property characteristics |
+| `ontology_get_datatype_constraints` | Inspect datatype facets and constraints |
+| `ontology_validate_literal` | Validate a literal against datatype and known constraints |
+| `ontology_check_class_compatibility` | Check whether two classes can overlap or conflict |
+| `ontology_check_individual_membership` | Check explicit or inferred individual class membership |
+| `ontology_check_relation_assertion` | Check explicit or inferred object property assertions |
 
 ## Why owl4agents
 
@@ -203,7 +222,7 @@ Do not rebuild these foundations unless there is a strong reason:
 | RDF graph handling and SPARQL | Apache Jena ARQ |
 | Ontology workflow ideas | ROBOT |
 | CLI framework | Picocli |
-| MCP protocol integration | MCP Java SDK |
+| MCP protocol integration | Project-local JSON-RPC stdin/stdout adapter |
 | Packaging Java runtime | jlink / jpackage |
 
 The local code should mostly provide adapters, stable service contracts, permission boundaries, workspace conventions, indexes, audit logs, and research-friendly context builders.
@@ -218,7 +237,7 @@ Java is the planned core runtime because the mature OWL ecosystem already lives 
 - Openllet for Pellet-style DL reasoning and explanation workflows
 - Apache Jena ARQ for RDF and SPARQL support
 - Picocli for CLI implementation
-- MCP Java SDK for exposing tools to local agents
+- Project-local JSON-RPC stdin/stdout adapter for exposing MCP-compatible tools to local agents
 
 ### npm as installer, not reasoning runtime
 
@@ -228,9 +247,10 @@ The desired future user experience is:
 npx -y owl4agents mcp
 ```
 
-In v0.1, use the local launcher from a source checkout:
+In v0.2, use the local launcher from a source checkout after building the runnable jar:
 
 ```bash
+./gradlew :modules:ontology-cli:shadowJar
 node npm/bin/owl4agents.js mcp --readonly
 ```
 
@@ -263,7 +283,7 @@ This keeps behavior, tests, errors, permissions, and reasoning results consisten
 |                                                                  |
 |  +----------------------+      +-------------------------------+ |
 |  | CLI Adapter          |      | MCP Server Adapter             | |
-|  | Picocli              |      | MCP Java SDK                   | |
+|  | Picocli              |      | JSON-RPC stdio adapter        | |
 |  +----------+-----------+      +---------------+---------------+ |
 |             |                                  |                 |
 |             +----------------+-----------------+                 |
@@ -310,10 +330,31 @@ The architecture separates concerns so new features can be added without changin
 | Explanation / compatibility | Openllet | Inconsistency explanation and Pellet-style capabilities |
 | RDF / SPARQL | Apache Jena ARQ | RDF graph handling and SPARQL queries |
 | CLI | Picocli | Java command-line interface |
-| MCP | MCP Java SDK | MCP server for local agent clients |
+| MCP | Project-local JSON-RPC stdin/stdout adapter | MCP-compatible server for local agent clients |
 | Local storage | Filesystem + JSONL | Portable, inspectable workspace, indexes, logs |
 | Distribution | npm launcher + jlink / jpackage | Simple npm entry point with self-contained Java runtime |
 | Testing | JUnit 5 | Unit, integration, and reasoner comparison tests |
+
+### Pinned Dependency Versions
+
+v0.2 pins the Semantic Web and runtime dependencies that affect parser, reasoner, and launcher compatibility:
+
+| Component | Maven / tool coordinate | Version | Used by |
+| --- | --- | --- | --- |
+| Java toolchain | JDK | 22 | All Java modules |
+| Gradle wrapper | `gradle-8.14-bin.zip` | 8.14 | Build and verification |
+| OWL API | `net.sourceforge.owlapi:owlapi-distribution` | 5.1.20 | OWL loading, profiles, axioms, serialization |
+| HermiT | `net.sourceforge.owlapi:org.semanticweb.hermit` | 1.4.5.519 | OWL 2 DL consistency, classification, realization |
+| ELK OWL API | `io.github.liveontologies:elk-owlapi` | 0.6.0 | OWL 2 EL classification and consistency |
+| Openllet OWL API | `com.github.galigator.openllet:openllet-owlapi` | 2.6.5 | Explanation-oriented DL workflows |
+| Apache Jena | `org.apache.jena:apache-jena-libs` | 5.3.0 | RDF graph handling and SPARQL |
+| Picocli | `info.picocli:picocli` / `picocli-codegen` | 4.7.7 | CLI commands and help |
+| Gson | `com.google.code.gson:gson` | 2.13.1 | JSON-RPC and structured payloads |
+| Shadow plugin | `com.github.johnrengelman.shadow` | 8.1.1 | Runnable fat jar generation |
+| JUnit | `org.junit:junit-bom` | 5.12.2 | Unit, integration, and acceptance tests |
+| Node.js | npm launcher runtime | 18+ | Local launcher and MCP client entry point |
+
+The reasoner module excludes transitive OWL API dependencies from HermiT, ELK, and Openllet so the project uses the pinned OWL API 5.1.20 consistently. This avoids the HermiT/OWL API method mismatch found during v0.2 acceptance testing.
 
 ## Delivery Gate
 
@@ -327,10 +368,16 @@ For every version or OpenSpec change, developers must provide:
 - Evidence that CLI and MCP behavior are checked through the same service contracts where both interfaces expose the same capability.
 - Evidence that required fixtures are present and missing required fixtures fail the test run.
 
-The default v0.1 verification command should be:
+The default v0.2 verification command should be:
 
 ```powershell
 .\gradlew.bat clean buildVerification
+```
+
+To run the CLI or MCP launcher from source after a clean checkout, also build the runnable fat jar:
+
+```powershell
+.\gradlew.bat :modules:ontology-cli:shadowJar
 ```
 
 The Gradle wrapper is part of the delivery contract. The repository must include `gradlew`, `gradlew.bat`, `gradle/wrapper/gradle-wrapper.jar`, and `gradle/wrapper/gradle-wrapper.properties` unless the project explicitly replaces Gradle with another documented build entry point.
@@ -384,11 +431,11 @@ npm/
 | `ontology-reasoner` | Unified adapters for HermiT, ELK, and Openllet |
 | `ontology-query` | Apache Jena ARQ query execution, SPARQL validation, graph scope selection |
 | `ontology-retrieval` | Entity search, graph neighborhood, hierarchy context, relation context, QA context construction |
-| `ontology-validation` | Entailment checks, class compatibility, literal validation, claim verification, answer verification |
-| `ontology-provenance` | Evidence paths, source tracking, reasoning reports, support/contradiction traces |
+| `ontology-validation` | Entailment checks, class compatibility, literal validation, and later claim / answer verification |
+| `ontology-provenance` | Source tracking, reasoning reports, support/contradiction traces, and later evidence paths |
 | `ontology-storage` | Local workspace, catalog, metadata, snapshots, indexes, audit logs |
 | `ontology-cli` | Picocli-based command adapter |
-| `ontology-mcp` | MCP Java SDK tool adapter |
+| `ontology-mcp` | MCP-compatible JSON-RPC stdin/stdout tool adapter |
 | `ontology-distribution` | jlink / jpackage packaging |
 | `npm` | npm launcher and platform package entry points |
 
@@ -501,7 +548,7 @@ The most important tools for reducing hallucinations are not only context retrie
 | `ontology_get_metadata` | v0.1 | Return ontology IRI, version IRI, source path, canonical path, and timestamps |
 | `ontology_get_imports` | v0.2 | Inspect import closure and imported ontology metadata |
 | `ontology_get_profile` | v0.1 | Return OWL profile information and profile violations |
-| `ontology_list_graphs` | v0.1 | List queryable graph scopes such as `explicit`, `inferred`, and `union` |
+| `ontology_list_graphs` | v0.1 → v0.2 | List queryable graph scopes (`explicit` in v0.1; adds `inferred`, `union` in v0.2) |
 
 ### Class tools
 
@@ -587,12 +634,12 @@ SPARQL safety rules:
 
 | Tool | Stage | Description |
 | --- | --- | --- |
-| `ontology_list_reasoners` | v0.1 | List installed reasoners and capabilities |
+| `ontology_list_reasoners` | v0.2 | List installed reasoners and capabilities |
 | `ontology_run_reasoner` | v0.2 | Run selected reasoning tasks |
-| `ontology_check_consistency` | v0.1 | Check ontology consistency |
+| `ontology_check_consistency` | v0.1 → v0.2 | Check ontology consistency (v0.2: extended with reasoner integration) |
 | `ontology_classify` | v0.2 | Compute inferred class hierarchy |
 | `ontology_realize_instances` | v0.2 | Infer individual class memberships |
-| `ontology_check_entailment` | v0.2 | Check whether an axiom or structured claim is entailed |
+| `ontology_check_entailment` | v0.2 | Check whether a supported structured OWL axiom is entailed |
 | `ontology_get_inferred_facts` | v0.2 | Return inferred axioms or triples for an entity or graph scope |
 | `ontology_explain_entailment` | v0.3 | Explain why a conclusion is entailed |
 | `ontology_explain_inconsistency` | v0.2 | Explain inconsistent axioms |
@@ -604,7 +651,7 @@ These are the tools that turn ontology access into answer verification.
 
 | Tool | Stage | Description |
 | --- | --- | --- |
-| `ontology_verify_claim` | v0.2 | Verify one structured claim as `supported`, `contradicted`, `unknown`, or `out_of_scope` |
+| `ontology_verify_claim` | v0.3 | Verify one structured claim as `supported`, `contradicted`, `unknown`, or `out_of_scope` |
 | `ontology_verify_answer` | v0.3 | Verify multiple claims extracted from an agent answer |
 | `ontology_ground_claims` | v0.3 | Attach evidence paths, axioms, triples, and query results to claims |
 | `ontology_find_counterexamples` | v0.3 | Find facts or axioms that contradict a claim |
@@ -620,7 +667,7 @@ These are the tools that turn ontology access into answer verification.
 | `ontology_get_entity_context` | v0.1 | Return labels, comments, class/property/individual context, and related facts |
 | `ontology_get_graph_neighborhood` | v0.1 | Return local graph neighborhood around an entity |
 | `ontology_get_qa_context` | v0.1 | Build ontology-grounded context for an agent question |
-| `ontology_get_evidence_path` | v0.2 | Return the path from matched entities to supporting facts |
+| `ontology_get_evidence_path` | v0.3 | Return the path from matched entities to supporting facts |
 | `ontology_get_scope` | v0.2 | Describe ontology domain coverage and known limitations |
 | `ontology_detect_missing_entities` | v0.3 | Find terms in a question that are not covered by the ontology |
 
@@ -861,7 +908,7 @@ Goal: make a local OWL/RDF ontology inspectable by both CLI and MCP.
 Planned support:
 
 - [x] Java 22 + Gradle multi-module skeleton
-- [x] Integration checks for OWL API, HermiT, Apache Jena ARQ, Picocli, and MCP Java SDK
+- [x] Integration checks for OWL API, HermiT, Apache Jena ARQ, Picocli, and the MCP-compatible JSON-RPC adapter
 - [x] Local workspace and ontology catalog
 - [x] OWL/RDF import through OWL API
 - [x] Ontology summary: IRI, version IRI, imports, profile, entity counts
@@ -881,21 +928,21 @@ Planned support:
 
 Goal: add mature OWL reasoning and expose inferred semantic structure.
 
-Planned support:
+Released support:
 
-- [ ] HermiT consistency checking and classification
-- [ ] ELK adapter for OWL 2 EL classification
-- [ ] Openllet adapter for explanation-oriented workflows
-- [ ] `auto` reasoner selection based on OWL profile and requested task
-- [ ] Inferred graph storage
-- [ ] `reasoning-report.json` with reasoner, profile, timings, warnings, and inferred axiom counts
-- [ ] Unsatisfiable class detection
-- [ ] Class compatibility checks based on disjointness and satisfiability
-- [ ] Individual realization and inferred individual types
-- [ ] Relation assertion checks for object properties
-- [ ] Data property literal validation against datatype and known constraints
-- [ ] Reasoner comparison tests
-- [ ] Evaluation of optional ROBOT integration for reusable ontology workflow operations
+- [x] HermiT consistency checking, classification, and realization
+- [x] ELK adapter for OWL 2 EL classification
+- [x] Openllet adapter for explanation-oriented workflows
+- [x] `auto` reasoner selection based on OWL profile and requested task
+- [x] Inferred graph and inferred fact result models
+- [x] Reasoning reports with reasoner, profile, timings, warnings, and inferred axiom counts
+- [x] Unsatisfiable class detection
+- [x] Structured entailment checks for supported OWL axiom types
+- [x] Class compatibility checks based on disjointness and satisfiability
+- [x] Individual realization and inferred individual types
+- [x] Relation assertion checks for object properties
+- [x] Data property literal validation against datatype and known constraints
+- [x] Reasoner and v0.1 regression acceptance tests
 
 ### v0.3 Claim Verification and Evidence Grounding
 
@@ -903,7 +950,7 @@ Goal: turn ontology access into anti-hallucination verification tools.
 
 Planned support:
 
-- [ ] Structured entailment checks for class, property, and individual claims
+- [ ] Claim-level verification built on v0.2 entailment, membership, relation, compatibility, literal validation, and scope primitives
 - [ ] `ontology_verify_claim` returning `supported`, `contradicted`, `unknown`, or `out_of_scope`
 - [ ] Evidence path generation for supported claims
 - [ ] Counterexample search for contradicted claims
@@ -939,6 +986,7 @@ Planned support:
 - [ ] Context export JSONL format
 - [ ] Benchmark runner
 - [ ] Reasoner comparison reports
+- [ ] Evaluate optional ROBOT integration for reusable ontology workflow operations and benchmark preprocessing
 - [ ] Answer verification reports
 - [ ] Coverage assessment for missing entities, relations, restrictions, and constraints
 - [ ] Ontology-agent QA evaluation helper

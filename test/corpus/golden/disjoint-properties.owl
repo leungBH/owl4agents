@@ -1,0 +1,102 @@
+@prefix : <http://example.org/disjoint-properties#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+<http://example.org/disjoint-properties> a owl:Ontology ;
+  rdfs:label "Disjoint Properties Ontology" ;
+  rdfs:comment "Ontology with explicit disjoint and equivalent property axioms for testing disjoint/equivalent property retrieval." .
+
+# Classes
+:Person a owl:Class ;
+  rdfs:label "Person" .
+
+:Event a owl:Class ;
+  rdfs:label "Event" .
+
+:Document a owl:Class ;
+  rdfs:label "Document" .
+
+# Equivalent object properties
+:hasSpouse a owl:ObjectProperty ;
+  rdfs:label "has spouse" ;
+  rdfs:domain :Person ;
+  rdfs:range :Person .
+
+:isMarriedTo a owl:ObjectProperty ;
+  rdfs:label "is married to" ;
+  rdfs:domain :Person ;
+  rdfs:range :Person ;
+  owl:equivalentProperty :hasSpouse .
+
+:spouseOf a owl:ObjectProperty ;
+  rdfs:label "spouse of" ;
+  rdfs:domain :Person ;
+  rdfs:range :Person ;
+  owl:equivalentProperty :hasSpouse .
+
+# Disjoint object properties
+:hasParent a owl:ObjectProperty ;
+  rdfs:label "has parent" ;
+  rdfs:domain :Person ;
+  rdfs:range :Person .
+
+:hasChild a owl:ObjectProperty ;
+  rdfs:label "has child" ;
+  rdfs:domain :Person ;
+  rdfs:range :Person ;
+  owl:propertyDisjointWith :hasParent .
+
+# Additional disjoint object properties
+:attendedBy a owl:ObjectProperty ;
+  rdfs:label "attended by" ;
+  rdfs:domain :Event ;
+  rdfs:range :Person .
+
+:organizedBy a owl:ObjectProperty ;
+  rdfs:label "organized by" ;
+  rdfs:domain :Event ;
+  rdfs:range :Person ;
+  owl:propertyDisjointWith :attendedBy .
+
+# Equivalent data properties
+:hasName a owl:DatatypeProperty ;
+  rdfs:label "has name" ;
+  rdfs:domain :Person ;
+  rdfs:range xsd:string .
+
+:fullName a owl:DatatypeProperty ;
+  rdfs:label "full name" ;
+  rdfs:domain :Person ;
+  rdfs:range xsd:string ;
+  owl:equivalentProperty :hasName .
+
+# Disjoint data properties
+:hasBirthDate a owl:DatatypeProperty ;
+  rdfs:label "has birth date" ;
+  rdfs:domain :Person ;
+  rdfs:range xsd:date .
+
+:hasDeathDate a owl:DatatypeProperty ;
+  rdfs:label "has death date" ;
+  rdfs:domain :Person ;
+  rdfs:range xsd:date ;
+  owl:propertyDisjointWith :hasBirthDate .
+
+# Property characteristics for combined testing
+:hasSpouse a owl:SymmetricProperty .
+:hasParent a owl:AsymmetricProperty ;
+  owl:inverseOf :hasChild .
+:hasSpouse a owl:FunctionalProperty , owl:InverseFunctionalProperty .
+
+# Individuals for testing
+:alice a :Person ;
+  rdfs:label "Alice" ;
+  :hasName "Alice Smith" ;
+  :hasSpouse :bob .
+
+:bob a :Person ;
+  rdfs:label "Bob" ;
+  :hasName "Bob Smith" ;
+  :hasSpouse :alice .

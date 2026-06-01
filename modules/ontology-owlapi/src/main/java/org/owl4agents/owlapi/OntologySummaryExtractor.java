@@ -15,7 +15,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Set;
+import java.util.Optional;
 
 /**
  * Extracts ontology metadata, IRI, version IRI, imports, entity counts,
@@ -51,16 +51,16 @@ public class OntologySummaryExtractor {
      * Build a summary from a loaded OWLOntology object.
      */
     public OntologySummary buildSummary(OntologyId ontologyId, OWLOntology ontology) {
-        // Extract ontology IRI — OWL API 4.5.x uses Guava Optional
+        // Extract ontology IRI — OWL API 5.1.20 uses java.util.Optional
         String ontologyIri = null;
-        com.google.common.base.Optional<IRI> optOntologyIRI = ontology.getOntologyID().getOntologyIRI();
+        Optional<IRI> optOntologyIRI = ontology.getOntologyID().getOntologyIRI();
         if (optOntologyIRI.isPresent()) {
             ontologyIri = optOntologyIRI.get().toString();
         }
 
-        // Extract version IRI — OWL API 4.5.x uses Guava Optional
+        // Extract version IRI — OWL API 5.1.20 uses java.util.Optional
         String versionIri = null;
-        com.google.common.base.Optional<IRI> optVersionIRI = ontology.getOntologyID().getVersionIRI();
+        Optional<IRI> optVersionIRI = ontology.getOntologyID().getVersionIRI();
         if (optVersionIRI.isPresent()) {
             versionIri = optVersionIRI.get().toString();
         }
@@ -78,8 +78,11 @@ public class OntologySummaryExtractor {
         // Extract profile information
         ProfileInfo profileInfo = extractProfileInfo(ontology);
 
-        return new OntologySummary(
-            ontologyId, ontologyIri, versionIri, imports, profileInfo, entityCounts
+        // v0.2: Determine recommended reasoner based on detected profile
+        String recommendedReasoner = determineRecommendedReasoner(profileInfo);
+
+        return OntologySummary.withReasoner(
+            ontologyId, ontologyIri, versionIri, imports, profileInfo, entityCounts, recommendedReasoner
         );
     }
 
@@ -145,5 +148,20 @@ public class OntologySummaryExtractor {
         }
 
         return new ProfileInfo(profiles, violations);
+    }
+
+    /**
+     * Determine the recommended reasoner based on detected OWL profile.
+     * OWL 2 EL → "elk", OWL 2 DL → "hermit", others → "hermit" fallback.
+     */
+    private String determineRecommendedReasoner(ProfileInfo profileInfo) {
+        List<String> profiles = profileInfo.profiles();
+        if (profiles.contains("OWL 2 EL")) {
+            return "elk";
+        } else if (profiles.contains("OWL 2 DL")) {
+            return "hermit";
+        } else {
+            return "hermit";  // Fallback for OWL 2 Full, QL, RL, or unknown
+        }
     }
 }

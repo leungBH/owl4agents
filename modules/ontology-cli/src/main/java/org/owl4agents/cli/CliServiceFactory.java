@@ -6,9 +6,13 @@ import org.owl4agents.core.WorkspaceId;
 import org.owl4agents.core.model.*;
 import org.owl4agents.owlapi.OntologyImporter;
 import org.owl4agents.owlapi.OntologySummaryExtractor;
+import org.owl4agents.owlapi.SemanticDeepeningService;
 import org.owl4agents.query.*;
+import org.owl4agents.reasoner.ReasonerServiceImpl;
+import org.owl4agents.reasoner.ReasonerLifecycleManager;
 import org.owl4agents.retrieval.*;
 import org.owl4agents.storage.*;
+import org.owl4agents.validation.ConsistencyAnalysisService;
 
 import org.semanticweb.owlapi.apibinding.OWLManager;
 import org.semanticweb.owlapi.model.OWLOntology;
@@ -36,6 +40,9 @@ public class CliServiceFactory {
     private SparqlValidator sparqlValidator;
     private SparqlExecutor sparqlExecutor;
     private SparqlSafetyGuard sparqlSafetyGuard;
+    private ReasonerServiceImpl reasonerService;
+    private SemanticDeepeningService semanticDeepeningService;
+    private ConsistencyAnalysisService consistencyAnalysisService;
 
     public CliServiceFactory(String workspaceName, String homeDirectory) {
         this.workspaceName = workspaceName;
@@ -159,6 +166,48 @@ public class CliServiceFactory {
         EntityIndex index = new EntityIndex();
         index.buildFromOntology(ontology);
         return new QaContextService(index, ontologyId, ontology);
+    }
+
+    /**
+     * Get the reasoner service instance.
+     * ReasonerServiceImpl resolves ontology paths as workspaceBasePath/default/ontologies/{id}/...
+     * The importer stores ontologies at homeDir/workspaces/default/ontologies/{id}/...
+     * So we pass homeDir/workspaces as the base path so the "default" segment aligns.
+     */
+    public ReasonerServiceImpl getReasonerService() {
+        if (reasonerService == null) {
+            String workspaceBasePath = getHomeResolver().resolveHomeDirectory()
+                .resolve("workspaces").toString();
+            reasonerService = new ReasonerServiceImpl(getCatalogStore(), workspaceBasePath);
+        }
+        return reasonerService;
+    }
+
+    /**
+     * Get the semantic deepening service instance.
+     * Same path resolution logic as ReasonerServiceImpl.
+     */
+    public SemanticDeepeningService getSemanticDeepeningService() {
+        if (semanticDeepeningService == null) {
+            String workspaceBasePath = getHomeResolver().resolveHomeDirectory()
+                .resolve("workspaces").toString();
+            semanticDeepeningService = new SemanticDeepeningService(workspaceBasePath);
+        }
+        return semanticDeepeningService;
+    }
+
+    /**
+     * Get the consistency analysis service instance.
+     * Same path resolution logic as ReasonerServiceImpl.
+     */
+    public ConsistencyAnalysisService getConsistencyAnalysisService() {
+        if (consistencyAnalysisService == null) {
+            String workspaceBasePath = getHomeResolver().resolveHomeDirectory()
+                .resolve("workspaces").toString();
+            ReasonerLifecycleManager lifecycleManager = getReasonerService().getLifecycleManager();
+            consistencyAnalysisService = new ConsistencyAnalysisService(lifecycleManager, workspaceBasePath);
+        }
+        return consistencyAnalysisService;
     }
 
     /**

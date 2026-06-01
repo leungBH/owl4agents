@@ -1,0 +1,158 @@
+@prefix : <http://example.org/datatype-constraints#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+<http://example.org/datatype-constraints> a owl:Ontology ;
+  rdfs:label "Datatype Constraints Ontology" ;
+  rdfs:comment "Ontology with datatype facets including min/max, pattern, enumeration, and cardinality constraints for testing datatype constraint retrieval and literal validation." .
+
+# Classes
+:Person a owl:Class ;
+  rdfs:label "Person" .
+
+:Product a owl:Class ;
+  rdfs:label "Product" .
+
+:Employee a owl:Class ;
+  rdfs:label "Employee" ;
+  rdfs:subClassOf :Person .
+
+# Custom datatypes with constraints
+
+# AgeType: integer between 0 and 150
+:AgeType a rdfs:Datatype ;
+  rdfs:label "Age Type" ;
+  owl:equivalentClass [
+    a rdfs:Datatype ;
+    owl:onDatatype xsd:integer ;
+    owl:withRestrictions (
+      [ xsd:minInclusive 0 ]
+      [ xsd:maxInclusive 150 ]
+    )
+  ] .
+
+# SalaryType: decimal between 0 and 1000000
+:SalaryType a rdfs:Datatype ;
+  rdfs:label "Salary Type" ;
+  owl:equivalentClass [
+    a rdfs:Datatype ;
+    owl:onDatatype xsd:decimal ;
+    owl:withRestrictions (
+      [ xsd:minInclusive 0 ]
+      [ xsd:maxInclusive 1000000 ]
+    )
+  ] .
+
+# EmailType: string matching email pattern
+:EmailType a rdfs:Datatype ;
+  rdfs:label "Email Type" ;
+  owl:equivalentClass [
+    a rdfs:Datatype ;
+    owl:onDatatype xsd:string ;
+    owl:withRestrictions (
+      [ xsd:pattern "^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$" ]
+    )
+  ] .
+
+# ColorType: enumeration of red, green, blue
+:ColorType a rdfs:Datatype ;
+  rdfs:label "Color Type" ;
+  owl:equivalentClass [
+    a rdfs:Datatype ;
+    owl:onDatatype xsd:string ;
+    owl:withRestrictions (
+      [ xsd:pattern "^(Red|Green|Blue)$" ]
+    )
+  ] .
+
+# SSNType: string with exact length 11 and pattern
+:SSNType a rdfs:Datatype ;
+  rdfs:label "SSN Type" ;
+  owl:equivalentClass [
+    a rdfs:Datatype ;
+    owl:onDatatype xsd:string ;
+    owl:withRestrictions (
+      [ xsd:pattern "^\\d{3}-\\d{2}-\\d{4}$" ]
+      [ xsd:length 11 ]
+    )
+  ] .
+
+# PositiveInteger: integer > 0
+:PositiveInteger a rdfs:Datatype ;
+  rdfs:label "Positive Integer" ;
+  owl:equivalentClass [
+    a rdfs:Datatype ;
+    owl:onDatatype xsd:integer ;
+    owl:withRestrictions (
+      [ xsd:minExclusive 0 ]
+    )
+  ] .
+
+# Data properties with constrained ranges
+:hasAge a owl:DatatypeProperty ;
+  rdfs:label "has age" ;
+  rdfs:domain :Person ;
+  rdfs:range :AgeType ;
+  a owl:FunctionalProperty .
+
+:hasSalary a owl:DatatypeProperty ;
+  rdfs:label "has salary" ;
+  rdfs:domain :Employee ;
+  rdfs:range :SalaryType .
+
+:hasEmail a owl:DatatypeProperty ;
+  rdfs:label "has email" ;
+  rdfs:domain :Person ;
+  rdfs:range :EmailType ;
+  a owl:FunctionalProperty .
+
+:hasSSN a owl:DatatypeProperty ;
+  rdfs:label "has SSN" ;
+  rdfs:domain :Employee ;
+  rdfs:range :SSNType ;
+  a owl:FunctionalProperty .
+
+:hasFavoriteColor a owl:DatatypeProperty ;
+  rdfs:label "has favorite color" ;
+  rdfs:domain :Person ;
+  rdfs:range :ColorType .
+
+:hasPrice a owl:DatatypeProperty ;
+  rdfs:label "has price" ;
+  rdfs:domain :Product ;
+  rdfs:range :SalaryType .
+
+# Cardinality restrictions on class
+:Employee owl:subClassOf [
+  a owl:Restriction ;
+  owl:onProperty :hasSSN ;
+  owl:maxCardinality 1
+ ] .
+
+:Employee owl:subClassOf [
+  a owl:Restriction ;
+  owl:onProperty :hasEmail ;
+  owl:minCardinality 1
+ ] .
+
+# Valid individuals
+:alice a :Employee ;
+  rdfs:label "Alice" ;
+  :hasAge 30 ;
+  :hasSalary 75000 ;
+  :hasEmail "alice@example.com" ;
+  :hasSSN "123-45-6789" ;
+  :hasFavoriteColor "Red" .
+
+:bob a :Employee ;
+  rdfs:label "Bob" ;
+  :hasAge 45 ;
+  :hasSalary 95000 ;
+  :hasEmail "bob@company.org" ;
+  :hasSSN "987-65-4321" .
+
+:laptop a :Product ;
+  rdfs:label "Laptop" ;
+  :hasPrice 999 .

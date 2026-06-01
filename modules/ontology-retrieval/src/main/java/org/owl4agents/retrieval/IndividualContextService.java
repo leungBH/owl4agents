@@ -12,6 +12,8 @@ import org.owl4agents.core.model.ObjectPropertyAssertion;
 
 import org.semanticweb.owlapi.model.*;
 import org.semanticweb.owlapi.model.parameters.Imports;
+import org.semanticweb.owlapi.reasoner.OWLReasoner;
+import org.semanticweb.owlapi.reasoner.NodeSet;
 import org.semanticweb.owlapi.search.EntitySearcher;
 
 import java.util.*;
@@ -19,17 +21,27 @@ import java.util.*;
 /**
  * Implements individual context including explicit types,
  * object property assertions, and data property assertions.
+ * v0.2: When a reasoner is available, includes inferred types.
  */
 public class IndividualContextService {
 
     private final EntityIndex entityIndex;
     private final OntologyId ontologyId;
     private final OWLOntology ontology;
+    private final Optional<OWLReasoner> reasoner;
 
     public IndividualContextService(EntityIndex entityIndex, OntologyId ontologyId, OWLOntology ontology) {
+        this(entityIndex, ontologyId, ontology, null);
+    }
+
+    /**
+     * v0.2 constructor: also accepts a reasoner for inferred content.
+     */
+    public IndividualContextService(EntityIndex entityIndex, OntologyId ontologyId, OWLOntology ontology, OWLReasoner reasoner) {
         this.entityIndex = entityIndex;
         this.ontologyId = ontologyId;
         this.ontology = ontology;
+        this.reasoner = Optional.ofNullable(reasoner);
     }
 
     public ServiceResult<IndividualContext> getIndividualContext(EntityId individualIri) {
@@ -51,7 +63,20 @@ public class IndividualContextService {
         // Extract data property assertions
         List<DataPropertyAssertion> dataAssertions = getDataPropertyAssertions(ind);
 
-        IndividualContext context = new IndividualContext(
+        // v0.2: Add inferred types if reasoner is available
+        if (reasoner.isPresent() && reasoner.get().isConsistent()) {
+            OWLReasoner r = reasoner.get();
+            List<String> inferredTypes = getInferredTypes(r, ind, explicitTypes);
+
+            IndividualContext context = IndividualContext.withInferred(
+                indexEntry.iri(), indexEntry.prefixedName(), indexEntry.label(), indexEntry.comment(),
+                explicitTypes, objectAssertions, dataAssertions,
+                r.getReasonerName(), inferredTypes
+            );
+            return ServiceResult.success(context, ResultMetadata.empty());
+        }
+
+        IndividualContext context = IndividualContext.explicit(
             indexEntry.iri(),
             indexEntry.prefixedName(),
             indexEntry.label(),
@@ -64,15 +89,28 @@ public class IndividualContextService {
         return ServiceResult.success(context, ResultMetadata.explicit(ontologyId));
     }
 
-    private List<String> getExplicitTypes(OWLNamedIndividual ind) {
-        // EntitySearcher.getTypes returns Collection<OWLClassExpression>
-        List<String> types = new ArrayList<>();
-        for (OWLClassExpression expr : EntitySearcher.getTypes(ind, ontology)) {
-            if (expr instanceof OWLClass) {
-                types.add(((OWLClass) expr).getIRI().toString());
+    /**
+     * v0.2: Get inferred types not already in explicit types.
+     */
+    private List<String> getInferredTypes(OWLReasoner r, OWLNamedIndividual ind, List<String> explicitTypes) {
+        List<String> inferred = new ArrayList<>();
+        NodeSet<OWLClass> types = r.getTypes(ind, false);
+        for (OWLClass cls : types.getFlattened()) {
+            if (cls.isOWLThing()) continue;
+            String iri = cls.getIRI().toString();
+            if (!explicitTypes.contains(iri)) {
+                inferred.add(iri);
             }
         }
-        return types;
+        return inferred;
+    }
+
+    private List<String> getExplicitTypes(OWLNamedIndividual ind) {
+        // OWL API 5.x: EntitySearcher.getTypes returns Stream<OWLClassExpression>
+        return EntitySearcher.getTypes(ind, ontology)
+            .filter(expr -> expr instanceof OWLClass)
+            .map(expr -> ((OWLClass) expr).getIRI().toString())
+            .collect(java.util.stream.Collectors.toList());
     }
 
     private List<ObjectPropertyAssertion> getObjectPropertyAssertions(OWLNamedIndividual ind) {

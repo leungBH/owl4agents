@@ -16,15 +16,20 @@ public record ResultMetadata(
     public static final String EXTRACTION_UNKNOWN = "unknown";
 
     public ResultMetadata {
-        if (ontologyId == null) {
-            throw new IllegalArgumentException("Ontology ID must not be null");
-        }
-        if (graphScope == null) {
-            graphScope = GraphScope.EXPLICIT;
-        }
         if (extractionStatus == null) {
             extractionStatus = EXTRACTION_EXPLICIT;
         }
+        if (timestamp == null) {
+            timestamp = java.time.Instant.now().toString();
+        }
+    }
+
+    /**
+     * Convenience constructor with minimal required fields.
+     * v0.2 service methods may not always have an ontologyId at hand.
+     */
+    public static ResultMetadata empty() {
+        return new ResultMetadata(null, null, EXTRACTION_UNKNOWN, java.time.Instant.now().toString());
     }
 
     public static ResultMetadata explicit(OntologyId ontologyId) {

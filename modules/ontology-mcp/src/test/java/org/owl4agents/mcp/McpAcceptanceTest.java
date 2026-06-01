@@ -34,9 +34,10 @@ class McpAcceptanceTest {
             McpToolRegistry registry = new McpToolRegistry();
             List<Map<String, Object>> tools = registry.listToolSchemas();
 
-            assertEquals(18, tools.size());
+            // v0.1 had 18 readonly tools, v0.2 adds 27 more = 45 total
+            assertTrue(tools.size() >= 18, "At least v0.1 readonly tools must be registered");
 
-            // Verify all expected tool names
+            // Verify all expected v0.1 tool names
             List<String> toolNames = tools.stream()
                 .map(t -> t.get("name").toString())
                 .toList();
@@ -46,6 +47,15 @@ class McpAcceptanceTest {
             assertTrue(toolNames.contains("ontology_search_entities"));
             assertTrue(toolNames.contains("ontology_sparql_select"));
             assertTrue(toolNames.contains("ontology_get_qa_context"));
+
+            // v0.2 reasoner tools
+            assertTrue(toolNames.contains("ontology_classify"));
+            assertTrue(toolNames.contains("ontology_check_consistency"));
+            assertTrue(toolNames.contains("ontology_get_reasoning_report"));
+
+            // v0.2 semantic-deepening tools
+            assertTrue(toolNames.contains("ontology_get_class_restrictions"));
+            assertTrue(toolNames.contains("ontology_get_imports"));
         }
 
         @Test

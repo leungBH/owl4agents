@@ -179,6 +179,11 @@ function main() {
     console.log('  query      Validate or execute SPARQL queries');
     console.log('  context    Generate QA context for a question');
     console.log('  mcp        Start the MCP server');
+    console.log('  reason     Run reasoner tasks');
+    console.log('  classify   Compute inferred class hierarchy');
+    console.log('  realize    Infer individual class memberships');
+    console.log('  consistency  Check ontology consistency');
+    console.log('  list-reasoners List available reasoner adapters');
     process.exit(0);
   }
 

@@ -1,0 +1,108 @@
+@prefix : <http://example.org/unsatisfiable#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+<http://example.org/unsatisfiable> a owl:Ontology ;
+  rdfs:label "Unsatisfiable Class Ontology" ;
+  rdfs:comment "Ontology with classes that cannot have instances due to contradictory restrictions. The ontology itself is consistent (no conflicting individuals), but certain classes are unsatisfiable." .
+
+# Base classes
+:Person a owl:Class ;
+  rdfs:label "Person" .
+
+:Vehicle a owl:Class ;
+  rdfs:label "Vehicle" .
+
+:Car a owl:Class ;
+  rdfs:label "Car" ;
+  rdfs:subClassOf :Vehicle .
+
+:Bicycle a owl:Class ;
+  rdfs:label "Bicycle" ;
+  rdfs:subClassOf :Vehicle .
+
+# Disjoint classes: Car and Bicycle cannot share instances
+[] a owl:AllDisjointClasses ;
+  owl:members ( :Car :Bicycle ) .
+
+# Unsatisfiable class 1: CarBike is both a Car and a Bicycle (disjoint)
+:CarBike a owl:Class ;
+  rdfs:label "Car-Bike" ;
+  rdfs:subClassOf :Car ;
+  rdfs:subClassOf :Bicycle .
+
+# Unsatisfiable class 2: via contradictory restrictions
+:hasWheelCount a owl:DatatypeProperty ;
+  rdfs:label "has wheel count" ;
+  rdfs:domain :Vehicle ;
+  rdfs:range xsd:integer .
+
+# TwoWheeler requires exactly 2 wheels
+:TwoWheeler a owl:Class ;
+  rdfs:label "Two Wheeler" ;
+  rdfs:subClassOf :Vehicle ;
+  owl:equivalentClass [
+    a owl:Class ;
+    owl:intersectionOf (
+      :Vehicle
+      [ a owl:Restriction ;
+        owl:onProperty :hasWheelCount ;
+        owl:hasValue 2
+      ]
+    )
+  ] .
+
+# FourWheeler requires exactly 4 wheels
+:FourWheeler a owl:Class ;
+  rdfs:label "Four Wheeler" ;
+  rdfs:subClassOf :Vehicle ;
+  owl:equivalentClass [
+    a owl:Class ;
+    owl:intersectionOf (
+      :Vehicle
+      [ a owl:Restriction ;
+        owl:onProperty :hasWheelCount ;
+        owl:hasValue 4
+      ]
+    )
+  ] .
+
+# Unsatisfiable class 3: TwoFourWheeler must have both 2 and 4 wheels
+# (hasWheelCount is functional, so cannot have two different values)
+:hasWheelCount a owl:FunctionalProperty .
+
+:TwoFourWheeler a owl:Class ;
+  rdfs:label "Two-Four Wheeler" ;
+  rdfs:subClassOf :TwoWheeler ;
+  rdfs:subClassOf :FourWheeler .
+
+# Cascading unsat: HybridBike is subOf CarBike, so also unsat
+:HybridBike a owl:Class ;
+  rdfs:label "Hybrid Bike" ;
+  rdfs:subClassOf :CarBike .
+
+# Satisfiable class for comparison
+:ElectricCar a owl:Class ;
+  rdfs:label "Electric Car" ;
+  rdfs:subClassOf :Car .
+
+# A valid individual (the ontology is consistent)
+:myCar a :ElectricCar ;
+  rdfs:label "My Electric Car" ;
+  :hasWheelCount 4 .
+
+# Object properties for relation testing
+:manufacturedBy a owl:ObjectProperty ;
+  rdfs:label "manufactured by" ;
+  rdfs:domain :Vehicle ;
+  rdfs:range :Manufacturer .
+
+:Manufacturer a owl:Class ;
+  rdfs:label "Manufacturer" .
+
+:tesla a :Manufacturer ;
+  rdfs:label "Tesla" .
+
+:myCar :manufacturedBy :tesla .

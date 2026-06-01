@@ -85,6 +85,7 @@ public class McpServerAdapter {
 
     private Map<String, Object> executeReadonlyTool(String toolName, Map<String, Object> arguments) {
         switch (toolName) {
+            // v0.1 tools
             case "ontology_list" -> { return executeOntologyList(arguments); }
             case "ontology_summary" -> { return executeOntologySummary(arguments); }
             case "ontology_get_metadata" -> { return executeGetMetadata(arguments); }
@@ -103,6 +104,36 @@ public class McpServerAdapter {
             case "ontology_sparql_construct" -> { return executeSparqlConstruct(arguments); }
             case "ontology_sparql_describe" -> { return executeSparqlDescribe(arguments); }
             case "ontology_get_qa_context" -> { return executeGetQaContext(arguments); }
+            // v0.2 reasoner tools
+            case "ontology_list_reasoners" -> { return executeListReasoners(arguments); }
+            case "ontology_run_reasoner" -> { return executeRunReasoner(arguments); }
+            case "ontology_classify" -> { return executeClassify(arguments); }
+            case "ontology_realize_instances" -> { return executeRealize(arguments); }
+            case "ontology_check_consistency" -> { return executeCheckConsistency(arguments); }
+            case "ontology_explain_inconsistency" -> { return executeExplainInconsistency(arguments); }
+            case "ontology_explain_unsat_class" -> { return executeExplainUnsatClass(arguments); }
+            case "ontology_get_unsat_classes" -> { return executeGetUnsatClasses(arguments); }
+            case "ontology_get_reasoning_report" -> { return executeGetReasoningReport(arguments); }
+            case "ontology_get_inferred_facts" -> { return executeGetInferredFacts(arguments); }
+            case "ontology_check_entailment" -> { return executeCheckEntailment(arguments); }
+            // v0.2 consistency-analysis tools
+            case "ontology_check_class_compatibility" -> { return executeCheckClassCompatibility(arguments); }
+            case "ontology_check_individual_membership" -> { return executeCheckIndividualMembership(arguments); }
+            case "ontology_check_relation_assertion" -> { return executeCheckRelationAssertion(arguments); }
+            case "ontology_get_scope" -> { return executeGetScope(arguments); }
+            // v0.2 semantic-deepening tools
+            case "ontology_get_imports" -> { return executeGetImports(arguments); }
+            case "ontology_get_class_restrictions" -> { return executeGetClassRestrictions(arguments); }
+            case "ontology_get_property_characteristics" -> { return executeGetPropertyCharacteristics(arguments); }
+            case "ontology_get_equivalent_properties" -> { return executeGetEquivalentProperties(arguments); }
+            case "ontology_get_disjoint_properties" -> { return executeGetDisjointProperties(arguments); }
+            case "ontology_get_datatype_constraints" -> { return executeGetDatatypeConstraints(arguments); }
+            case "ontology_validate_literal" -> { return executeValidateLiteral(arguments); }
+            case "ontology_find_relations_between_entities" -> { return executeFindRelations(arguments); }
+            case "ontology_get_object_property_assertions" -> { return executeGetObjectPropertyAssertions(arguments); }
+            case "ontology_get_data_property_assertions" -> { return executeGetDataPropertyAssertions(arguments); }
+            case "ontology_get_same_individuals" -> { return executeGetSameIndividuals(arguments); }
+            case "ontology_get_different_individuals" -> { return executeGetDifferentIndividuals(arguments); }
             default -> { return errorResponse(ServiceError.readonlyViolation(toolName)); }
         }
     }
@@ -169,7 +200,8 @@ public class McpServerAdapter {
     }
 
     private Map<String, Object> executeListGraphs(Map<String, Object> args) {
-        return Map.of("status", "success", "data", Map.of("scopes", List.of("explicit")));
+        // v0.2: include inferred and union scopes alongside explicit
+        return Map.of("status", "success", "data", Map.of("scopes", List.of("explicit", "inferred", "union")));
     }
 
     private Map<String, Object> executeSearchEntities(Map<String, Object> args) {
@@ -467,6 +499,507 @@ public class McpServerAdapter {
         } catch (Exception e) {
             return errorResponse(ServiceError.of(ErrorCode.ONTOLOGY_NOT_FOUND, e.getMessage()));
         }
+    }
+
+    // ── v0.2 MCP tool implementations ──
+
+    private Map<String, Object> executeListReasoners(Map<String, Object> args) {
+        try {
+            String homeDirPath = homeResolver.resolveHomeDirectory().toString();
+            org.owl4agents.reasoner.ReasonerServiceImpl reasonerService =
+                new org.owl4agents.reasoner.ReasonerServiceImpl(catalogStore, homeDirPath);
+            ServiceResult<ReasonerListResult> result = reasonerService.listReasoners();
+            if (!result.isSuccess()) return errorResponse(((ServiceResult.Error<ReasonerListResult>) result).error());
+            ReasonerListResult data = ((ServiceResult.Success<ReasonerListResult>) result).data();
+            List<Map<String, Object>> reasoners = data.reasoners().stream()
+                .map(r -> Map.<String, Object>of("name", r.name(),
+                    "supportedProfiles", r.supportedProfiles(),
+                    "supportedOperations", r.supportedOperations(),
+                    "explanationSupported", r.explanationSupported()))
+                .collect(Collectors.toList());
+            return Map.of("status", "success", "data", Map.of("reasoners", reasoners));
+        } catch (Exception e) {
+            return errorResponse(ServiceError.of(ErrorCode.REASONER_NOT_AVAILABLE, e.getMessage()));
+        }
+    }
+
+    private Map<String, Object> executeRunReasoner(Map<String, Object> args) {
+        String ontologyIdStr = (String) args.get("ontology_id");
+        if (ontologyIdStr == null) return errorResponse(ServiceError.of(ErrorCode.ONTOLOGY_NOT_FOUND, "ontology_id is required"));
+        String reasonerName = (String) args.getOrDefault("reasoner", "auto");
+        try {
+            String homeDirPath = homeResolver.resolveHomeDirectory().toString();
+            org.owl4agents.reasoner.ReasonerServiceImpl reasonerService =
+                new org.owl4agents.reasoner.ReasonerServiceImpl(catalogStore, homeDirPath);
+            ServiceResult<ReasoningReport> result = reasonerService.runReasoner(
+                new OntologyId(ontologyIdStr), Optional.ofNullable(reasonerName));
+            if (!result.isSuccess()) return errorResponse(((ServiceResult.Error<ReasoningReport>) result).error());
+            ReasoningReport report = ((ServiceResult.Success<ReasoningReport>) result).data();
+            return Map.of("status", "success", "data", serializeReport(report));
+        } catch (Exception e) {
+            return errorResponse(ServiceError.of(ErrorCode.CLASSIFICATION_FAILED, e.getMessage()));
+        }
+    }
+
+    private Map<String, Object> executeClassify(Map<String, Object> args) {
+        String ontologyIdStr = (String) args.get("ontology_id");
+        if (ontologyIdStr == null) return errorResponse(ServiceError.of(ErrorCode.ONTOLOGY_NOT_FOUND, "ontology_id is required"));
+        String reasonerName = (String) args.getOrDefault("reasoner", "auto");
+        try {
+            String homeDirPath = homeResolver.resolveHomeDirectory().toString();
+            org.owl4agents.reasoner.ReasonerServiceImpl reasonerService =
+                new org.owl4agents.reasoner.ReasonerServiceImpl(catalogStore, homeDirPath);
+            ServiceResult<ClassificationResult> result = reasonerService.classify(
+                new OntologyId(ontologyIdStr), Optional.ofNullable(reasonerName));
+            if (!result.isSuccess()) return errorResponse(((ServiceResult.Error<ClassificationResult>) result).error());
+            ClassificationResult data = ((ServiceResult.Success<ClassificationResult>) result).data();
+            return Map.of("status", "success", "data", Map.of(
+                "ontologyId", data.ontologyId(), "reasonerName", data.reasonerName(),
+                "completeHierarchyCount", data.completeHierarchy().size(), "deltaCount", data.delta().size()));
+        } catch (Exception e) {
+            return errorResponse(ServiceError.of(ErrorCode.CLASSIFICATION_FAILED, e.getMessage()));
+        }
+    }
+
+    private Map<String, Object> executeRealize(Map<String, Object> args) {
+        String ontologyIdStr = (String) args.get("ontology_id");
+        if (ontologyIdStr == null) return errorResponse(ServiceError.of(ErrorCode.ONTOLOGY_NOT_FOUND, "ontology_id is required"));
+        String reasonerName = (String) args.getOrDefault("reasoner", "auto");
+        try {
+            String homeDirPath = homeResolver.resolveHomeDirectory().toString();
+            org.owl4agents.reasoner.ReasonerServiceImpl reasonerService =
+                new org.owl4agents.reasoner.ReasonerServiceImpl(catalogStore, homeDirPath);
+            ServiceResult<RealizationResult> result = reasonerService.realize(
+                new OntologyId(ontologyIdStr), Optional.ofNullable(reasonerName));
+            if (!result.isSuccess()) return errorResponse(((ServiceResult.Error<RealizationResult>) result).error());
+            RealizationResult data = ((ServiceResult.Success<RealizationResult>) result).data();
+            return Map.of("status", "success", "data", Map.of(
+                "ontologyId", data.ontologyId(), "reasonerName", data.reasonerName(),
+                "completeTypesCount", data.completeTypes().size(), "deltaCount", data.delta().size()));
+        } catch (Exception e) {
+            return errorResponse(ServiceError.of(ErrorCode.CLASSIFICATION_FAILED, e.getMessage()));
+        }
+    }
+
+    private Map<String, Object> executeCheckConsistency(Map<String, Object> args) {
+        String ontologyIdStr = (String) args.get("ontology_id");
+        if (ontologyIdStr == null) return errorResponse(ServiceError.of(ErrorCode.ONTOLOGY_NOT_FOUND, "ontology_id is required"));
+        String reasonerName = (String) args.getOrDefault("reasoner", "auto");
+        try {
+            String homeDirPath = homeResolver.resolveHomeDirectory().toString();
+            org.owl4agents.reasoner.ReasonerServiceImpl reasonerService =
+                new org.owl4agents.reasoner.ReasonerServiceImpl(catalogStore, homeDirPath);
+            ServiceResult<ConsistencyResult> result = reasonerService.checkConsistency(
+                new OntologyId(ontologyIdStr), Optional.ofNullable(reasonerName));
+            if (!result.isSuccess()) return errorResponse(((ServiceResult.Error<ConsistencyResult>) result).error());
+            ConsistencyResult data = ((ServiceResult.Success<ConsistencyResult>) result).data();
+            return Map.of("status", "success", "data", Map.of(
+                "consistent", data.consistent(), "reasonerName", data.reasonerName(),
+                "unsatisfiableClassIRIs", data.unsatisfiableClassIRIs()));
+        } catch (Exception e) {
+            return errorResponse(ServiceError.of(ErrorCode.CLASSIFICATION_FAILED, e.getMessage()));
+        }
+    }
+
+    private Map<String, Object> executeExplainInconsistency(Map<String, Object> args) {
+        String ontologyIdStr = (String) args.get("ontology_id");
+        if (ontologyIdStr == null) return errorResponse(ServiceError.of(ErrorCode.ONTOLOGY_NOT_FOUND, "ontology_id is required"));
+        String reasonerName = (String) args.getOrDefault("reasoner", "openllet");
+        try {
+            String homeDirPath = homeResolver.resolveHomeDirectory().toString();
+            org.owl4agents.reasoner.ReasonerServiceImpl reasonerService =
+                new org.owl4agents.reasoner.ReasonerServiceImpl(catalogStore, homeDirPath);
+            ServiceResult<InconsistencyExplanation> result = reasonerService.explainInconsistency(
+                new OntologyId(ontologyIdStr), Optional.ofNullable(reasonerName));
+            if (!result.isSuccess()) return errorResponse(((ServiceResult.Error<InconsistencyExplanation>) result).error());
+            InconsistencyExplanation data = ((ServiceResult.Success<InconsistencyExplanation>) result).data();
+            return Map.of("status", "success", "data", Map.of(
+                "ontologyId", data.ontologyId(), "explanationCount", data.explanationCount(),
+                "conflictingAxiomSets", data.conflictingAxiomSets().stream()
+                    .map(s -> Map.<String, Object>of("axiomDescriptions", s.axiomDescriptions(), "syntaxFormat", s.syntaxFormat()))
+                    .collect(Collectors.toList())));
+        } catch (Exception e) {
+            return errorResponse(ServiceError.of(ErrorCode.EXPLANATION_FAILED, e.getMessage()));
+        }
+    }
+
+    private Map<String, Object> executeExplainUnsatClass(Map<String, Object> args) {
+        String ontologyIdStr = (String) args.get("ontology_id");
+        String classIRI = (String) args.get("class_uri");
+        if (ontologyIdStr == null || classIRI == null) return errorResponse(ServiceError.of(ErrorCode.CLASS_NOT_FOUND, "ontology_id and class_uri are required"));
+        String reasonerName = (String) args.getOrDefault("reasoner", "openllet");
+        try {
+            String homeDirPath = homeResolver.resolveHomeDirectory().toString();
+            org.owl4agents.reasoner.ReasonerServiceImpl reasonerService =
+                new org.owl4agents.reasoner.ReasonerServiceImpl(catalogStore, homeDirPath);
+            ServiceResult<UnsatClassExplanation> result = reasonerService.explainUnsatClass(
+                new OntologyId(ontologyIdStr), classIRI, Optional.ofNullable(reasonerName));
+            if (!result.isSuccess()) return errorResponse(((ServiceResult.Error<UnsatClassExplanation>) result).error());
+            UnsatClassExplanation data = ((ServiceResult.Success<UnsatClassExplanation>) result).data();
+            return Map.of("status", "success", "data", Map.of(
+                "ontologyId", data.ontologyId(), "classURI", data.classIRI(),
+                "explanationCount", data.explanationCount()));
+        } catch (Exception e) {
+            return errorResponse(ServiceError.of(ErrorCode.EXPLANATION_FAILED, e.getMessage()));
+        }
+    }
+
+    private Map<String, Object> executeGetUnsatClasses(Map<String, Object> args) {
+        String ontologyIdStr = (String) args.get("ontology_id");
+        if (ontologyIdStr == null) return errorResponse(ServiceError.of(ErrorCode.ONTOLOGY_NOT_FOUND, "ontology_id is required"));
+        try {
+            String homeDirPath = homeResolver.resolveHomeDirectory().toString();
+            org.owl4agents.reasoner.ReasonerServiceImpl reasonerService =
+                new org.owl4agents.reasoner.ReasonerServiceImpl(catalogStore, homeDirPath);
+            ServiceResult<List<String>> result = reasonerService.getUnsatClasses(new OntologyId(ontologyIdStr));
+            if (!result.isSuccess()) return errorResponse(((ServiceResult.Error<List<String>>) result).error());
+            return Map.of("status", "success", "data", Map.of("unsatisfiableClassIRIs", ((ServiceResult.Success<List<String>>) result).data()));
+        } catch (Exception e) {
+            return errorResponse(ServiceError.of(ErrorCode.CLASSIFICATION_FAILED, e.getMessage()));
+        }
+    }
+
+    private Map<String, Object> executeGetReasoningReport(Map<String, Object> args) {
+        String ontologyIdStr = (String) args.get("ontology_id");
+        if (ontologyIdStr == null) return errorResponse(ServiceError.of(ErrorCode.ONTOLOGY_NOT_FOUND, "ontology_id is required"));
+        try {
+            String homeDirPath = homeResolver.resolveHomeDirectory().toString();
+            org.owl4agents.reasoner.ReasonerServiceImpl reasonerService =
+                new org.owl4agents.reasoner.ReasonerServiceImpl(catalogStore, homeDirPath);
+            ServiceResult<ReasoningReport> result = reasonerService.getReasoningReport(new OntologyId(ontologyIdStr));
+            if (!result.isSuccess()) return errorResponse(((ServiceResult.Error<ReasoningReport>) result).error());
+            return Map.of("status", "success", "data", serializeReport(((ServiceResult.Success<ReasoningReport>) result).data()));
+        } catch (Exception e) {
+            return errorResponse(ServiceError.of(ErrorCode.REASONING_NOT_RUN, e.getMessage()));
+        }
+    }
+
+    private Map<String, Object> executeGetInferredFacts(Map<String, Object> args) {
+        String ontologyIdStr = (String) args.get("ontology_id");
+        if (ontologyIdStr == null) return errorResponse(ServiceError.of(ErrorCode.ONTOLOGY_NOT_FOUND, "ontology_id is required"));
+        String entityIRI = (String) args.getOrDefault("entity_iri", null);
+        try {
+            String homeDirPath = homeResolver.resolveHomeDirectory().toString();
+            org.owl4agents.reasoner.ReasonerServiceImpl reasonerService =
+                new org.owl4agents.reasoner.ReasonerServiceImpl(catalogStore, homeDirPath);
+            ServiceResult<InferredFactsResult> result = reasonerService.getInferredFacts(
+                new OntologyId(ontologyIdStr), Optional.ofNullable(entityIRI));
+            if (!result.isSuccess()) return errorResponse(((ServiceResult.Error<InferredFactsResult>) result).error());
+            InferredFactsResult data = ((ServiceResult.Success<InferredFactsResult>) result).data();
+            return Map.of("status", "success", "data", Map.of("ontologyId", data.ontologyId(), "factsCount", data.facts().size()));
+        } catch (Exception e) {
+            return errorResponse(ServiceError.of(ErrorCode.REASONING_NOT_RUN, e.getMessage()));
+        }
+    }
+
+    private Map<String, Object> executeCheckEntailment(Map<String, Object> args) {
+        String ontologyIdStr = (String) args.get("ontology_id");
+        String axiomType = (String) args.get("axiom_type");
+        if (ontologyIdStr == null || axiomType == null) return errorResponse(ServiceError.of(ErrorCode.INVALID_AXIOM_PARAMETERS, "ontology_id and axiom_type are required"));
+        String reasonerName = (String) args.getOrDefault("reasoner", "auto");
+        Map<String, String> params = new HashMap<>();
+        args.forEach((k, v) -> { if (!k.equals("ontology_id") && !k.equals("axiom_type") && !k.equals("reasoner")) params.put(k, v != null ? v.toString() : null); });
+        try {
+            String homeDirPath = homeResolver.resolveHomeDirectory().toString();
+            org.owl4agents.reasoner.ReasonerServiceImpl reasonerService =
+                new org.owl4agents.reasoner.ReasonerServiceImpl(catalogStore, homeDirPath);
+            ServiceResult<EntailmentResult> result = reasonerService.checkEntailment(
+                new OntologyId(ontologyIdStr), axiomType, params, Optional.ofNullable(reasonerName));
+            if (!result.isSuccess()) return errorResponse(((ServiceResult.Error<EntailmentResult>) result).error());
+            EntailmentResult data = ((ServiceResult.Success<EntailmentResult>) result).data();
+            return Map.of("status", "success", "data", Map.of("result", data.result(), "axiomType", data.axiomType(), "source", data.source() != null ? data.source() : ""));
+        } catch (Exception e) {
+            return errorResponse(ServiceError.of(ErrorCode.CLASSIFICATION_FAILED, e.getMessage()));
+        }
+    }
+
+    // v0.2 consistency-analysis tools
+    private Map<String, Object> executeCheckClassCompatibility(Map<String, Object> args) {
+        String ontologyIdStr = (String) args.get("ontology_id");
+        String class1IRI = (String) args.get("class1_uri");
+        String class2IRI = (String) args.get("class2_uri");
+        if (ontologyIdStr == null || class1IRI == null || class2IRI == null) return errorResponse(ServiceError.of(ErrorCode.CLASS_NOT_FOUND, "ontology_id, class1_uri, and class2_uri are required"));
+        try {
+            String homeDirPath = homeResolver.resolveHomeDirectory().toString();
+            org.owl4agents.reasoner.ReasonerServiceImpl reasonerService =
+                new org.owl4agents.reasoner.ReasonerServiceImpl(catalogStore, homeDirPath);
+            org.owl4agents.validation.ConsistencyAnalysisService analysisService =
+                new org.owl4agents.validation.ConsistencyAnalysisService(reasonerService.getLifecycleManager(), homeDirPath);
+            ServiceResult<ClassCompatibilityResult> result = analysisService.checkClassCompatibility(
+                new OntologyId(ontologyIdStr), class1IRI, class2IRI);
+            if (!result.isSuccess()) return errorResponse(((ServiceResult.Error<ClassCompatibilityResult>) result).error());
+            ClassCompatibilityResult data = ((ServiceResult.Success<ClassCompatibilityResult>) result).data();
+            return Map.of("status", "success", "data", Map.of("compatibility", data.compatibility(), "class1IRI", data.class1IRI(), "class2IRI", data.class2IRI()));
+        } catch (Exception e) {
+            return errorResponse(ServiceError.of(ErrorCode.CLASSIFICATION_FAILED, e.getMessage()));
+        }
+    }
+
+    private Map<String, Object> executeCheckIndividualMembership(Map<String, Object> args) {
+        String ontologyIdStr = (String) args.get("ontology_id");
+        String individualIRI = (String) args.get("individual_uri");
+        String classIRI = (String) args.get("class_uri");
+        if (ontologyIdStr == null || individualIRI == null || classIRI == null) return errorResponse(ServiceError.of(ErrorCode.INDIVIDUAL_NOT_FOUND, "ontology_id, individual_uri, and class_uri are required"));
+        String reasonerName = (String) args.getOrDefault("reasoner", "auto");
+        try {
+            String homeDirPath = homeResolver.resolveHomeDirectory().toString();
+            org.owl4agents.reasoner.ReasonerServiceImpl reasonerService =
+                new org.owl4agents.reasoner.ReasonerServiceImpl(catalogStore, homeDirPath);
+            org.owl4agents.validation.ConsistencyAnalysisService analysisService =
+                new org.owl4agents.validation.ConsistencyAnalysisService(reasonerService.getLifecycleManager(), homeDirPath);
+            ServiceResult<MembershipResult> result = analysisService.checkIndividualMembership(
+                new OntologyId(ontologyIdStr), individualIRI, classIRI, Optional.ofNullable(reasonerName));
+            if (!result.isSuccess()) return errorResponse(((ServiceResult.Error<MembershipResult>) result).error());
+            MembershipResult data = ((ServiceResult.Success<MembershipResult>) result).data();
+            return Map.of("status", "success", "data", Map.of("isMember", data.isMember(), "membershipType", data.membershipType() != null ? data.membershipType() : ""));
+        } catch (Exception e) { return errorResponse(ServiceError.of(ErrorCode.ONTOLOGY_NOT_FOUND, e.getMessage())); }
+    }
+
+    private Map<String, Object> executeCheckRelationAssertion(Map<String, Object> args) {
+        String ontologyIdStr = (String) args.get("ontology_id");
+        String sourceIRI = (String) args.get("source_individual_uri");
+        String propertyIRI = (String) args.get("property_uri");
+        String targetIRI = (String) args.get("target_individual_uri");
+        if (ontologyIdStr == null || sourceIRI == null || propertyIRI == null || targetIRI == null) return errorResponse(ServiceError.of(ErrorCode.INDIVIDUAL_NOT_FOUND, "ontology_id, source, property, and target are required"));
+        String reasonerName = (String) args.getOrDefault("reasoner", "auto");
+        try {
+            String homeDirPath = homeResolver.resolveHomeDirectory().toString();
+            org.owl4agents.reasoner.ReasonerServiceImpl reasonerService =
+                new org.owl4agents.reasoner.ReasonerServiceImpl(catalogStore, homeDirPath);
+            org.owl4agents.validation.ConsistencyAnalysisService analysisService =
+                new org.owl4agents.validation.ConsistencyAnalysisService(reasonerService.getLifecycleManager(), homeDirPath);
+            ServiceResult<RelationAssertionResult> result = analysisService.checkRelationAssertion(
+                new OntologyId(ontologyIdStr), sourceIRI, propertyIRI, targetIRI, Optional.ofNullable(reasonerName));
+            if (!result.isSuccess()) return errorResponse(((ServiceResult.Error<RelationAssertionResult>) result).error());
+            RelationAssertionResult data = ((ServiceResult.Success<RelationAssertionResult>) result).data();
+            return Map.of("status", "success", "data", Map.of("isAsserted", data.isAsserted(), "assertionType", data.assertionType() != null ? data.assertionType() : ""));
+        } catch (Exception e) { return errorResponse(ServiceError.of(ErrorCode.ONTOLOGY_NOT_FOUND, e.getMessage())); }
+    }
+
+    private Map<String, Object> executeGetScope(Map<String, Object> args) {
+        String ontologyIdStr = (String) args.get("ontology_id");
+        if (ontologyIdStr == null) return errorResponse(ServiceError.of(ErrorCode.ONTOLOGY_NOT_FOUND, "ontology_id is required"));
+        try {
+            String homeDirPath = homeResolver.resolveHomeDirectory().toString();
+            org.owl4agents.reasoner.ReasonerServiceImpl reasonerService =
+                new org.owl4agents.reasoner.ReasonerServiceImpl(catalogStore, homeDirPath);
+            org.owl4agents.validation.ConsistencyAnalysisService analysisService =
+                new org.owl4agents.validation.ConsistencyAnalysisService(reasonerService.getLifecycleManager(), homeDirPath);
+            ServiceResult<ScopeDescription> result = analysisService.getScope(new OntologyId(ontologyIdStr));
+            if (!result.isSuccess()) return errorResponse(((ServiceResult.Error<ScopeDescription>) result).error());
+            ScopeDescription data = ((ServiceResult.Success<ScopeDescription>) result).data();
+            return Map.of("status", "success", "data", Map.of(
+                "ontologyId", data.ontologyId(), "coveredDomains", data.coveredDomains(),
+                "knownGaps", data.knownGaps(), "profileLimitations", data.profileLimitations(),
+                "unsupportedFeatureTypes", data.unsupportedFeatureTypes()));
+        } catch (Exception e) { return errorResponse(ServiceError.of(ErrorCode.SCOPE_ANALYSIS_FAILED, e.getMessage())); }
+    }
+
+    // v0.2 semantic-deepening tools
+    private Map<String, Object> executeGetImports(Map<String, Object> args) {
+        String ontologyIdStr = (String) args.get("ontology_id");
+        if (ontologyIdStr == null) return errorResponse(ServiceError.of(ErrorCode.ONTOLOGY_NOT_FOUND, "ontology_id is required"));
+        try {
+            String homeDirPath = homeResolver.resolveHomeDirectory().toString();
+            org.owl4agents.owlapi.SemanticDeepeningService service = new org.owl4agents.owlapi.SemanticDeepeningService(homeDirPath);
+            ServiceResult<ImportClosureResult> result = service.getImportClosure(new OntologyId(ontologyIdStr));
+            if (!result.isSuccess()) return errorResponse(((ServiceResult.Error<ImportClosureResult>) result).error());
+            ImportClosureResult data = ((ServiceResult.Success<ImportClosureResult>) result).data();
+            return Map.of("status", "success", "data", Map.of("ontologyId", data.ontologyId(), "imports", data.imports().stream()
+                .map(i -> Map.<String, Object>of("ontologyIRI", i.ontologyIRI() != null ? i.ontologyIRI() : "", "isDirect", i.isDirect())).collect(Collectors.toList())));
+        } catch (Exception e) { return errorResponse(ServiceError.of(ErrorCode.ONTOLOGY_NOT_FOUND, e.getMessage())); }
+    }
+
+    private Map<String, Object> executeGetClassRestrictions(Map<String, Object> args) {
+        String ontologyIdStr = (String) args.get("ontology_id");
+        String classIRI = (String) args.get("class_uri");
+        if (ontologyIdStr == null || classIRI == null) return errorResponse(ServiceError.of(ErrorCode.CLASS_NOT_FOUND, "ontology_id and class_uri are required"));
+        boolean includeInferred = Boolean.parseBoolean((String) args.getOrDefault("include_inferred", "false"));
+        try {
+            String homeDirPath = homeResolver.resolveHomeDirectory().toString();
+            org.owl4agents.owlapi.SemanticDeepeningService service = new org.owl4agents.owlapi.SemanticDeepeningService(homeDirPath);
+            ServiceResult<ClassRestrictionsResult> result = service.getClassRestrictions(new OntologyId(ontologyIdStr), classIRI, includeInferred);
+            if (!result.isSuccess()) return errorResponse(((ServiceResult.Error<ClassRestrictionsResult>) result).error());
+            ClassRestrictionsResult data = ((ServiceResult.Success<ClassRestrictionsResult>) result).data();
+            return Map.of("status", "success", "data", Map.of("ontologyId", data.ontologyId(), "classIRI", data.classIRI(),
+                "restrictions", data.restrictions().stream().map(r -> Map.<String, Object>of(
+                    "restrictionType", r.restrictionType(), "onProperty", r.onProperty(),
+                    "filler", r.filler() != null ? r.filler() : "", "cardinality", r.cardinality() != null ? r.cardinality() : 0))
+                .collect(Collectors.toList())));
+        } catch (Exception e) { return errorResponse(ServiceError.of(ErrorCode.ONTOLOGY_NOT_FOUND, e.getMessage())); }
+    }
+
+    private Map<String, Object> executeGetPropertyCharacteristics(Map<String, Object> args) {
+        String ontologyIdStr = (String) args.get("ontology_id");
+        String propertyIRI = (String) args.get("property_uri");
+        if (ontologyIdStr == null || propertyIRI == null) return errorResponse(ServiceError.of(ErrorCode.PROPERTY_NOT_FOUND, "ontology_id and property_uri are required"));
+        boolean includeInferred = Boolean.parseBoolean((String) args.getOrDefault("include_inferred", "false"));
+        try {
+            String homeDirPath = homeResolver.resolveHomeDirectory().toString();
+            org.owl4agents.owlapi.SemanticDeepeningService service = new org.owl4agents.owlapi.SemanticDeepeningService(homeDirPath);
+            ServiceResult<PropertyCharacteristicsResult> result = service.getPropertyCharacteristics(new OntologyId(ontologyIdStr), propertyIRI, includeInferred);
+            if (!result.isSuccess()) return errorResponse(((ServiceResult.Error<PropertyCharacteristicsResult>) result).error());
+            PropertyCharacteristicsResult data = ((ServiceResult.Success<PropertyCharacteristicsResult>) result).data();
+            return Map.of("status", "success", "data", Map.of("propertyIRI", data.propertyIRI(), "propertyType", data.propertyType(),
+                "functional", data.functional(), "inverseFunctional", data.inverseFunctional(), "transitive", data.transitive(),
+                "symmetric", data.symmetric(), "asymmetric", data.asymmetric(), "reflexive", data.reflexive(), "irreflexive", data.irreflexive()));
+        } catch (Exception e) { return errorResponse(ServiceError.of(ErrorCode.ONTOLOGY_NOT_FOUND, e.getMessage())); }
+    }
+
+    private Map<String, Object> executeGetEquivalentProperties(Map<String, Object> args) {
+        String ontologyIdStr = (String) args.get("ontology_id");
+        String propertyIRI = (String) args.get("property_uri");
+        if (ontologyIdStr == null || propertyIRI == null) return errorResponse(ServiceError.of(ErrorCode.PROPERTY_NOT_FOUND, "ontology_id and property_uri are required"));
+        boolean includeInferred = Boolean.parseBoolean((String) args.getOrDefault("include_inferred", "false"));
+        try {
+            String homeDirPath = homeResolver.resolveHomeDirectory().toString();
+            org.owl4agents.owlapi.SemanticDeepeningService service = new org.owl4agents.owlapi.SemanticDeepeningService(homeDirPath);
+            ServiceResult<PropertyAxiomsResult> result = service.getEquivalentProperties(new OntologyId(ontologyIdStr), propertyIRI, includeInferred);
+            if (!result.isSuccess()) return errorResponse(((ServiceResult.Error<PropertyAxiomsResult>) result).error());
+            PropertyAxiomsResult data = ((ServiceResult.Success<PropertyAxiomsResult>) result).data();
+            return Map.of("status", "success", "data", Map.of("propertyIRI", data.propertyIRI(), "relatedProperties", data.relatedPropertyIRIs()));
+        } catch (Exception e) { return errorResponse(ServiceError.of(ErrorCode.ONTOLOGY_NOT_FOUND, e.getMessage())); }
+    }
+
+    private Map<String, Object> executeGetDisjointProperties(Map<String, Object> args) {
+        String ontologyIdStr = (String) args.get("ontology_id");
+        String propertyIRI = (String) args.get("property_uri");
+        if (ontologyIdStr == null || propertyIRI == null) return errorResponse(ServiceError.of(ErrorCode.PROPERTY_NOT_FOUND, "ontology_id and property_uri are required"));
+        boolean includeInferred = Boolean.parseBoolean((String) args.getOrDefault("include_inferred", "false"));
+        try {
+            String homeDirPath = homeResolver.resolveHomeDirectory().toString();
+            org.owl4agents.owlapi.SemanticDeepeningService service = new org.owl4agents.owlapi.SemanticDeepeningService(homeDirPath);
+            ServiceResult<PropertyAxiomsResult> result = service.getDisjointProperties(new OntologyId(ontologyIdStr), propertyIRI, includeInferred);
+            if (!result.isSuccess()) return errorResponse(((ServiceResult.Error<PropertyAxiomsResult>) result).error());
+            PropertyAxiomsResult data = ((ServiceResult.Success<PropertyAxiomsResult>) result).data();
+            return Map.of("status", "success", "data", Map.of("propertyIRI", data.propertyIRI(), "disjointProperties", data.relatedPropertyIRIs()));
+        } catch (Exception e) { return errorResponse(ServiceError.of(ErrorCode.ONTOLOGY_NOT_FOUND, e.getMessage())); }
+    }
+
+    private Map<String, Object> executeGetDatatypeConstraints(Map<String, Object> args) {
+        String ontologyIdStr = (String) args.get("ontology_id");
+        String datatypeIRI = (String) args.get("datatype_uri");
+        if (ontologyIdStr == null || datatypeIRI == null) return errorResponse(ServiceError.of(ErrorCode.DATATYPE_NOT_FOUND, "ontology_id and datatype_uri are required"));
+        try {
+            String homeDirPath = homeResolver.resolveHomeDirectory().toString();
+            org.owl4agents.owlapi.SemanticDeepeningService service = new org.owl4agents.owlapi.SemanticDeepeningService(homeDirPath);
+            ServiceResult<DatatypeConstraintsResult> result = service.getDatatypeConstraints(new OntologyId(ontologyIdStr), datatypeIRI);
+            if (!result.isSuccess()) return errorResponse(((ServiceResult.Error<DatatypeConstraintsResult>) result).error());
+            DatatypeConstraintsResult data = ((ServiceResult.Success<DatatypeConstraintsResult>) result).data();
+            return Map.of("status", "success", "data", Map.of("datatypeIRI", data.datatypeIRI(), "baseDatatypeIRI", data.baseDatatypeIRI() != null ? data.baseDatatypeIRI() : "",
+                "facets", data.facets().stream().map(f -> Map.<String, Object>of("facetType", f.facetType(), "facetValue", f.facetValue())).collect(Collectors.toList())));
+        } catch (Exception e) { return errorResponse(ServiceError.of(ErrorCode.ONTOLOGY_NOT_FOUND, e.getMessage())); }
+    }
+
+    private Map<String, Object> executeValidateLiteral(Map<String, Object> args) {
+        String ontologyIdStr = (String) args.get("ontology_id");
+        String literalValue = (String) args.get("literal_value");
+        String datatypeIRI = (String) args.get("datatype_uri");
+        if (ontologyIdStr == null || literalValue == null || datatypeIRI == null) return errorResponse(ServiceError.of(ErrorCode.DATATYPE_NOT_FOUND, "ontology_id, literal_value, and datatype_uri are required"));
+        String propertyIRI = (String) args.getOrDefault("property_uri", null);
+        try {
+            String homeDirPath = homeResolver.resolveHomeDirectory().toString();
+            org.owl4agents.owlapi.SemanticDeepeningService service = new org.owl4agents.owlapi.SemanticDeepeningService(homeDirPath);
+            ServiceResult<LiteralValidationResult> result = service.validateLiteral(new OntologyId(ontologyIdStr), literalValue, datatypeIRI, Optional.ofNullable(propertyIRI));
+            if (!result.isSuccess()) return errorResponse(((ServiceResult.Error<LiteralValidationResult>) result).error());
+            LiteralValidationResult data = ((ServiceResult.Success<LiteralValidationResult>) result).data();
+            return Map.of("status", "success", "data", Map.of("valid", data.valid(), "literalValue", data.literalValue(), "datatypeIRI", data.datatypeIRI(), "violations", data.violations()));
+        } catch (Exception e) { return errorResponse(ServiceError.of(ErrorCode.ONTOLOGY_NOT_FOUND, e.getMessage())); }
+    }
+
+    private Map<String, Object> executeFindRelations(Map<String, Object> args) {
+        String ontologyIdStr = (String) args.get("ontology_id");
+        String sourceIRI = (String) args.get("source_entity_uri");
+        String targetIRI = (String) args.get("target_entity_uri");
+        if (ontologyIdStr == null || sourceIRI == null || targetIRI == null) return errorResponse(ServiceError.of(ErrorCode.ENTITY_NOT_FOUND, "ontology_id, source_entity_uri, and target_entity_uri are required"));
+        boolean includeInferred = Boolean.parseBoolean((String) args.getOrDefault("include_inferred", "false"));
+        try {
+            String homeDirPath = homeResolver.resolveHomeDirectory().toString();
+            org.owl4agents.owlapi.SemanticDeepeningService service = new org.owl4agents.owlapi.SemanticDeepeningService(homeDirPath);
+            ServiceResult<PropertyAxiomsResult> result = service.findRelationsBetweenEntities(new OntologyId(ontologyIdStr), sourceIRI, targetIRI, includeInferred);
+            if (!result.isSuccess()) return errorResponse(((ServiceResult.Error<PropertyAxiomsResult>) result).error());
+            PropertyAxiomsResult data = ((ServiceResult.Success<PropertyAxiomsResult>) result).data();
+            return Map.of("status", "success", "data", Map.of("relations", data.relatedPropertyIRIs()));
+        } catch (Exception e) { return errorResponse(ServiceError.of(ErrorCode.ONTOLOGY_NOT_FOUND, e.getMessage())); }
+    }
+
+    private Map<String, Object> executeGetObjectPropertyAssertions(Map<String, Object> args) {
+        String ontologyIdStr = (String) args.get("ontology_id");
+        String individualIRI = (String) args.get("individual_uri");
+        if (ontologyIdStr == null || individualIRI == null) return errorResponse(ServiceError.of(ErrorCode.INDIVIDUAL_NOT_FOUND, "ontology_id and individual_uri are required"));
+        boolean includeInferred = Boolean.parseBoolean((String) args.getOrDefault("include_inferred", "false"));
+        try {
+            String homeDirPath = homeResolver.resolveHomeDirectory().toString();
+            org.owl4agents.owlapi.SemanticDeepeningService service = new org.owl4agents.owlapi.SemanticDeepeningService(homeDirPath);
+            ServiceResult<PropertyAxiomsResult> result = service.getObjectPropertyAssertions(new OntologyId(ontologyIdStr), individualIRI, includeInferred);
+            if (!result.isSuccess()) return errorResponse(((ServiceResult.Error<PropertyAxiomsResult>) result).error());
+            return Map.of("status", "success", "data", Map.of("assertions", ((ServiceResult.Success<PropertyAxiomsResult>) result).data().relatedPropertyIRIs()));
+        } catch (Exception e) { return errorResponse(ServiceError.of(ErrorCode.ONTOLOGY_NOT_FOUND, e.getMessage())); }
+    }
+
+    private Map<String, Object> executeGetDataPropertyAssertions(Map<String, Object> args) {
+        String ontologyIdStr = (String) args.get("ontology_id");
+        String individualIRI = (String) args.get("individual_uri");
+        if (ontologyIdStr == null || individualIRI == null) return errorResponse(ServiceError.of(ErrorCode.INDIVIDUAL_NOT_FOUND, "ontology_id and individual_uri are required"));
+        boolean includeInferred = Boolean.parseBoolean((String) args.getOrDefault("include_inferred", "false"));
+        try {
+            String homeDirPath = homeResolver.resolveHomeDirectory().toString();
+            org.owl4agents.owlapi.SemanticDeepeningService service = new org.owl4agents.owlapi.SemanticDeepeningService(homeDirPath);
+            ServiceResult<PropertyAxiomsResult> result = service.getDataPropertyAssertions(new OntologyId(ontologyIdStr), individualIRI, includeInferred);
+            if (!result.isSuccess()) return errorResponse(((ServiceResult.Error<PropertyAxiomsResult>) result).error());
+            return Map.of("status", "success", "data", Map.of("assertions", ((ServiceResult.Success<PropertyAxiomsResult>) result).data().relatedPropertyIRIs()));
+        } catch (Exception e) { return errorResponse(ServiceError.of(ErrorCode.ONTOLOGY_NOT_FOUND, e.getMessage())); }
+    }
+
+    private Map<String, Object> executeGetSameIndividuals(Map<String, Object> args) {
+        String ontologyIdStr = (String) args.get("ontology_id");
+        String individualIRI = (String) args.get("individual_uri");
+        if (ontologyIdStr == null || individualIRI == null) return errorResponse(ServiceError.of(ErrorCode.INDIVIDUAL_NOT_FOUND, "ontology_id and individual_uri are required"));
+        boolean includeInferred = Boolean.parseBoolean((String) args.getOrDefault("include_inferred", "false"));
+        try {
+            String homeDirPath = homeResolver.resolveHomeDirectory().toString();
+            org.owl4agents.owlapi.SemanticDeepeningService service = new org.owl4agents.owlapi.SemanticDeepeningService(homeDirPath);
+            ServiceResult<PropertyAxiomsResult> result = service.getSameIndividuals(new OntologyId(ontologyIdStr), individualIRI, includeInferred);
+            if (!result.isSuccess()) return errorResponse(((ServiceResult.Error<PropertyAxiomsResult>) result).error());
+            return Map.of("status", "success", "data", Map.of("sameAsIndividuals", ((ServiceResult.Success<PropertyAxiomsResult>) result).data().relatedPropertyIRIs()));
+        } catch (Exception e) { return errorResponse(ServiceError.of(ErrorCode.ONTOLOGY_NOT_FOUND, e.getMessage())); }
+    }
+
+    private Map<String, Object> executeGetDifferentIndividuals(Map<String, Object> args) {
+        String ontologyIdStr = (String) args.get("ontology_id");
+        String individualIRI = (String) args.get("individual_uri");
+        if (ontologyIdStr == null || individualIRI == null) return errorResponse(ServiceError.of(ErrorCode.INDIVIDUAL_NOT_FOUND, "ontology_id and individual_uri are required"));
+        boolean includeInferred = Boolean.parseBoolean((String) args.getOrDefault("include_inferred", "false"));
+        try {
+            String homeDirPath = homeResolver.resolveHomeDirectory().toString();
+            org.owl4agents.owlapi.SemanticDeepeningService service = new org.owl4agents.owlapi.SemanticDeepeningService(homeDirPath);
+            ServiceResult<PropertyAxiomsResult> result = service.getDifferentIndividuals(new OntologyId(ontologyIdStr), individualIRI, includeInferred);
+            if (!result.isSuccess()) return errorResponse(((ServiceResult.Error<PropertyAxiomsResult>) result).error());
+            return Map.of("status", "success", "data", Map.of("differentFromIndividuals", ((ServiceResult.Success<PropertyAxiomsResult>) result).data().relatedPropertyIRIs()));
+        } catch (Exception e) { return errorResponse(ServiceError.of(ErrorCode.ONTOLOGY_NOT_FOUND, e.getMessage())); }
+    }
+
+    private Map<String, Object> serializeReport(ReasoningReport report) {
+        Map<String, Object> m = new HashMap<>();
+        m.put("ontologyId", report.ontologyId());
+        m.put("reasonerName", report.reasonerName());
+        m.put("owlProfile", report.owlProfile());
+        m.put("classificationStatus", report.classificationStatus());
+        m.put("realizationStatus", report.realizationStatus());
+        m.put("consistencyStatus", report.consistencyStatus());
+        m.put("warningCount", report.warningCount());
+        m.put("inferredAxiomCountsByType", report.inferredAxiomCountsByType());
+        if (report.timingBreakdown() != null) {
+            m.put("timingBreakdown", Map.of(
+                "initializationTimeMs", report.timingBreakdown().initializationTimeMs(),
+                "classificationTimeMs", report.timingBreakdown().classificationTimeMs(),
+                "realizationTimeMs", report.timingBreakdown().realizationTimeMs(),
+                "totalTimeMs", report.timingBreakdown().totalTimeMs()));
+        }
+        if (report.errorDetails() != null) {
+            m.put("errorDetails", Map.of("errorCode", report.errorDetails().errorCode(), "message", report.errorDetails().message()));
+        }
+        return m;
     }
 
     // ── Helper methods ──

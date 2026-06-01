@@ -1,16 +1,29 @@
-# 隐藏文件夹（工具/IDE生成的配置目录）
+# Local AI/IDE tool state
 .claude/
 .codex/
 .trae/
 openspec/
 doc/
+
+# Local-only evidence and scratch space
 reports/
 temp/
+local/
+
+# Private or sensitive ontology inputs
+test/owl_files/
+test/corpus/realworld-local/
+test/corpus/downloads/
+test/corpus/benchmarks/ore/
 
 # Gradle
 .gradle/
 .gradle-local/
 build/
+modules/**/build/
+modules/**/bin/
+**/build/test-results/
+**/build/reports/tests/
 *.zip
 # Do NOT ignore gradlew / gradlew.bat — they are required for reproducible builds
 # Do NOT ignore gradle-wrapper.jar — it must be committed for wrapper to work
