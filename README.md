@@ -657,7 +657,7 @@ These are the tools that turn ontology access into answer verification.
 | `ontology_find_counterexamples` | v0.3 | Find facts or axioms that contradict a claim |
 | `ontology_check_constraints` | v0.3 | Validate data with SHACL or ontology-derived constraints |
 | `ontology_explain_unknown` | v0.3 | Explain why a claim cannot be verified |
-| `ontology_assess_answer_coverage` | v0.4 | Check whether an answer missed important classes, relations, restrictions, or known exceptions |
+| `ontology_assess_answer_coverage` | v0.5 | Check whether an answer missed important classes, relations, restrictions, or known exceptions |
 
 ### Retrieval and QA context tools
 
@@ -677,13 +677,13 @@ These tools require `--allow-write`.
 
 | Tool | Stage | Description |
 | --- | --- | --- |
-| `ontology_import` | v0.3 | Import an ontology into a workspace |
-| `ontology_export` | v0.3 | Export ontology in a selected format |
-| `ontology_edit_axiom` | v0.3 | Apply structured ontology edits |
-| `ontology_diff` | v0.3 | Show differences between snapshots or ontology versions |
-| `ontology_snapshot` | v0.3 | Create a named snapshot |
-| `ontology_rollback` | v0.3 | Roll back to a snapshot |
-| `ontology_get_audit_log` | v0.3 | Inspect write operations and MCP tool calls |
+| `ontology_import` | v0.6 | Import an ontology into a workspace through write-enabled MCP |
+| `ontology_export` | v0.6 | Export ontology in a selected format |
+| `ontology_edit_axiom` | v0.6 | Apply structured ontology edits |
+| `ontology_diff` | v0.6 | Show differences between snapshots or ontology versions |
+| `ontology_snapshot` | v0.6 | Create a named snapshot |
+| `ontology_rollback` | v0.6 | Roll back to a snapshot |
+| `ontology_get_audit_log` | v0.6 | Inspect write operations and MCP tool calls |
 
 Example MCP client configuration:
 
@@ -901,6 +901,8 @@ Large downloads are opt-in because some resources are hundreds of MB or more.
 
 The roadmap is organized by user-visible capability. Version numbers start at v0.1 so each milestone can be treated as a publishable project state.
 
+After the v0.1 and v0.2 releases, the roadmap intentionally narrows each milestone. Reasoner integration and dependency compatibility proved to be high-risk enough that future releases separate stabilization, verification, distribution, evaluation, and write operations instead of bundling them into one large change.
+
 ### v0.1 Local Ontology Reader and Readonly MCP
 
 Goal: make a local OWL/RDF ontology inspectable by both CLI and MCP.
@@ -944,37 +946,52 @@ Released support:
 - [x] Data property literal validation against datatype and known constraints
 - [x] Reasoner and v0.1 regression acceptance tests
 
+### v0.2.x Stabilization and Release Hardening
+
+Goal: make v0.2 easier to install, debug, and maintain without expanding the feature surface.
+
+Planned support:
+
+- [ ] Clean up Gradle deprecation warnings that may affect Gradle 9 compatibility
+- [ ] Improve launcher error messages when the runnable fat jar is missing
+- [ ] Add stricter npm launcher smoke tests for help, version, runtime discovery, and MCP startup
+- [ ] Keep dependency compatibility matrix current for OWL API, HermiT, ELK, Openllet, Jena, Picocli, and Gson
+- [ ] Add release checklist covering build, `shadowJar`, launcher smoke tests, acceptance report, tag, and push
+- [ ] Improve README troubleshooting for Java, `JAVA_HOME`, reasoner selection, and MCP stdio behavior
+- [ ] Keep v0.1 and v0.2 regression gates green before any new feature work starts
+
 ### v0.3 Claim Verification and Evidence Grounding
 
 Goal: turn ontology access into anti-hallucination verification tools.
 
 Planned support:
 
+- [ ] Structured claim schema for subclass, membership, relation, consistency, property domain/range, and literal validation claims
 - [ ] Claim-level verification built on v0.2 entailment, membership, relation, compatibility, literal validation, and scope primitives
 - [ ] `ontology_verify_claim` returning `supported`, `contradicted`, `unknown`, or `out_of_scope`
-- [ ] Evidence path generation for supported claims
+- [ ] Evidence path generation for supported claims using source axioms, explicit triples, inferred facts, and reasoner metadata
 - [ ] Counterexample search for contradicted claims
 - [ ] Unknown explanation for missing entities, missing relations, unsupported profiles, or insufficient axioms
-- [ ] Claim grounding with source axioms, triples, inferred facts, graph scope, and reasoner metadata
-- [ ] `ontology_verify_answer` for multi-claim answer verification
-- [ ] SHACL or Jena-based constraint validation spike
-- [ ] Answer verification report format
+- [ ] CLI and MCP parity for claim verification results
+- [ ] Acceptance fixtures for supported, contradicted, unknown, and out_of_scope verdicts
+- [ ] No free-text claim parsing in v0.3; agents must pass structured claims
+- [ ] No ontology write operations in v0.3
 
-### v0.4 Editing, Snapshots, and Audit
+### v0.4 Agent Usability and Distribution
 
-Goal: safely allow controlled ontology updates from CLI and MCP.
+Goal: make owl4agents easy for local agents and GitHub users to install, configure, and use.
 
 Planned support:
 
-- [ ] Controlled import/export workflows
-- [ ] Structured ontology edit operations for classes, properties, individuals, labels, comments, and axioms
-- [ ] Add/remove subclass, equivalent class, disjoint class, domain, range, and assertion axioms
-- [ ] Snapshot generation before every write
-- [ ] Diff between snapshots or ontology versions
-- [ ] Rollback to a previous snapshot
-- [ ] MCP `--allow-write` mode
-- [ ] Write audit log for CLI operations and MCP tool calls
-- [ ] Security tests for readonly mode, write mode, file access limits, and rollback behavior
+- [ ] Source-checkout setup script for Windows, macOS, and Linux
+- [ ] Better local npm launcher flow that can build or locate `owl4agents.jar` predictably
+- [ ] MCP configuration templates for common local agent clients
+- [ ] Example workspace setup using Pizza and selected golden fixtures
+- [ ] Agent usage cookbook for search, context, SPARQL, reasoning, and claim verification workflows
+- [ ] Troubleshooting guide for Java version, `JAVA_HOME`, stale workspace state, and stdio MCP issues
+- [ ] Stable examples for CLI and MCP outputs
+- [ ] Cross-platform launcher acceptance tests
+- [ ] Keep MCP readonly by default
 
 ### v0.5 Research Evaluation and Benchmarks
 
@@ -992,6 +1009,23 @@ Planned support:
 - [ ] Ontology-agent QA evaluation helper
 - [ ] Reproducible experiment configuration files
 - [ ] Example benchmark packs for small, medium, inconsistent, OWL 2 EL, and OWL 2 DL ontologies
+
+### v0.6 Controlled Editing, Snapshots, and Audit
+
+Goal: safely allow controlled ontology updates from CLI and MCP after readonly reasoning and verification are stable.
+
+Planned support:
+
+- [ ] Controlled import/export workflows
+- [ ] Structured ontology edit operations for classes, properties, individuals, labels, comments, and axioms
+- [ ] Add/remove subclass, equivalent class, disjoint class, domain, range, and assertion axioms
+- [ ] Snapshot generation before every write
+- [ ] Diff between snapshots or ontology versions
+- [ ] Rollback to a previous snapshot
+- [ ] MCP `--allow-write` mode with explicit opt-in
+- [ ] Dry-run mode for proposed edits
+- [ ] Write audit log for CLI operations and MCP tool calls
+- [ ] Security tests for readonly mode, write mode, file access limits, dry-run, and rollback behavior
 
 ### v1.0 Stable Release
 
