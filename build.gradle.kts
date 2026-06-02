@@ -3,7 +3,7 @@ plugins {
 }
 
 group = "org.owl4agents"
-version = "0.3.0"
+version = "0.2.0"
 
 allprojects {
     repositories {
