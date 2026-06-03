@@ -1,6 +1,12 @@
-# v0.1 Output Contract Schema Overview
+# owl4agents Test Contract Overview
 
-This document defines the shared schema patterns used across all v0.1 output contracts.
+This directory contains public, versioned contracts for acceptance tests, CLI/MCP parity, release readiness, output schemas, and tester reporting discipline.
+
+Local acceptance reports are stored under `reports/acceptance/` and are intentionally ignored by Git. Testers MUST use `test/contracts/acceptance-report/contracts.md` as the default report standard unless a version-specific OpenSpec change defines stricter requirements.
+
+## Shared Output Schema
+
+This document defines the shared schema patterns used across all v0.1 and v0.2 output contracts.
 
 ## Result Envelope
 
@@ -70,8 +76,8 @@ Ontology IDs are user-provided identifiers used to reference imported ontologies
 | Scope | Description |
 | --- | --- |
 | `explicit` | Axioms and facts from the imported ontology file only |
-| `inferred` | Axioms inferred by a reasoner (v0.1: mostly unavailable) |
-| `union` | Combined explicit + inferred (v0.1: same as explicit) |
+| `inferred` | Axioms inferred by a reasoner (requires prior reasoning) |
+| `union` | Combined explicit + inferred |
 
 ## Entity Types
 

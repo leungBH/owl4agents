@@ -56,7 +56,7 @@ public record ServiceError(
 
     public static ServiceError readonlyViolation(String operationType) {
         return new ServiceError(ErrorCode.READONLY_VIOLATION,
-            "Operation '" + operationType + "' is not allowed in v0.1 readonly mode.",
+            "Operation '" + operationType + "' is not allowed in readonly mode.",
             Map.of("operationType", operationType, "mode", "readonly"));
     }
 

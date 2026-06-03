@@ -8,7 +8,7 @@ import org.owl4agents.core.WorkspaceId;
 import java.nio.file.Path;
 
 /**
- * Workspace safety checks for v0.1 readonly mode.
+ * Workspace safety checks for readonly mode.
  * Restricts read operations to cataloged ontology resources
  * and explicitly provided import paths.
  */
@@ -38,7 +38,7 @@ public class WorkspaceSafety {
 
     /**
      * Check if a write-style operation is allowed.
-     * In v0.1, all write-style operations are rejected except
+     * In readonly mode, all write-style operations are rejected except
      * workspace initialization and ontology import (catalog setup).
      */
     public ServiceResult<Void> checkWriteAllowed(String operationType) {

@@ -2,7 +2,7 @@
 
 ## Principle
 
-v0.1 is strictly readonly. The system SHALL reject all write-style operations through every interface (CLI, MCP, SPARQL). This is enforced by the shared `OntologyService` layer, not only by adapters.
+owl4agents is strictly readonly. The system SHALL reject all write-style operations through every interface (CLI, MCP, SPARQL). This is enforced by the shared `OntologyService` layer, not only by adapters.
 
 ## Safety Scenarios
 
@@ -15,7 +15,7 @@ Any MCP tool call that would modify ontology or workspace state SHALL be rejecte
   "status": "error",
   "error": {
     "code": "READONLY_VIOLATION",
-    "message": "string — describes that the operation is not allowed in v0.1 readonly mode",
+    "message": "string — describes that the operation is not allowed in readonly mode",
     "details": {
       "operationType": "import_ontology | edit_axiom | create_snapshot | rollback | export_ontology",
       "mode": "readonly"
@@ -35,7 +35,7 @@ Any SPARQL update operation SHALL be rejected:
   "status": "error",
   "error": {
     "code": "READONLY_VIOLATION",
-    "message": "SPARQL update operations are not allowed in v0.1 readonly mode.",
+    "message": "SPARQL update operations are not allowed in readonly mode.",
     "details": {
       "operationType": "INSERT | DELETE | LOAD | CLEAR | CREATE | DROP | MOVE",
       "queryForm": "UPDATE"

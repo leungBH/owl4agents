@@ -15,7 +15,7 @@ public enum ErrorCode {
     INVALID_SPARQL("INVALID_SPARQL",
         "SPARQL query has syntax or structural errors."),
     READONLY_VIOLATION("READONLY_VIOLATION",
-        "Operation would modify ontology or workspace state, which is not allowed in v0.1 readonly mode."),
+        "Operation would modify ontology or workspace state, which is not allowed in readonly mode."),
     FILE_ACCESS_DENIED("FILE_ACCESS_DENIED",
         "File path is not cataloged or not an explicit import path."),
     QUERY_TIMEOUT("QUERY_TIMEOUT",

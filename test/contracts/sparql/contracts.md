@@ -141,7 +141,7 @@
   "status": "error",
   "error": {
     "code": "READONLY_VIOLATION",
-    "message": "SPARQL update operations are not allowed in v0.1 readonly mode.",
+    "message": "SPARQL update operations are not allowed in readonly mode.",
     "details": {
       "queryForm": "UPDATE",
       "operationType": "INSERT | DELETE | LOAD | CLEAR | CREATE | DROP | MOVE"

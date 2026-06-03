@@ -13,7 +13,7 @@ import java.util.concurrent.Callable;
 @Command(
     name = "owl4agents",
     mixinStandardHelpOptions = true,
-    version = "0.2.0",
+    version = "0.2.1",
     description = "Local OWL ontology reasoning and MCP server for LLM agents.",
     subcommands = {
         InitCommand.class,

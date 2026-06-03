@@ -2,7 +2,7 @@
 
 ## Principle
 
-For every v0.1 operation that has both a CLI command and an MCP tool, the system SHALL return equivalent behavior. "Equivalent" means:
+For every v0.1 and v0.2 operation that has both a CLI command and an MCP tool, the system SHALL return equivalent behavior. "Equivalent" means:
 
 1. **Same data fields**: Both interfaces return the same data fields in their result payloads.
 2. **Same error codes**: Both interfaces return the same error codes for the same failure conditions.
@@ -12,7 +12,7 @@ The CLI and MCP adapters may differ in:
 - Output format (CLI prints human-readable text, MCP returns JSON)
 - Exit codes (CLI uses non-zero exit codes, MCP returns error JSON)
 
-## Parity Checks Required for v0.1
+## Parity Checks Required for v0.1 and v0.2
 
 ### Summary Parity
 

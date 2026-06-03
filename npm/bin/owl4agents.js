@@ -45,12 +45,27 @@ function detectPlatform() {
 function findJavaRuntime() {
   // 1. Check OWL4AGENTS_RUNTIME env var for explicit override
   const runtimeOverride = process.env.OWL4AGENTS_RUNTIME;
-  if (runtimeOverride && fs.existsSync(runtimeOverride)) {
-    // Support .js files as script runtimes (for testing)
-    if (runtimeOverride.endsWith('.js')) {
-      return { type: 'script', path: runtimeOverride };
+  if (runtimeOverride) {
+    if (fs.existsSync(runtimeOverride)) {
+      // Support .js files as script runtimes (for testing)
+      if (runtimeOverride.endsWith('.js')) {
+        return { type: 'script', path: runtimeOverride };
+      }
+      return { type: 'jar', path: runtimeOverride };
     }
-    return { type: 'jar', path: runtimeOverride };
+    // Explicit override points to non-existent path — deterministic diagnostic
+    console.error('Error: owl4agents runtime not found.');
+    console.error('');
+    console.error('The OWL4AGENTS_RUNTIME environment variable points to a non-existent path:');
+    console.error(`  ${runtimeOverride}`);
+    console.error('');
+    console.error('To resolve this, try one of the following:');
+    console.error('  1. Build the fat jar:    .\\gradlew.bat :modules:ontology-cli:shadowJar');
+    console.error('  2. Set OWL4AGENTS_RUNTIME to point to an existing jar');
+    console.error('  3. Remove OWL4AGENTS_RUNTIME to use automatic runtime discovery');
+    console.error('');
+    console.error('Required Java version: 22+ (as configured in Gradle toolchain)');
+    process.exit(2);
   }
 
   // 2. Check for shadow jar (owl4agents.jar) - preferred, works with stdin
@@ -98,8 +113,16 @@ function findJavaRuntime() {
     if (fs.existsSync(gradlewPath)) {
       return { type: 'gradle', path: gradlewPath };
     }
-    console.error('Error: No Java runtime or Gradle wrapper found. Install Java 21+ or run `gradle build` first.');
-    process.exit(1);
+    // No runtime found — produce deterministic error with actionable guidance
+    console.error('Error: owl4agents runtime not found.');
+    console.error('');
+    console.error('To resolve this, try one of the following:');
+    console.error('  1. Build the fat jar:    .\\gradlew.bat :modules:ontology-cli:shadowJar');
+    console.error('  2. Set OWL4AGENTS_RUNTIME env var to point to an existing jar');
+    console.error('  3. Install Java 22+ and ensure JAVA_HOME is set or java is on PATH');
+    console.error('');
+    console.error('Required Java version: 22+ (as configured in Gradle toolchain)');
+    process.exit(2);  // Deterministic exit code for missing runtime
   }
 }
 
@@ -165,6 +188,18 @@ function buildJavaCommand(runtime, args) {
 function main() {
   const args = process.argv.slice(2);
 
+  // Handle --version locally (reads from npm package.json)
+  if (args.length === 1 && (args[0] === '--version' || args[0] === '-V')) {
+    const pkgPath = path.resolve(__dirname, '..', 'package.json');
+    try {
+      const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf-8'));
+      console.log(pkg.version || '0.2.1');
+    } catch {
+      console.log('0.2.1');
+    }
+    process.exit(0);
+  }
+
   if (args.length === 0) {
     console.log('owl4agents — Local OWL ontology reasoning and MCP server for LLM agents');
     console.log('Usage: owl4agents <command> [options]');
@@ -176,7 +211,7 @@ function main() {
     console.log('  summary    Get ontology summary');
     console.log('  search     Search ontology entities');
     console.log('  entity     Get entity context');
-    console.log('  query      Validate or execute SPARQL queries');
+    console.log('  query       Validate or execute SPARQL queries');
     console.log('  context    Generate QA context for a question');
     console.log('  mcp        Start the MCP server');
     console.log('  reason     Run reasoner tasks');

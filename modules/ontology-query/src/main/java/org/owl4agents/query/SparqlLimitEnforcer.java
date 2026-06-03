@@ -48,8 +48,9 @@ public class SparqlLimitEnforcer {
     }
 
     /**
-     * Check that graph scope is valid for v0.1.
-     * v0.1 only supports EXPLICIT and UNION (which is same as EXPLICIT for v0.1).
+     * Check that graph scope is valid.
+     * EXPLICIT and UNION are always available.
+     * INFERRED requires prior reasoning to have been executed.
      */
     public ServiceResult<Void> validateGraphScope(org.owl4agents.core.GraphScope scope) {
         if (scope == null) {
@@ -57,17 +58,23 @@ public class SparqlLimitEnforcer {
                 org.owl4agents.core.ResultMetadata.explicit(new OntologyId("limit-check")));
         }
 
-        // v0.1 supports EXPLICIT and UNION
+        // EXPLICIT and UNION are always valid scopes
         if (scope == org.owl4agents.core.GraphScope.EXPLICIT ||
             scope == org.owl4agents.core.GraphScope.UNION) {
             return ServiceResult.success(null,
                 org.owl4agents.core.ResultMetadata.explicit(new OntologyId("limit-check")));
         }
 
-        // INFERRED is not available in v0.1
+        // INFERRED is valid but requires reasoning to have been run first
+        // The reasoner service layer will check reasoning state when INFERRED scope is used
+        if (scope == org.owl4agents.core.GraphScope.INFERRED) {
+            return ServiceResult.success(null,
+                org.owl4agents.core.ResultMetadata.explicit(new OntologyId("limit-check")));
+        }
+
         return ServiceResult.error(ServiceError.of(
             org.owl4agents.core.ErrorCode.ONTOLOGY_NOT_FOUND,
-            "INFERRED graph scope is not available in v0.1. Use EXPLICIT or UNION scope."
+            "Unsupported graph scope: " + scope
         ));
     }
 

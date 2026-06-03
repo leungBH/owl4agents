@@ -236,19 +236,36 @@ public class ReasonerServiceImpl implements ReasonerService {
 
     @Override
     public ServiceResult<ReasoningReport> getReasoningReport(OntologyId ontologyId) {
+        // Try in-memory first (fast path for same-session access)
         Optional<ReasoningReport> report = lifecycleManager.getReasoningReport(ontologyId);
-        if (report.isEmpty()) {
-            return ServiceResult.error(ErrorCode.REASONING_NOT_RUN,
-                "Reasoning has not been executed. No reasoning report available.");
+        if (report.isPresent()) {
+            return ServiceResult.success(report.get(), ResultMetadata.empty());
         }
-        return ServiceResult.success(report.get(), ResultMetadata.empty());
+        // Filesystem fallback: read persisted reasoning-report.json from prior CLI invocation
+        try {
+            Path reportFile = getInferredDir(ontologyId).resolve("reasoning-report.json");
+            if (Files.exists(reportFile)) {
+                ReasoningReport persisted = deserializeReportFromJson(Files.readString(reportFile));
+                if (persisted != null) {
+                    return ServiceResult.success(persisted, ResultMetadata.empty());
+                }
+            }
+        } catch (Exception e) {
+            // Fall through to error
+        }
+        return ServiceResult.error(ErrorCode.REASONING_NOT_RUN,
+            "Reasoning has not been executed. No reasoning report available.");
     }
 
     @Override
     public ServiceResult<InferredFactsResult> getInferredFacts(OntologyId ontologyId, Optional<String> entityIRI) {
+        // Allow access if reasoning ran in this session OR a prior session left persisted results
         if (!lifecycleManager.hasReasoningRun(ontologyId)) {
-            return ServiceResult.error(ErrorCode.REASONING_NOT_RUN,
-                "Reasoning has not been executed. Run reasoning first before accessing inferred facts.");
+            Path reportFile = getInferredDir(ontologyId).resolve("reasoning-report.json");
+            if (!Files.exists(reportFile)) {
+                return ServiceResult.error(ErrorCode.REASONING_NOT_RUN,
+                    "Reasoning has not been executed. Run reasoning first before accessing inferred facts.");
+            }
         }
         try {
             Path inferredDir = getInferredDir(ontologyId);
@@ -644,5 +661,111 @@ public class ReasonerServiceImpl implements ReasonerService {
         // Access to internal OWLReasoner for advanced operations
         // This is a temporary bridge; the full implementation will use adapter methods
         return null;
+    }
+
+    /**
+     * Deserialize a reasoning-report.json string into a ReasoningReport record.
+     * Mirrors the structure written by serializeReportToJson().
+     */
+    private ReasoningReport deserializeReportFromJson(String json) {
+        try {
+            String ontologyId = extractJsonValue(json, "ontologyId");
+            String reasonerName = extractJsonValue(json, "reasonerName");
+            String owlProfile = extractJsonValue(json, "owlProfile");
+            boolean classificationStatus = Boolean.parseBoolean(extractJsonValue(json, "classificationStatus"));
+            String realizationRaw = extractJsonValue(json, "realizationStatus");
+            Boolean realizationStatus = (realizationRaw == null || realizationRaw.equals("null")) ? null : Boolean.parseBoolean(realizationRaw);
+            boolean consistencyStatus = Boolean.parseBoolean(extractJsonValue(json, "consistencyStatus"));
+
+            // Parse timing breakdown
+            long initTime = Long.parseLong(extractNestedJsonValue(json, "timingBreakdown", "initializationTimeMs"));
+            long classTime = Long.parseLong(extractNestedJsonValue(json, "timingBreakdown", "classificationTimeMs"));
+            long realTime = Long.parseLong(extractNestedJsonValue(json, "timingBreakdown", "realizationTimeMs"));
+            long totalTime = Long.parseLong(extractNestedJsonValue(json, "timingBreakdown", "totalTimeMs"));
+            ReasoningReport.TimingBreakdown timing = new ReasoningReport.TimingBreakdown(initTime, classTime, realTime, totalTime);
+
+            int warningCount = Integer.parseInt(extractJsonValue(json, "warningCount") != null ? extractJsonValue(json, "warningCount") : "0");
+
+            // Parse inferred axiom counts (nested object)
+            Map<String, Integer> axiomCounts = new LinkedHashMap<>();
+            String countsBlock = extractJsonBlock(json, "inferredAxiomCountsByType");
+            if (countsBlock != null) {
+                parseKeyValueCounts(countsBlock, axiomCounts);
+            }
+
+            // Parse error details (may be null)
+            String errorBlock = extractJsonValue(json, "errorDetails");
+            ReasoningReport.ErrorDetails errorDetails = null;
+            if (errorBlock != null && !errorBlock.equals("null")) {
+                String innerBlock = extractJsonBlock(json, "errorDetails");
+                if (innerBlock != null) {
+                    String errorCode = extractJsonValue(innerBlock, "errorCode");
+                    String message = extractJsonValue(innerBlock, "message");
+                    String stackTrace = extractJsonValue(innerBlock, "stackTrace");
+                    errorDetails = new ReasoningReport.ErrorDetails(errorCode, message, stackTrace);
+                }
+            }
+
+            return new ReasoningReport(ontologyId, reasonerName, owlProfile, classificationStatus,
+                realizationStatus, consistencyStatus, timing, warningCount, axiomCounts, errorDetails);
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    private String extractNestedJsonValue(String json, String parentKey, String childKey) {
+        String block = extractJsonBlock(json, parentKey);
+        if (block == null) return null;
+        return extractJsonValue(block, childKey);
+    }
+
+    private String extractJsonBlock(String json, String key) {
+        String pattern = "\"" + key + "\":";
+        int start = json.indexOf(pattern);
+        if (start == -1) return null;
+        start += pattern.length();
+        while (start < json.length() && json.charAt(start) == ' ') start++;
+        if (start >= json.length()) return null;
+
+        if (json.charAt(start) == '{') {
+            int depth = 1;
+            int end = start + 1;
+            while (end < json.length() && depth > 0) {
+                if (json.charAt(end) == '{') depth++;
+                else if (json.charAt(end) == '}') depth--;
+                end++;
+            }
+            return json.substring(start, end);
+        } else if (json.charAt(start) == 'n') {
+            return "null";
+        }
+        return null;
+    }
+
+    private void parseKeyValueCounts(String block, Map<String, Integer> counts) {
+        // Parse simple "key": value pairs from a JSON object block
+        int pos = 0;
+        while (pos < block.length()) {
+            int keyStart = block.indexOf('"', pos);
+            if (keyStart == -1) break;
+            int keyEnd = block.indexOf('"', keyStart + 1);
+            if (keyEnd == -1) break;
+            String key = block.substring(keyStart + 1, keyEnd);
+
+            int colonPos = block.indexOf(':', keyEnd);
+            if (colonPos == -1) break;
+            int valStart = colonPos + 1;
+            while (valStart < block.length() && block.charAt(valStart) == ' ') valStart++;
+
+            int valEnd = valStart;
+            while (valEnd < block.length() && block.charAt(valEnd) != ',' && block.charAt(valEnd) != '}') valEnd++;
+            String valueStr = block.substring(valStart, valEnd).trim();
+            try {
+                counts.put(key, Integer.parseInt(valueStr));
+            } catch (NumberFormatException e) {
+                // skip malformed entries
+            }
+            pos = valEnd + 1;
+        }
     }
 }

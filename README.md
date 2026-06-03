@@ -4,14 +4,14 @@ Local OWL ontology runtime, reasoner integration, SPARQL query layer, and readon
 
 `owl4agents` is a local-first OWL/RDF ontology runtime for researchers and agent developers. It imports, manages, reasons over, queries, and retrieves structured semantic context from OWL ontologies, then exposes those capabilities through both CLI commands and an MCP server.
 
-> Status: v0.2 ready for release. v0.2 adds HermiT/ELK/Openllet reasoner integration, classification, realization, consistency checks, inferred facts, semantic-deepening tools, readonly MCP reasoning tools, and v0.1 regression coverage. Verified on Windows with JDK 22 via `.\gradlew.bat clean buildVerification`.
+> Status: v0.2.1 stabilization release. v0.2.1 hardens the v0.2 feature surface: improved launcher diagnostics, strict child-process smoke tests, deterministic exit codes for missing runtime, `--version` output, and updated dependency matrix. Verified on Windows with JDK 22 via `.\gradlew.bat clean buildVerification` and `node npm/test/launcher.test.js`.
 
-## v0.2 Quick Start
+## v0.2.1 Quick Start
 
 ### Requirements
 
 - Windows, macOS, or Linux
-- Java 22 for the current v0.2 build, with `JAVA_HOME` pointing to the JDK
+- Java 22 for the current v0.2.1 build, with `JAVA_HOME` pointing to the JDK
 - Node.js 18+ for the npm launcher and MCP client entry point
 
 On Windows, prefer `JAVA_HOME` over the Oracle `javapath` shim. The local npm launcher and MCP wrapper use `JAVA_HOME\bin\java.exe` when it is available.
@@ -20,7 +20,10 @@ Verify the release from a fresh checkout:
 
 ```powershell
 .\gradlew.bat clean buildVerification
+.\gradlew.bat :modules:ontology-cli:shadowJar
 node npm/test/launcher.test.js
+node npm/bin/owl4agents.js --version
+node npm/bin/owl4agents.js --help
 ```
 
 Build the runnable CLI jar:
@@ -53,6 +56,8 @@ node npm/bin/owl4agents.js consistency pizza --reasoner hermit
 node npm/bin/owl4agents.js classify pizza --reasoner auto
 node npm/bin/owl4agents.js realize pizza --reasoner hermit
 ```
+
+> **Note:** `reason`, `classify`, `realize`, and `consistency` may recompute reasoner state for the current command. The `reason` command persists `reasoning-report.json` and inferred artifacts under the ontology workspace, so `report` can read the latest report in a later CLI or MCP process. Commands that need inferred facts still require reasoning artifacts to exist for the ontology.
 
 Or run the fat jar directly:
 
@@ -269,6 +274,53 @@ OntologyService
 
 This keeps behavior, tests, errors, permissions, and reasoning results consistent across interfaces.
 
+## Troubleshooting
+
+### Missing fat jar
+
+If `node npm/bin/owl4agents.js` exits with a "runtime not found" error, the runnable jar has not been built:
+
+```powershell
+.\gradlew.bat :modules:ontology-cli:shadowJar
+```
+
+The jar is generated at `modules/ontology-cli/build/libs/owl4agents.jar` (approximately 46 MB). The launcher looks for this jar relative to the npm script directory, so it must exist under the project root.
+
+### Java not found or wrong version
+
+owl4agents requires Java 22 (as configured in the Gradle toolchain). If `java -version` reports a different version or `java` is not on PATH:
+
+1. Install JDK 22 and set `JAVA_HOME` to the JDK directory.
+2. On Windows, prefer `JAVA_HOME\bin\java.exe` over the Oracle `javapath` shim, which may point to an older JDK.
+3. Verify: `"$env:JAVA_HOME\bin\java.exe" -version` should report 22.
+
+If `JAVA_HOME` is not set, the launcher falls back to `java` on PATH, then to the Gradle wrapper as a last resort (which does not support MCP stdin).
+
+### Reasoner selection
+
+- **HermiT**: OWL 2 DL reasoning — consistency, classification, realization. Does not support explanation.
+- **ELK**: OWL 2 EL reasoning — fast classification and consistency for EL-profile ontologies. Does not support explanation.
+- **Openllet**: Explanation-oriented workflows — inconsistency explanation, unsatisfiable class explanation. Supports all OWL 2 DL reasoning tasks.
+- **auto**: Profile-based selection — OWL 2 EL → ELK, OWL 2 DL → HermiT, explanation requested → Openllet.
+
+### MCP stdio issues on Windows
+
+The MCP protocol uses stdin/stdout for JSON-RPC. On Windows, Node's `execSync` with `stdio: 'inherit'` may not forward stdin correctly for MCP sessions. The bundled `bin/owl4agents-mcp.cmd` wrapper bypasses Node for MCP, running `java -jar owl4agents.jar mcp` directly. Use this wrapper when MCP clients have trouble connecting through Node.
+
+### Launcher startup failures
+
+The npm launcher follows a deterministic runtime discovery order:
+
+1. `OWL4AGENTS_RUNTIME` env var (explicit override, supports `.js` scripts for testing)
+2. `modules/ontology-cli/build/libs/owl4agents.jar` (shadow jar from Gradle build)
+3. `modules/ontology-cli/build/libs/ontology-cli-all.jar` (fat jar)
+4. `modules/ontology-distribution/build/libs/ontology-distribution.jar`
+5. `JAVA_HOME\bin\java` with classpath mode
+6. `java` on PATH
+7. Gradle wrapper (last resort; MCP stdin not supported)
+
+If none of these paths are available, the launcher exits with code 2 and prints actionable guidance including the `shadowJar` build command and Java version requirement.
+
 ## Planned Architecture
 
 ```text
@@ -382,6 +434,19 @@ To run the CLI or MCP launcher from source after a clean checkout, also build th
 
 The Gradle wrapper is part of the delivery contract. The repository must include `gradlew`, `gradlew.bat`, `gradle/wrapper/gradle-wrapper.jar`, and `gradle/wrapper/gradle-wrapper.properties` unless the project explicitly replaces Gradle with another documented build entry point.
 
+### v0.2.1 Release Checklist
+
+Before releasing v0.2.1 or any subsequent stabilization version, verify each step:
+
+1. **Build**: `.\gradlew.bat clean buildVerification` exits 0
+2. **Shadow jar**: `.\gradlew.bat :modules:ontology-cli:shadowJar` produces `modules/ontology-cli/build/libs/owl4agents.jar`
+3. **Launcher tests**: `node npm/test/launcher.test.js` exits 0
+4. **Smoke commands**: `node npm/bin/owl4agents.js --help`, `--version`, and `list-reasoners` all work
+5. **Version alignment**: Gradle version, npm package.json version, Picocli `version` attribute, and MCP `serverInfo.version` all match
+6. **Acceptance report**: Timestamped report under `reports/acceptance/` with environment, commands, gate results, and verdict
+7. **Git tag**: Tag the release commit (e.g. `v0.2.1`)
+8. **Push**: Push the tag and commit to the remote
+
 Acceptance reports are stored locally under:
 
 ```text
@@ -398,7 +463,7 @@ A change or version cannot be marked done unless all of the following are true:
 - Required acceptance fixtures are present; missing required fixtures fail the run instead of being silently skipped.
 - Tests fail on placeholder success responses, empty MCP payloads, broken catalog readback, and unsupported command paths.
 - CLI and MCP parity tests pass for overlapping readonly operations.
-- npm launcher smoke tests pass for help output, command forwarding, local runtime path, and unsupported platform behavior.
+- npm launcher smoke tests pass for help output, version output, command forwarding, exit code semantics, runtime discovery, and MCP startup path verification.
 - The acceptance report records all failures and skipped scenarios explicitly.
 - The final report path and command output summary are included in the handoff.
 
@@ -946,19 +1011,20 @@ Released support:
 - [x] Data property literal validation against datatype and known constraints
 - [x] Reasoner and v0.1 regression acceptance tests
 
-### v0.2.x Stabilization and Release Hardening
+### v0.2.1 Stabilization and Release Hardening
 
 Goal: make v0.2 easier to install, debug, and maintain without expanding the feature surface.
 
-Planned support:
+Released support:
 
-- [ ] Clean up Gradle deprecation warnings that may affect Gradle 9 compatibility
-- [ ] Improve launcher error messages when the runnable fat jar is missing
-- [ ] Add stricter npm launcher smoke tests for help, version, runtime discovery, and MCP startup
-- [ ] Keep dependency compatibility matrix current for OWL API, HermiT, ELK, Openllet, Jena, Picocli, and Gson
-- [ ] Add release checklist covering build, `shadowJar`, launcher smoke tests, acceptance report, tag, and push
-- [ ] Improve README troubleshooting for Java, `JAVA_HOME`, reasoner selection, and MCP stdio behavior
-- [ ] Keep v0.1 and v0.2 regression gates green before any new feature work starts
+- [x] Review and classify Gradle deprecation warnings — all accepted (shadow plugin + OWL API deprecation + unchecked generics)
+- [x] Improved launcher error messages with deterministic exit codes for missing runtime, missing jar, missing Java
+- [x] `--version` support in npm launcher reading from package.json
+- [x] Strict npm launcher smoke tests for help, version, runtime discovery, exit code preservation, and MCP startup path
+- [x] Dependency matrix validation: OWL API 5.1.20, HermiT 1.4.5.519, ELK (liveontologies) 0.6.0, Openllet 2.6.5, Jena 5.3.0, Picocli 4.7.7, Gson 2.13.1
+- [x] Release checklist covering build, `shadowJar`, launcher smoke tests, acceptance report, tag, and push
+- [x] Troubleshooting for Java, `JAVA_HOME`, missing fat jar, reasoner selection, MCP stdio, and launcher failures
+- [x] v0.1 and v0.2 regression gates remain green
 
 ### v0.3 Claim Verification and Evidence Grounding
 

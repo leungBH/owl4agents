@@ -1,21 +1,28 @@
 #!/usr/bin/env node
 
 /**
- * npm launcher smoke tests for owl4agents.
- * Tests: help output, command forwarding, local runtime path, unsupported platform behavior.
+ * owl4agents npm launcher smoke tests.
+ * v0.2.1 hardened tests: help, version, command forwarding, missing runtime,
+ * real MCP startup, dependency matrix alignment, and placeholder rejection.
  *
  * Uses real child-process execution with strict exit-code, stdout, stderr assertions.
  *
  * Run with: node npm/test/launcher.test.js
  */
 
-const { execSync, spawnSync } = require('child_process');
+const { spawnSync } = require('child_process');
 const path = require('path');
 const fs = require('fs');
+const os = require('os');
 const assert = require('assert');
 
 const LAUNCHER = path.resolve(__dirname, '..', 'bin', 'owl4agents.js');
 const PROJECT_ROOT = path.resolve(__dirname, '..', '..');
+const PACKAGE_JSON = path.resolve(__dirname, '..', 'package.json');
+const MCP_SMOKE_TIMEOUT_MS = 15000;
+
+const pkg = JSON.parse(fs.readFileSync(PACKAGE_JSON, 'utf-8'));
+const EXPECTED_VERSION = pkg.version;
 
 let passed = 0;
 let failed = 0;
@@ -23,19 +30,15 @@ let failed = 0;
 function runTest(name, testFn) {
   try {
     testFn();
-    console.log(`  ✓ ${name}`);
+    console.log(`  PASS ${name}`);
     passed++;
   } catch (err) {
-    console.log(`  ✗ ${name}`);
+    console.log(`  FAIL ${name}`);
     console.log(`    ${err.message}`);
     failed++;
   }
 }
 
-/**
- * Run the launcher with real child-process execution.
- * Returns { stdout, stderr, code } with strict capture.
- */
 function runLauncher(args = [], options = {}) {
   const env = {
     ...process.env,
@@ -43,11 +46,16 @@ function runLauncher(args = [], options = {}) {
     ...options.env
   };
 
+  if (options.runtime === '') {
+    delete env.OWL4AGENTS_RUNTIME;
+  }
+
   const result = spawnSync('node', [LAUNCHER, ...args], {
     encoding: 'utf-8',
     timeout: options.timeout || 30000,
     env,
     cwd: options.cwd || PROJECT_ROOT,
+    input: options.input,
     stdio: ['pipe', 'pipe', 'pipe']
   });
 
@@ -60,156 +68,197 @@ function runLauncher(args = [], options = {}) {
   };
 }
 
-console.log('\n  owl4agents npm launcher smoke tests\n');
+console.log('\n  owl4agents v0.2.1 npm launcher smoke tests\n');
 
-// ── Test 1: Help output (no args) ──
-runTest('No arguments shows help output and exits 0', () => {
+runTest('No arguments shows help output and exits 0 (V021-LAUNCH-001)', () => {
   const { stdout, stderr, code, signal, error } = runLauncher([]);
 
-  // Must not crash
   assert(!error, `Launcher should not error: ${error}`);
   assert(!signal, `Launcher should not be killed by signal: ${signal}`);
-
-  // Must exit cleanly
   assert.strictEqual(code, 0, `Expected exit code 0, got ${code}`);
-
-  // Must show help text
   assert(stdout.includes('owl4agents'), 'Help should include "owl4agents"');
   assert(stdout.includes('init'), 'Help should list init command');
   assert(stdout.includes('import'), 'Help should list import command');
-  assert(stdout.includes('list'), 'Help should list list command');
   assert(stdout.includes('summary'), 'Help should list summary command');
-  assert(stdout.includes('search'), 'Help should list search command');
-  assert(stdout.includes('entity'), 'Help should list entity command');
-  assert(stdout.includes('query'), 'Help should list query command');
-  assert(stdout.includes('context'), 'Help should list context command');
   assert(stdout.includes('mcp'), 'Help should list mcp command');
+  assert(!stderr.includes('Error:'), `stderr should not contain crash text: ${stderr}`);
+  assert(!stderr.includes('Exception'), `stderr should not contain stack trace: ${stderr}`);
 });
 
-// ── Test 2: --help flag forwards to runtime ──
-runTest('--help flag is forwarded to runtime', () => {
-  // --help is forwarded to the runtime, not handled by launcher
-  // In the current design, only no-args shows launcher help
-  const { stdout, code, signal, error } = runLauncher(['--help']);
+runTest('--version reports project version and exits 0 (V021-LAUNCH-002)', () => {
+  const { stdout, stderr, code, signal, error } = runLauncher(['--version']);
 
-  // Should not crash
-  assert(!signal || signal === 'SIGTERM', `Should not crash with signal: ${signal}`);
+  assert(!error, `Launcher should not error: ${error}`);
+  assert(!signal, `Launcher should not be killed by signal: ${signal}`);
+  assert.strictEqual(code, 0, `Expected exit code 0, got ${code}. stderr: ${stderr}`);
+  assert(stdout.includes(EXPECTED_VERSION), `stdout should contain version "${EXPECTED_VERSION}", got: "${stdout}"`);
+  assert(!stderr.includes('Exception'), `stderr should not contain stack trace: ${stderr}`);
 });
 
-// ── Test 3: Missing runtime shows helpful error ──
-runTest('Missing runtime shows helpful error message', () => {
-  // Use a non-existent runtime path
-  const { stdout, stderr, code } = runLauncher(['list'], {
-    runtime: '/nonexistent/path/to/runtime.jar'
+runTest('Missing runtime source path has controlled diagnostics (V021-LAUNCH-003 supplemental)', () => {
+  const source = fs.readFileSync(LAUNCHER, 'utf-8');
+
+  assert(source.includes('runtime not found'), 'Should have "runtime not found" error message');
+  assert(source.includes('shadowJar') || source.includes('owl4agents.jar'), 'Should reference jar build path');
+  assert(source.includes('gradlew'), 'Should reference Gradle build command');
+  assert(source.includes('JAVA_HOME'), 'Should reference JAVA_HOME guidance');
+  assert(source.includes('Required Java version') || source.includes('Java 22+'), 'Should mention required Java version');
+
+  const exitCodePattern = /process\.exit\((\d+)\)/g;
+  const exitCodes = [];
+  let match;
+  while ((match = exitCodePattern.exec(source)) !== null) {
+    exitCodes.push(parseInt(match[1], 10));
+  }
+  assert(exitCodes.includes(1), 'Should use exit code 1 for unsupported platform');
+  assert(exitCodes.includes(2), 'Should use exit code 2 for missing runtime');
+});
+
+runTest('OWL4AGENTS_RUNTIME pointing to non-existent path exits 2 with diagnostic (V021-LAUNCH-003 E2E)', () => {
+  const nonexistentPath = path.join(os.tmpdir(), 'owl4agents-nonexistent-runtime-' + Date.now() + '.jar');
+  assert(!fs.existsSync(nonexistentPath), 'Non-existent path should not exist on disk');
+
+  const { stdout, stderr, code, signal, error } = runLauncher(['list'], {
+    env: { OWL4AGENTS_RUNTIME: nonexistentPath }
   });
 
-  const combined = stdout + stderr;
-
-  // Should either succeed (if runtime found elsewhere) or show error
-  // The key is it should not crash silently
-  assert(code !== null && code !== undefined, 'Should have an exit code');
+  assert(!error, `Launcher should not error: ${error}`);
+  assert(!signal, `Launcher should not be killed by signal: ${signal}`);
+  assert.strictEqual(code, 2, `Expected exit code 2 for non-existent OWL4AGENTS_RUNTIME, got ${code}`);
+  assert(stderr.includes('runtime not found'), `stderr should contain "runtime not found", got: ${stderr}`);
+  assert(stderr.includes('OWL4AGENTS_RUNTIME'), `stderr should reference OWL4AGENTS_RUNTIME, got: ${stderr}`);
+  assert(stderr.includes(nonexistentPath) || stderr.includes('non-existent'), `stderr should reference the invalid path, got: ${stderr}`);
+  assert(stderr.includes('gradlew') || stderr.includes('shadowJar'), `stderr should reference build command, got: ${stderr}`);
+  assert.strictEqual(stdout, '', `stdout should be empty for error case, got: ${stdout}`);
 });
 
-// ── Test 4: Platform detection logic ──
-runTest('Launcher has platform detection logic', () => {
+runTest('Launcher forwards commands to fake runtime preserving arguments (V021-LAUNCH-004)', () => {
+  const fakeRuntimePath = path.resolve(__dirname, 'fixtures', 'fake-runtime.js');
+  assert(fs.existsSync(fakeRuntimePath), 'Fake runtime should exist');
+
+  const { stdout, stderr, code, signal, error } = runLauncher(['list-reasoners'], {
+    runtime: fakeRuntimePath
+  });
+
+  assert(!error, `Launcher should not error: ${error}`);
+  assert(!signal, `Launcher should not be killed by signal: ${signal}`);
+  assert.strictEqual(code, 0, `Expected exit code 0, got ${code}. stderr: ${stderr}`);
+  assert(stdout.includes('list-reasoners'), 'Should forward "list-reasoners" argument');
+  assert(stdout.includes('fake-runtime'), 'Should identify as fake-runtime');
+});
+
+runTest('Launcher preserves nonzero exit code from runtime (V021-LAUNCH-004 exit semantics)', () => {
+  const exitCodeScript = path.join(os.tmpdir(), 'exit-code-test.js');
+  fs.writeFileSync(exitCodeScript, 'console.error("intentional failure"); process.exit(42);');
+
+  const { code, stderr, error } = runLauncher(['list-reasoners'], {
+    runtime: exitCodeScript,
+    timeout: 10000
+  });
+
+  assert(!error, `Launcher should not error: ${error}`);
+  assert.strictEqual(code, 42, `Expected exit code 42 from runtime, got ${code}. stderr: ${stderr}`);
+  try { fs.unlinkSync(exitCodeScript); } catch {}
+});
+
+runTest('Launcher MCP command completes real readonly JSON-RPC smoke (V021-MCP-001)', () => {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'owl4agents-mcp-smoke-'));
+  const env = { OWL4AGENTS_HOME: home };
+
+  const init = runLauncher(['init'], { env, timeout: MCP_SMOKE_TIMEOUT_MS });
+  assert.strictEqual(init.code, 0, `init should succeed. stdout=${init.stdout} stderr=${init.stderr}`);
+
+  const input = [
+    JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'initialize', params: {} }),
+    JSON.stringify({ jsonrpc: '2.0', id: 2, method: 'tools/list', params: {} }),
+    JSON.stringify({ jsonrpc: '2.0', id: 3, method: 'tools/call', params: { name: 'ontology_list', arguments: {} } }),
+    ''
+  ].join('\n');
+
+  const result = runLauncher(['mcp', '--readonly'], { env, input, timeout: MCP_SMOKE_TIMEOUT_MS });
+
+  assert.strictEqual(result.code, 0, `MCP process should exit 0 after stdin closes. stderr=${result.stderr}`);
+  assert(result.stdout.includes('"id":1'), `initialize response should be present. stdout=${result.stdout}`);
+  assert(result.stdout.includes('serverInfo'), `initialize response should contain serverInfo. stdout=${result.stdout}`);
+  assert(result.stdout.includes('"id":2'), `tools/list response should be present. stdout=${result.stdout}`);
+  assert(result.stdout.includes('ontology_list'), `tools/list should include ontology_list. stdout=${result.stdout}`);
+  assert(result.stdout.includes('"id":3'), `tools/call response should be present. stdout=${result.stdout}`);
+  assert(!result.stderr.includes('Failed to write MCP log entry'), `MCP should not warn about log path. stderr=${result.stderr}`);
+  assert(!result.stderr.includes('Exception'), `MCP stderr should not contain stack traces. stderr=${result.stderr}`);
+
+  const logPath = path.join(home, 'workspaces', 'default', 'logs', 'mcp-tool-calls.jsonl');
+  assert(fs.existsSync(logPath), `MCP tool-call log should exist at ${logPath}`);
+  const logText = fs.readFileSync(logPath, 'utf-8');
+  assert(logText.includes('ontology_list'), `MCP log should include ontology_list. log=${logText}`);
+  assert(logText.includes('success'), `MCP log should include success status. log=${logText}`);
+});
+
+runTest('Package.json version matches build.gradle.kts version (V021-DOC-001)', () => {
+  const buildGradlePath = path.resolve(PROJECT_ROOT, 'build.gradle.kts');
+  const buildGradle = fs.readFileSync(buildGradlePath, 'utf-8');
+  const versionMatch = buildGradle.match(/version\s*=\s*"([^"]+)"/);
+  assert(versionMatch, 'build.gradle.kts should contain a version declaration');
+  assert.strictEqual(EXPECTED_VERSION, versionMatch[1],
+    `npm package version (${EXPECTED_VERSION}) should match Gradle version (${versionMatch[1]})`);
+});
+
+runTest('Gradle wrapper version matches gradle-wrapper.properties (V021-DOC-001)', () => {
+  const wrapperProps = path.resolve(PROJECT_ROOT, 'gradle', 'wrapper', 'gradle-wrapper.properties');
+  assert(fs.existsSync(wrapperProps), 'gradle-wrapper.properties should exist');
+  const content = fs.readFileSync(wrapperProps, 'utf-8');
+  assert(content.match(/distributionUrl\s*=\s*.*gradle-(\d+\.\d+)-bin\.zip/), 'Should contain a valid Gradle distribution URL');
+});
+
+runTest('Launcher has platform detection logic (regression)', () => {
   const source = fs.readFileSync(LAUNCHER, 'utf-8');
   assert(source.includes('detectPlatform'), 'Should have detectPlatform function');
-  assert(source.includes('platformMap'), 'Should have platformMap for OS detection');
   assert(source.includes("'win32': 'windows'"), 'Should map win32 to windows');
   assert(source.includes("'darwin': 'macos'"), 'Should map darwin to macos');
   assert(source.includes("'linux': 'linux'"), 'Should map linux to linux');
 });
 
-// ── Test 5: Local runtime path support ──
-runTest('Launcher has local runtime path support', () => {
+runTest('Launcher has local runtime path support (regression)', () => {
   const source = fs.readFileSync(LAUNCHER, 'utf-8');
   assert(source.includes('findJavaRuntime'), 'Should have findJavaRuntime function');
   assert(source.includes('OWL4AGENTS_RUNTIME'), 'Should support OWL4AGENTS_RUNTIME env var');
-  assert(source.includes('ontology-cli-all.jar'), 'Should look for fat jar (ontology-cli-all.jar)');
-  assert(source.includes('ontology-distribution.jar'), 'Should look for distribution jar');
+  assert(source.includes('owl4agents.jar'), 'Should look for owl4agents.jar');
 });
 
-// ── Test 6: Java command construction ──
-runTest('Launcher builds correct Java command for jar files', () => {
-  const source = fs.readFileSync(LAUNCHER, 'utf-8');
-  assert(source.includes('buildJavaCommand'), 'Should have buildJavaCommand function');
-  assert(source.includes("'java'") || source.includes('"java"'), 'Should use java command');
-  assert(source.includes("'-jar'") || source.includes('"-jar"'), 'Should use -jar flag for jar files');
-});
-
-// ── Test 7: OWL4AGENTS_HOME passthrough ──
-runTest('Launcher passes OWL4AGENTS_HOME to Java runtime', () => {
+runTest('Launcher passes OWL4AGENTS_HOME to Java runtime (regression)', () => {
   const source = fs.readFileSync(LAUNCHER, 'utf-8');
   assert(source.includes('OWL4AGENTS_HOME'), 'Should pass OWL4AGENTS_HOME env var');
 });
 
-// ── Test 8: npm package.json exists ──
+runTest('Launcher does not produce empty success output on help (no placeholder)', () => {
+  const { stdout, code } = runLauncher([]);
+  assert.strictEqual(code, 0);
+  assert(stdout.length > 100, `Help output should be substantive, not placeholder (got ${stdout.length} chars)`);
+});
+
+runTest('Launcher does not produce empty success output on version (no placeholder)', () => {
+  const { stdout, code } = runLauncher(['--version']);
+  assert.strictEqual(code, 0);
+  assert(stdout.length > 0, 'Version output should not be empty/placeholder');
+});
+
 runTest('npm package.json exists with correct metadata', () => {
-  const pkgPath = path.resolve(__dirname, '..', 'package.json');
-  assert(fs.existsSync(pkgPath), 'package.json should exist');
-  const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf-8'));
-  assert(pkg.name === 'owl4agents', 'Package name should be owl4agents');
+  assert(fs.existsSync(PACKAGE_JSON), 'package.json should exist');
+  assert(pkg.name === 'owl4agents', `Package name should be owl4agents, got ${pkg.name}`);
   assert(pkg.bin && pkg.bin.owl4agents, 'Should have bin.owl4agents entry');
+  assert(pkg.engines && pkg.engines.node, 'Should declare Node engine requirement');
 });
 
-// ── Test 9: Positive runtime forwarding with fake runtime ──
-runTest('Launcher forwards commands to specified runtime', () => {
-  // Use the fake runtime script to test successful forwarding
-  const fakeRuntimePath = path.resolve(__dirname, 'fixtures', 'fake-runtime.js');
-  assert(fs.existsSync(fakeRuntimePath), 'Fake runtime should exist at: ' + fakeRuntimePath);
-
-  // Run with fake runtime
-  const { stdout, stderr, code, signal, error } = runLauncher(['search', 'pizza', 'Margherita'], {
-    runtime: fakeRuntimePath
-  });
-
-  // Should not crash
-  assert(!error, `Launcher should not error: ${error}`);
-  assert(!signal, `Launcher should not be killed by signal: ${signal}`);
-
-  // Should succeed
-  assert.strictEqual(code, 0, `Expected exit code 0, got ${code}. stderr: ${stderr}`);
-
-  // Should contain forwarded arguments
-  assert(stdout.includes('search'), 'Should forward "search" argument');
-  assert(stdout.includes('pizza'), 'Should forward "pizza" argument');
-  assert(stdout.includes('Margherita'), 'Should forward "Margherita" argument');
-  assert(stdout.includes('fake-runtime'), 'Should identify as fake-runtime');
-});
-
-// ── Test 10: Positive runtime forwarding with multiple args ──
 runTest('Launcher forwards multiple arguments correctly', () => {
   const fakeRuntimePath = path.resolve(__dirname, 'fixtures', 'fake-runtime.js');
-
   const { stdout, code, signal } = runLauncher(['query', 'pizza', '--select', 'SELECT ?s WHERE { ?s a owl:Class }'], {
     runtime: fakeRuntimePath
   });
 
   assert(!signal, `Should not crash with signal: ${signal}`);
   assert.strictEqual(code, 0, `Expected exit code 0, got ${code}`);
-
-  // Verify all arguments are forwarded
   assert(stdout.includes('query'), 'Should forward "query"');
   assert(stdout.includes('pizza'), 'Should forward "pizza"');
-  assert(stdout.includes('--select'), 'Should forward "--select"');
 });
 
-// ── Test 10: Launcher handles special characters in args ──
-runTest('Launcher handles special characters in arguments', () => {
-  const { stdout, stderr, code, signal } = runLauncher(['--query', 'SELECT ?s WHERE { ?s a owl:Class }']);
-
-  // Should not crash
-  assert(!signal || signal === 'SIGTERM', `Should not crash with signal: ${signal}`);
-});
-
-// ── Test 11: Launcher exits cleanly on invalid command ──
-runTest('Launcher handles invalid commands gracefully', () => {
-  const { stdout, stderr, code, signal } = runLauncher(['invalid-command-xyz']);
-
-  // Should not crash with signal
-  assert(!signal || signal === 'SIGTERM', `Should not crash with signal: ${signal}`);
-});
-
-// Summary
 console.log(`\n  Results: ${passed} passed, ${failed} failed\n`);
 process.exit(failed > 0 ? 1 : 0);

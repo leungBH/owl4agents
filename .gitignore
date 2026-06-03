@@ -4,6 +4,8 @@
 .trae/
 openspec/
 doc/
+backup/
+version.md
 
 # Local-only evidence and scratch space
 reports/

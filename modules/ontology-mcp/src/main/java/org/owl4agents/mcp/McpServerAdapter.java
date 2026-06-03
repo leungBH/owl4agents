@@ -32,6 +32,51 @@ public class McpServerAdapter {
     private final SparqlExecutor sparqlExecutor;
     private final SparqlSafetyGuard sparqlSafetyGuard;
 
+    // Cached service instances — share lifecycle manager across MCP tool calls
+    private org.owl4agents.reasoner.ReasonerServiceImpl reasonerService;
+    private org.owl4agents.validation.ConsistencyAnalysisService consistencyAnalysisService;
+    private org.owl4agents.owlapi.SemanticDeepeningService semanticDeepeningService;
+
+    /**
+     * Get the cached reasoner service instance.
+     * Uses homeDir/workspaces as workspaceBasePath (matching CliServiceFactory).
+     */
+    private org.owl4agents.reasoner.ReasonerServiceImpl getReasonerService() {
+        if (reasonerService == null) {
+            String workspaceBasePath = homeResolver.resolveHomeDirectory()
+                .resolve("workspaces").toString();
+            reasonerService = new org.owl4agents.reasoner.ReasonerServiceImpl(catalogStore, workspaceBasePath);
+        }
+        return reasonerService;
+    }
+
+    /**
+     * Get the cached consistency analysis service instance.
+     * Shares lifecycle manager with the cached reasoner service.
+     */
+    private org.owl4agents.validation.ConsistencyAnalysisService getConsistencyAnalysisService() {
+        if (consistencyAnalysisService == null) {
+            String workspaceBasePath = homeResolver.resolveHomeDirectory()
+                .resolve("workspaces").toString();
+            consistencyAnalysisService = new org.owl4agents.validation.ConsistencyAnalysisService(
+                getReasonerService().getLifecycleManager(), workspaceBasePath);
+        }
+        return consistencyAnalysisService;
+    }
+
+    /**
+     * Get the cached semantic deepening service instance.
+     * Uses homeDir/workspaces as workspaceBasePath (matching CliServiceFactory).
+     */
+    private org.owl4agents.owlapi.SemanticDeepeningService getSemanticDeepeningService() {
+        if (semanticDeepeningService == null) {
+            String workspaceBasePath = homeResolver.resolveHomeDirectory()
+                .resolve("workspaces").toString();
+            semanticDeepeningService = new org.owl4agents.owlapi.SemanticDeepeningService(workspaceBasePath);
+        }
+        return semanticDeepeningService;
+    }
+
     public McpServerAdapter(Map<String, Object> serviceContext, String logFilePath) {
         this.serviceContext = serviceContext;
         this.toolRegistry = new McpToolRegistry();
@@ -505,9 +550,7 @@ public class McpServerAdapter {
 
     private Map<String, Object> executeListReasoners(Map<String, Object> args) {
         try {
-            String homeDirPath = homeResolver.resolveHomeDirectory().toString();
-            org.owl4agents.reasoner.ReasonerServiceImpl reasonerService =
-                new org.owl4agents.reasoner.ReasonerServiceImpl(catalogStore, homeDirPath);
+            org.owl4agents.reasoner.ReasonerServiceImpl reasonerService = getReasonerService();
             ServiceResult<ReasonerListResult> result = reasonerService.listReasoners();
             if (!result.isSuccess()) return errorResponse(((ServiceResult.Error<ReasonerListResult>) result).error());
             ReasonerListResult data = ((ServiceResult.Success<ReasonerListResult>) result).data();
@@ -528,9 +571,7 @@ public class McpServerAdapter {
         if (ontologyIdStr == null) return errorResponse(ServiceError.of(ErrorCode.ONTOLOGY_NOT_FOUND, "ontology_id is required"));
         String reasonerName = (String) args.getOrDefault("reasoner", "auto");
         try {
-            String homeDirPath = homeResolver.resolveHomeDirectory().toString();
-            org.owl4agents.reasoner.ReasonerServiceImpl reasonerService =
-                new org.owl4agents.reasoner.ReasonerServiceImpl(catalogStore, homeDirPath);
+            org.owl4agents.reasoner.ReasonerServiceImpl reasonerService = getReasonerService();
             ServiceResult<ReasoningReport> result = reasonerService.runReasoner(
                 new OntologyId(ontologyIdStr), Optional.ofNullable(reasonerName));
             if (!result.isSuccess()) return errorResponse(((ServiceResult.Error<ReasoningReport>) result).error());
@@ -546,9 +587,7 @@ public class McpServerAdapter {
         if (ontologyIdStr == null) return errorResponse(ServiceError.of(ErrorCode.ONTOLOGY_NOT_FOUND, "ontology_id is required"));
         String reasonerName = (String) args.getOrDefault("reasoner", "auto");
         try {
-            String homeDirPath = homeResolver.resolveHomeDirectory().toString();
-            org.owl4agents.reasoner.ReasonerServiceImpl reasonerService =
-                new org.owl4agents.reasoner.ReasonerServiceImpl(catalogStore, homeDirPath);
+            org.owl4agents.reasoner.ReasonerServiceImpl reasonerService = getReasonerService();
             ServiceResult<ClassificationResult> result = reasonerService.classify(
                 new OntologyId(ontologyIdStr), Optional.ofNullable(reasonerName));
             if (!result.isSuccess()) return errorResponse(((ServiceResult.Error<ClassificationResult>) result).error());
@@ -566,9 +605,7 @@ public class McpServerAdapter {
         if (ontologyIdStr == null) return errorResponse(ServiceError.of(ErrorCode.ONTOLOGY_NOT_FOUND, "ontology_id is required"));
         String reasonerName = (String) args.getOrDefault("reasoner", "auto");
         try {
-            String homeDirPath = homeResolver.resolveHomeDirectory().toString();
-            org.owl4agents.reasoner.ReasonerServiceImpl reasonerService =
-                new org.owl4agents.reasoner.ReasonerServiceImpl(catalogStore, homeDirPath);
+            org.owl4agents.reasoner.ReasonerServiceImpl reasonerService = getReasonerService();
             ServiceResult<RealizationResult> result = reasonerService.realize(
                 new OntologyId(ontologyIdStr), Optional.ofNullable(reasonerName));
             if (!result.isSuccess()) return errorResponse(((ServiceResult.Error<RealizationResult>) result).error());
@@ -586,9 +623,7 @@ public class McpServerAdapter {
         if (ontologyIdStr == null) return errorResponse(ServiceError.of(ErrorCode.ONTOLOGY_NOT_FOUND, "ontology_id is required"));
         String reasonerName = (String) args.getOrDefault("reasoner", "auto");
         try {
-            String homeDirPath = homeResolver.resolveHomeDirectory().toString();
-            org.owl4agents.reasoner.ReasonerServiceImpl reasonerService =
-                new org.owl4agents.reasoner.ReasonerServiceImpl(catalogStore, homeDirPath);
+            org.owl4agents.reasoner.ReasonerServiceImpl reasonerService = getReasonerService();
             ServiceResult<ConsistencyResult> result = reasonerService.checkConsistency(
                 new OntologyId(ontologyIdStr), Optional.ofNullable(reasonerName));
             if (!result.isSuccess()) return errorResponse(((ServiceResult.Error<ConsistencyResult>) result).error());
@@ -606,9 +641,7 @@ public class McpServerAdapter {
         if (ontologyIdStr == null) return errorResponse(ServiceError.of(ErrorCode.ONTOLOGY_NOT_FOUND, "ontology_id is required"));
         String reasonerName = (String) args.getOrDefault("reasoner", "openllet");
         try {
-            String homeDirPath = homeResolver.resolveHomeDirectory().toString();
-            org.owl4agents.reasoner.ReasonerServiceImpl reasonerService =
-                new org.owl4agents.reasoner.ReasonerServiceImpl(catalogStore, homeDirPath);
+            org.owl4agents.reasoner.ReasonerServiceImpl reasonerService = getReasonerService();
             ServiceResult<InconsistencyExplanation> result = reasonerService.explainInconsistency(
                 new OntologyId(ontologyIdStr), Optional.ofNullable(reasonerName));
             if (!result.isSuccess()) return errorResponse(((ServiceResult.Error<InconsistencyExplanation>) result).error());
@@ -629,9 +662,7 @@ public class McpServerAdapter {
         if (ontologyIdStr == null || classIRI == null) return errorResponse(ServiceError.of(ErrorCode.CLASS_NOT_FOUND, "ontology_id and class_uri are required"));
         String reasonerName = (String) args.getOrDefault("reasoner", "openllet");
         try {
-            String homeDirPath = homeResolver.resolveHomeDirectory().toString();
-            org.owl4agents.reasoner.ReasonerServiceImpl reasonerService =
-                new org.owl4agents.reasoner.ReasonerServiceImpl(catalogStore, homeDirPath);
+            org.owl4agents.reasoner.ReasonerServiceImpl reasonerService = getReasonerService();
             ServiceResult<UnsatClassExplanation> result = reasonerService.explainUnsatClass(
                 new OntologyId(ontologyIdStr), classIRI, Optional.ofNullable(reasonerName));
             if (!result.isSuccess()) return errorResponse(((ServiceResult.Error<UnsatClassExplanation>) result).error());
@@ -648,9 +679,7 @@ public class McpServerAdapter {
         String ontologyIdStr = (String) args.get("ontology_id");
         if (ontologyIdStr == null) return errorResponse(ServiceError.of(ErrorCode.ONTOLOGY_NOT_FOUND, "ontology_id is required"));
         try {
-            String homeDirPath = homeResolver.resolveHomeDirectory().toString();
-            org.owl4agents.reasoner.ReasonerServiceImpl reasonerService =
-                new org.owl4agents.reasoner.ReasonerServiceImpl(catalogStore, homeDirPath);
+            org.owl4agents.reasoner.ReasonerServiceImpl reasonerService = getReasonerService();
             ServiceResult<List<String>> result = reasonerService.getUnsatClasses(new OntologyId(ontologyIdStr));
             if (!result.isSuccess()) return errorResponse(((ServiceResult.Error<List<String>>) result).error());
             return Map.of("status", "success", "data", Map.of("unsatisfiableClassIRIs", ((ServiceResult.Success<List<String>>) result).data()));
@@ -663,9 +692,7 @@ public class McpServerAdapter {
         String ontologyIdStr = (String) args.get("ontology_id");
         if (ontologyIdStr == null) return errorResponse(ServiceError.of(ErrorCode.ONTOLOGY_NOT_FOUND, "ontology_id is required"));
         try {
-            String homeDirPath = homeResolver.resolveHomeDirectory().toString();
-            org.owl4agents.reasoner.ReasonerServiceImpl reasonerService =
-                new org.owl4agents.reasoner.ReasonerServiceImpl(catalogStore, homeDirPath);
+            org.owl4agents.reasoner.ReasonerServiceImpl reasonerService = getReasonerService();
             ServiceResult<ReasoningReport> result = reasonerService.getReasoningReport(new OntologyId(ontologyIdStr));
             if (!result.isSuccess()) return errorResponse(((ServiceResult.Error<ReasoningReport>) result).error());
             return Map.of("status", "success", "data", serializeReport(((ServiceResult.Success<ReasoningReport>) result).data()));
@@ -679,9 +706,7 @@ public class McpServerAdapter {
         if (ontologyIdStr == null) return errorResponse(ServiceError.of(ErrorCode.ONTOLOGY_NOT_FOUND, "ontology_id is required"));
         String entityIRI = (String) args.getOrDefault("entity_iri", null);
         try {
-            String homeDirPath = homeResolver.resolveHomeDirectory().toString();
-            org.owl4agents.reasoner.ReasonerServiceImpl reasonerService =
-                new org.owl4agents.reasoner.ReasonerServiceImpl(catalogStore, homeDirPath);
+            org.owl4agents.reasoner.ReasonerServiceImpl reasonerService = getReasonerService();
             ServiceResult<InferredFactsResult> result = reasonerService.getInferredFacts(
                 new OntologyId(ontologyIdStr), Optional.ofNullable(entityIRI));
             if (!result.isSuccess()) return errorResponse(((ServiceResult.Error<InferredFactsResult>) result).error());
@@ -700,9 +725,7 @@ public class McpServerAdapter {
         Map<String, String> params = new HashMap<>();
         args.forEach((k, v) -> { if (!k.equals("ontology_id") && !k.equals("axiom_type") && !k.equals("reasoner")) params.put(k, v != null ? v.toString() : null); });
         try {
-            String homeDirPath = homeResolver.resolveHomeDirectory().toString();
-            org.owl4agents.reasoner.ReasonerServiceImpl reasonerService =
-                new org.owl4agents.reasoner.ReasonerServiceImpl(catalogStore, homeDirPath);
+            org.owl4agents.reasoner.ReasonerServiceImpl reasonerService = getReasonerService();
             ServiceResult<EntailmentResult> result = reasonerService.checkEntailment(
                 new OntologyId(ontologyIdStr), axiomType, params, Optional.ofNullable(reasonerName));
             if (!result.isSuccess()) return errorResponse(((ServiceResult.Error<EntailmentResult>) result).error());
@@ -720,11 +743,7 @@ public class McpServerAdapter {
         String class2IRI = (String) args.get("class2_uri");
         if (ontologyIdStr == null || class1IRI == null || class2IRI == null) return errorResponse(ServiceError.of(ErrorCode.CLASS_NOT_FOUND, "ontology_id, class1_uri, and class2_uri are required"));
         try {
-            String homeDirPath = homeResolver.resolveHomeDirectory().toString();
-            org.owl4agents.reasoner.ReasonerServiceImpl reasonerService =
-                new org.owl4agents.reasoner.ReasonerServiceImpl(catalogStore, homeDirPath);
-            org.owl4agents.validation.ConsistencyAnalysisService analysisService =
-                new org.owl4agents.validation.ConsistencyAnalysisService(reasonerService.getLifecycleManager(), homeDirPath);
+            org.owl4agents.validation.ConsistencyAnalysisService analysisService = getConsistencyAnalysisService();
             ServiceResult<ClassCompatibilityResult> result = analysisService.checkClassCompatibility(
                 new OntologyId(ontologyIdStr), class1IRI, class2IRI);
             if (!result.isSuccess()) return errorResponse(((ServiceResult.Error<ClassCompatibilityResult>) result).error());
@@ -742,11 +761,7 @@ public class McpServerAdapter {
         if (ontologyIdStr == null || individualIRI == null || classIRI == null) return errorResponse(ServiceError.of(ErrorCode.INDIVIDUAL_NOT_FOUND, "ontology_id, individual_uri, and class_uri are required"));
         String reasonerName = (String) args.getOrDefault("reasoner", "auto");
         try {
-            String homeDirPath = homeResolver.resolveHomeDirectory().toString();
-            org.owl4agents.reasoner.ReasonerServiceImpl reasonerService =
-                new org.owl4agents.reasoner.ReasonerServiceImpl(catalogStore, homeDirPath);
-            org.owl4agents.validation.ConsistencyAnalysisService analysisService =
-                new org.owl4agents.validation.ConsistencyAnalysisService(reasonerService.getLifecycleManager(), homeDirPath);
+            org.owl4agents.validation.ConsistencyAnalysisService analysisService = getConsistencyAnalysisService();
             ServiceResult<MembershipResult> result = analysisService.checkIndividualMembership(
                 new OntologyId(ontologyIdStr), individualIRI, classIRI, Optional.ofNullable(reasonerName));
             if (!result.isSuccess()) return errorResponse(((ServiceResult.Error<MembershipResult>) result).error());
@@ -763,11 +778,7 @@ public class McpServerAdapter {
         if (ontologyIdStr == null || sourceIRI == null || propertyIRI == null || targetIRI == null) return errorResponse(ServiceError.of(ErrorCode.INDIVIDUAL_NOT_FOUND, "ontology_id, source, property, and target are required"));
         String reasonerName = (String) args.getOrDefault("reasoner", "auto");
         try {
-            String homeDirPath = homeResolver.resolveHomeDirectory().toString();
-            org.owl4agents.reasoner.ReasonerServiceImpl reasonerService =
-                new org.owl4agents.reasoner.ReasonerServiceImpl(catalogStore, homeDirPath);
-            org.owl4agents.validation.ConsistencyAnalysisService analysisService =
-                new org.owl4agents.validation.ConsistencyAnalysisService(reasonerService.getLifecycleManager(), homeDirPath);
+            org.owl4agents.validation.ConsistencyAnalysisService analysisService = getConsistencyAnalysisService();
             ServiceResult<RelationAssertionResult> result = analysisService.checkRelationAssertion(
                 new OntologyId(ontologyIdStr), sourceIRI, propertyIRI, targetIRI, Optional.ofNullable(reasonerName));
             if (!result.isSuccess()) return errorResponse(((ServiceResult.Error<RelationAssertionResult>) result).error());
@@ -780,11 +791,7 @@ public class McpServerAdapter {
         String ontologyIdStr = (String) args.get("ontology_id");
         if (ontologyIdStr == null) return errorResponse(ServiceError.of(ErrorCode.ONTOLOGY_NOT_FOUND, "ontology_id is required"));
         try {
-            String homeDirPath = homeResolver.resolveHomeDirectory().toString();
-            org.owl4agents.reasoner.ReasonerServiceImpl reasonerService =
-                new org.owl4agents.reasoner.ReasonerServiceImpl(catalogStore, homeDirPath);
-            org.owl4agents.validation.ConsistencyAnalysisService analysisService =
-                new org.owl4agents.validation.ConsistencyAnalysisService(reasonerService.getLifecycleManager(), homeDirPath);
+            org.owl4agents.validation.ConsistencyAnalysisService analysisService = getConsistencyAnalysisService();
             ServiceResult<ScopeDescription> result = analysisService.getScope(new OntologyId(ontologyIdStr));
             if (!result.isSuccess()) return errorResponse(((ServiceResult.Error<ScopeDescription>) result).error());
             ScopeDescription data = ((ServiceResult.Success<ScopeDescription>) result).data();
@@ -800,8 +807,7 @@ public class McpServerAdapter {
         String ontologyIdStr = (String) args.get("ontology_id");
         if (ontologyIdStr == null) return errorResponse(ServiceError.of(ErrorCode.ONTOLOGY_NOT_FOUND, "ontology_id is required"));
         try {
-            String homeDirPath = homeResolver.resolveHomeDirectory().toString();
-            org.owl4agents.owlapi.SemanticDeepeningService service = new org.owl4agents.owlapi.SemanticDeepeningService(homeDirPath);
+            org.owl4agents.owlapi.SemanticDeepeningService service = getSemanticDeepeningService();
             ServiceResult<ImportClosureResult> result = service.getImportClosure(new OntologyId(ontologyIdStr));
             if (!result.isSuccess()) return errorResponse(((ServiceResult.Error<ImportClosureResult>) result).error());
             ImportClosureResult data = ((ServiceResult.Success<ImportClosureResult>) result).data();
@@ -816,8 +822,7 @@ public class McpServerAdapter {
         if (ontologyIdStr == null || classIRI == null) return errorResponse(ServiceError.of(ErrorCode.CLASS_NOT_FOUND, "ontology_id and class_uri are required"));
         boolean includeInferred = Boolean.parseBoolean((String) args.getOrDefault("include_inferred", "false"));
         try {
-            String homeDirPath = homeResolver.resolveHomeDirectory().toString();
-            org.owl4agents.owlapi.SemanticDeepeningService service = new org.owl4agents.owlapi.SemanticDeepeningService(homeDirPath);
+            org.owl4agents.owlapi.SemanticDeepeningService service = getSemanticDeepeningService();
             ServiceResult<ClassRestrictionsResult> result = service.getClassRestrictions(new OntologyId(ontologyIdStr), classIRI, includeInferred);
             if (!result.isSuccess()) return errorResponse(((ServiceResult.Error<ClassRestrictionsResult>) result).error());
             ClassRestrictionsResult data = ((ServiceResult.Success<ClassRestrictionsResult>) result).data();
@@ -835,8 +840,7 @@ public class McpServerAdapter {
         if (ontologyIdStr == null || propertyIRI == null) return errorResponse(ServiceError.of(ErrorCode.PROPERTY_NOT_FOUND, "ontology_id and property_uri are required"));
         boolean includeInferred = Boolean.parseBoolean((String) args.getOrDefault("include_inferred", "false"));
         try {
-            String homeDirPath = homeResolver.resolveHomeDirectory().toString();
-            org.owl4agents.owlapi.SemanticDeepeningService service = new org.owl4agents.owlapi.SemanticDeepeningService(homeDirPath);
+            org.owl4agents.owlapi.SemanticDeepeningService service = getSemanticDeepeningService();
             ServiceResult<PropertyCharacteristicsResult> result = service.getPropertyCharacteristics(new OntologyId(ontologyIdStr), propertyIRI, includeInferred);
             if (!result.isSuccess()) return errorResponse(((ServiceResult.Error<PropertyCharacteristicsResult>) result).error());
             PropertyCharacteristicsResult data = ((ServiceResult.Success<PropertyCharacteristicsResult>) result).data();
@@ -852,8 +856,7 @@ public class McpServerAdapter {
         if (ontologyIdStr == null || propertyIRI == null) return errorResponse(ServiceError.of(ErrorCode.PROPERTY_NOT_FOUND, "ontology_id and property_uri are required"));
         boolean includeInferred = Boolean.parseBoolean((String) args.getOrDefault("include_inferred", "false"));
         try {
-            String homeDirPath = homeResolver.resolveHomeDirectory().toString();
-            org.owl4agents.owlapi.SemanticDeepeningService service = new org.owl4agents.owlapi.SemanticDeepeningService(homeDirPath);
+            org.owl4agents.owlapi.SemanticDeepeningService service = getSemanticDeepeningService();
             ServiceResult<PropertyAxiomsResult> result = service.getEquivalentProperties(new OntologyId(ontologyIdStr), propertyIRI, includeInferred);
             if (!result.isSuccess()) return errorResponse(((ServiceResult.Error<PropertyAxiomsResult>) result).error());
             PropertyAxiomsResult data = ((ServiceResult.Success<PropertyAxiomsResult>) result).data();
@@ -867,8 +870,7 @@ public class McpServerAdapter {
         if (ontologyIdStr == null || propertyIRI == null) return errorResponse(ServiceError.of(ErrorCode.PROPERTY_NOT_FOUND, "ontology_id and property_uri are required"));
         boolean includeInferred = Boolean.parseBoolean((String) args.getOrDefault("include_inferred", "false"));
         try {
-            String homeDirPath = homeResolver.resolveHomeDirectory().toString();
-            org.owl4agents.owlapi.SemanticDeepeningService service = new org.owl4agents.owlapi.SemanticDeepeningService(homeDirPath);
+            org.owl4agents.owlapi.SemanticDeepeningService service = getSemanticDeepeningService();
             ServiceResult<PropertyAxiomsResult> result = service.getDisjointProperties(new OntologyId(ontologyIdStr), propertyIRI, includeInferred);
             if (!result.isSuccess()) return errorResponse(((ServiceResult.Error<PropertyAxiomsResult>) result).error());
             PropertyAxiomsResult data = ((ServiceResult.Success<PropertyAxiomsResult>) result).data();
@@ -881,8 +883,7 @@ public class McpServerAdapter {
         String datatypeIRI = (String) args.get("datatype_uri");
         if (ontologyIdStr == null || datatypeIRI == null) return errorResponse(ServiceError.of(ErrorCode.DATATYPE_NOT_FOUND, "ontology_id and datatype_uri are required"));
         try {
-            String homeDirPath = homeResolver.resolveHomeDirectory().toString();
-            org.owl4agents.owlapi.SemanticDeepeningService service = new org.owl4agents.owlapi.SemanticDeepeningService(homeDirPath);
+            org.owl4agents.owlapi.SemanticDeepeningService service = getSemanticDeepeningService();
             ServiceResult<DatatypeConstraintsResult> result = service.getDatatypeConstraints(new OntologyId(ontologyIdStr), datatypeIRI);
             if (!result.isSuccess()) return errorResponse(((ServiceResult.Error<DatatypeConstraintsResult>) result).error());
             DatatypeConstraintsResult data = ((ServiceResult.Success<DatatypeConstraintsResult>) result).data();
@@ -898,8 +899,7 @@ public class McpServerAdapter {
         if (ontologyIdStr == null || literalValue == null || datatypeIRI == null) return errorResponse(ServiceError.of(ErrorCode.DATATYPE_NOT_FOUND, "ontology_id, literal_value, and datatype_uri are required"));
         String propertyIRI = (String) args.getOrDefault("property_uri", null);
         try {
-            String homeDirPath = homeResolver.resolveHomeDirectory().toString();
-            org.owl4agents.owlapi.SemanticDeepeningService service = new org.owl4agents.owlapi.SemanticDeepeningService(homeDirPath);
+            org.owl4agents.owlapi.SemanticDeepeningService service = getSemanticDeepeningService();
             ServiceResult<LiteralValidationResult> result = service.validateLiteral(new OntologyId(ontologyIdStr), literalValue, datatypeIRI, Optional.ofNullable(propertyIRI));
             if (!result.isSuccess()) return errorResponse(((ServiceResult.Error<LiteralValidationResult>) result).error());
             LiteralValidationResult data = ((ServiceResult.Success<LiteralValidationResult>) result).data();
@@ -914,8 +914,7 @@ public class McpServerAdapter {
         if (ontologyIdStr == null || sourceIRI == null || targetIRI == null) return errorResponse(ServiceError.of(ErrorCode.ENTITY_NOT_FOUND, "ontology_id, source_entity_uri, and target_entity_uri are required"));
         boolean includeInferred = Boolean.parseBoolean((String) args.getOrDefault("include_inferred", "false"));
         try {
-            String homeDirPath = homeResolver.resolveHomeDirectory().toString();
-            org.owl4agents.owlapi.SemanticDeepeningService service = new org.owl4agents.owlapi.SemanticDeepeningService(homeDirPath);
+            org.owl4agents.owlapi.SemanticDeepeningService service = getSemanticDeepeningService();
             ServiceResult<PropertyAxiomsResult> result = service.findRelationsBetweenEntities(new OntologyId(ontologyIdStr), sourceIRI, targetIRI, includeInferred);
             if (!result.isSuccess()) return errorResponse(((ServiceResult.Error<PropertyAxiomsResult>) result).error());
             PropertyAxiomsResult data = ((ServiceResult.Success<PropertyAxiomsResult>) result).data();
@@ -929,8 +928,7 @@ public class McpServerAdapter {
         if (ontologyIdStr == null || individualIRI == null) return errorResponse(ServiceError.of(ErrorCode.INDIVIDUAL_NOT_FOUND, "ontology_id and individual_uri are required"));
         boolean includeInferred = Boolean.parseBoolean((String) args.getOrDefault("include_inferred", "false"));
         try {
-            String homeDirPath = homeResolver.resolveHomeDirectory().toString();
-            org.owl4agents.owlapi.SemanticDeepeningService service = new org.owl4agents.owlapi.SemanticDeepeningService(homeDirPath);
+            org.owl4agents.owlapi.SemanticDeepeningService service = getSemanticDeepeningService();
             ServiceResult<PropertyAxiomsResult> result = service.getObjectPropertyAssertions(new OntologyId(ontologyIdStr), individualIRI, includeInferred);
             if (!result.isSuccess()) return errorResponse(((ServiceResult.Error<PropertyAxiomsResult>) result).error());
             return Map.of("status", "success", "data", Map.of("assertions", ((ServiceResult.Success<PropertyAxiomsResult>) result).data().relatedPropertyIRIs()));
@@ -943,8 +941,7 @@ public class McpServerAdapter {
         if (ontologyIdStr == null || individualIRI == null) return errorResponse(ServiceError.of(ErrorCode.INDIVIDUAL_NOT_FOUND, "ontology_id and individual_uri are required"));
         boolean includeInferred = Boolean.parseBoolean((String) args.getOrDefault("include_inferred", "false"));
         try {
-            String homeDirPath = homeResolver.resolveHomeDirectory().toString();
-            org.owl4agents.owlapi.SemanticDeepeningService service = new org.owl4agents.owlapi.SemanticDeepeningService(homeDirPath);
+            org.owl4agents.owlapi.SemanticDeepeningService service = getSemanticDeepeningService();
             ServiceResult<PropertyAxiomsResult> result = service.getDataPropertyAssertions(new OntologyId(ontologyIdStr), individualIRI, includeInferred);
             if (!result.isSuccess()) return errorResponse(((ServiceResult.Error<PropertyAxiomsResult>) result).error());
             return Map.of("status", "success", "data", Map.of("assertions", ((ServiceResult.Success<PropertyAxiomsResult>) result).data().relatedPropertyIRIs()));
@@ -957,8 +954,7 @@ public class McpServerAdapter {
         if (ontologyIdStr == null || individualIRI == null) return errorResponse(ServiceError.of(ErrorCode.INDIVIDUAL_NOT_FOUND, "ontology_id and individual_uri are required"));
         boolean includeInferred = Boolean.parseBoolean((String) args.getOrDefault("include_inferred", "false"));
         try {
-            String homeDirPath = homeResolver.resolveHomeDirectory().toString();
-            org.owl4agents.owlapi.SemanticDeepeningService service = new org.owl4agents.owlapi.SemanticDeepeningService(homeDirPath);
+            org.owl4agents.owlapi.SemanticDeepeningService service = getSemanticDeepeningService();
             ServiceResult<PropertyAxiomsResult> result = service.getSameIndividuals(new OntologyId(ontologyIdStr), individualIRI, includeInferred);
             if (!result.isSuccess()) return errorResponse(((ServiceResult.Error<PropertyAxiomsResult>) result).error());
             return Map.of("status", "success", "data", Map.of("sameAsIndividuals", ((ServiceResult.Success<PropertyAxiomsResult>) result).data().relatedPropertyIRIs()));
@@ -971,8 +967,7 @@ public class McpServerAdapter {
         if (ontologyIdStr == null || individualIRI == null) return errorResponse(ServiceError.of(ErrorCode.INDIVIDUAL_NOT_FOUND, "ontology_id and individual_uri are required"));
         boolean includeInferred = Boolean.parseBoolean((String) args.getOrDefault("include_inferred", "false"));
         try {
-            String homeDirPath = homeResolver.resolveHomeDirectory().toString();
-            org.owl4agents.owlapi.SemanticDeepeningService service = new org.owl4agents.owlapi.SemanticDeepeningService(homeDirPath);
+            org.owl4agents.owlapi.SemanticDeepeningService service = getSemanticDeepeningService();
             ServiceResult<PropertyAxiomsResult> result = service.getDifferentIndividuals(new OntologyId(ontologyIdStr), individualIRI, includeInferred);
             if (!result.isSuccess()) return errorResponse(((ServiceResult.Error<PropertyAxiomsResult>) result).error());
             return Map.of("status", "success", "data", Map.of("differentFromIndividuals", ((ServiceResult.Success<PropertyAxiomsResult>) result).data().relatedPropertyIRIs()));

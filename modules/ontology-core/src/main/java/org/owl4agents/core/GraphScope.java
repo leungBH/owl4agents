@@ -2,7 +2,7 @@ package org.owl4agents.core;
 
 /**
  * Enum representing the graph scope for query and retrieval operations.
- * v0.1 primarily uses EXPLICIT scope.
+ * EXPLICIT is the default scope; INFERRED requires prior reasoning; UNION combines both.
  */
 public enum GraphScope {
     EXPLICIT("explicit"),

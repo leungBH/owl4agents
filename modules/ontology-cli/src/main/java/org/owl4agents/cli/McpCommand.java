@@ -4,6 +4,7 @@ import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;
 
 import org.owl4agents.mcp.McpServerAdapter;
+import org.owl4agents.storage.HomeDirectoryResolver;
 
 import java.io.*;
 import java.nio.file.Path;
@@ -22,7 +23,7 @@ import com.google.gson.JsonParser;
 @Command(name = "mcp", description = "Start the readonly MCP server.")
 public class McpCommand implements Callable<Integer> {
 
-    @Option(names = {"--readonly"}, description = "Start MCP in readonly mode (default for v0.1)", defaultValue = "true")
+    @Option(names = {"--readonly"}, description = "Start MCP in readonly mode (default)", arity = "0..1", fallbackValue = "true", defaultValue = "true")
     private boolean readonly = true;
 
     @Option(names = {"--workspace"}, description = "Workspace name")
@@ -37,7 +38,7 @@ public class McpCommand implements Callable<Integer> {
     @Override
     public Integer call() {
         if (!readonly) {
-            System.err.println("Error: v0.1 only supports readonly MCP mode. Use --readonly (default).");
+            System.err.println("Error: owl4agents only supports readonly MCP mode. Use --readonly (default).");
             return 1;
         }
 
@@ -47,11 +48,15 @@ public class McpCommand implements Callable<Integer> {
             serviceContext.put("homeDir", homeDirectory);
         }
 
-        String logDir = homeDirectory != null ?
-            Path.of(homeDirectory, "workspaces", workspaceName, "logs").toString() :
-            Path.of(System.getProperty("user.home"), ".owl4agents", "workspaces", workspaceName, "logs").toString();
+        HomeDirectoryResolver homeResolver = homeDirectory != null
+            ? new HomeDirectoryResolver(Path.of(homeDirectory))
+            : new HomeDirectoryResolver();
+        String logFilePath = homeResolver.resolveWorkspaceDirectory(new org.owl4agents.core.WorkspaceId(workspaceName))
+            .resolve("logs")
+            .resolve("mcp-tool-calls.jsonl")
+            .toString();
 
-        McpServerAdapter adapter = new McpServerAdapter(serviceContext, logDir);
+        McpServerAdapter adapter = new McpServerAdapter(serviceContext, logFilePath);
 
         // MCP server runs on stdin/stdout
         BufferedReader reader = new BufferedReader(new InputStreamReader(System.in));
@@ -112,7 +117,7 @@ public class McpCommand implements Callable<Integer> {
                 result.add("capabilities", capabilities);
                 JsonObject serverInfo = new JsonObject();
                 serverInfo.addProperty("name", "owl4agents");
-                serverInfo.addProperty("version", "0.1.0");
+                serverInfo.addProperty("version", "0.2.1");
                 result.add("serverInfo", serverInfo);
                 response.add("result", result);
             }
