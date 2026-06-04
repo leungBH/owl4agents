@@ -1,7 +1,7 @@
 package org.owl4agents.core;
 
 /**
- * Structured error codes for owl4agents v0.1 and v0.2.
+ * Structured error codes for owl4agents v0.1 through v0.3.
  * Each error code corresponds to a specific failure condition in the service layer.
  */
 public enum ErrorCode {
@@ -91,7 +91,15 @@ public enum ErrorCode {
     ROBOT_NOT_AVAILABLE("ROBOT_NOT_AVAILABLE",
         "The ROBOT module is not installed; robot: prefixed operations require the ontology-robot module."),
     ROBOT_PREPROCESSING_FAILED("ROBOT_PREPROCESSING_FAILED",
-        "ROBOT preprocessing failed; the input ontologies caused an incompatible format error.");
+        "ROBOT preprocessing failed; the input ontologies caused an incompatible format error."),
+
+    // v0.3 claim verification error codes
+    INVALID_CLAIM_SCHEMA("INVALID_CLAIM_SCHEMA",
+        "The submitted claim does not conform to the structured claim schema."),
+    UNSUPPORTED_CLAIM_TYPE("UNSUPPORTED_CLAIM_TYPE",
+        "The claim type is not one of the supported v0.3 verification types."),
+    EVIDENCE_NOT_AVAILABLE("EVIDENCE_NOT_AVAILABLE",
+        "No evidence could be assembled for the given claim verdict.");
 
     private final String code;
     private final String defaultMessage;

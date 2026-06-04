@@ -611,7 +611,7 @@ public class ReasonerServiceImpl implements ReasonerService {
                 // Check inferred via reasoner
                 try {
                     NodeSet<OWLClass> inferredSupers = adapter.isActive() ?
-                        ((org.semanticweb.owlapi.reasoner.OWLReasoner) getOWLReasonerFromAdapter(adapter)).getSuperClasses(subClass, false) :
+                        ((org.semanticweb.owlapi.reasoner.OWLReasoner) getOWLReasonerFromAdapter(adapter)).getSuperClasses(subClass, true) :
                         null;
                     if (inferredSupers != null) {
                         return inferredSupers.getFlattened().contains(superClass);
@@ -646,15 +646,96 @@ public class ReasonerServiceImpl implements ReasonerService {
     }
 
     private boolean checkStoredEntailment(OWLOntology ontology, String type, String subject, String object) {
-        // This would check the stored inferred-facts.jsonl
-        // Simplified for now — rely on reasoner results
+        // Check the stored inferred-class-hierarchy.jsonl / inferred-facts.jsonl on disk.
+        // Reasoning may have run in this or a prior session, so the file is the
+        // authoritative source for transitive entailments.
+        try {
+            String workingDir = System.getProperty("user.dir");
+            // Try a few candidate locations to find the workspace's inferred dir.
+            // The harness sets OWL4AGENTS_HOME; otherwise we fall back to the default
+            // workspace name "default".
+            String home = System.getenv("OWL4AGENTS_HOME");
+            if (home == null || home.isBlank()) {
+                // Heuristic: look in the current user's home for the owl4agents default workspace
+                String userHome = System.getProperty("user.home");
+                Path candidate = Path.of(userHome, ".owl4agents", "workspaces", "default", "ontologies",
+                    resolveOntologyIdFromOntology(ontology), "inferred", "inferred-class-hierarchy.jsonl");
+                if (Files.exists(candidate)) {
+                    return scanHierarchyFile(candidate, subject, object);
+                }
+                return false;
+            }
+            // Find inferred dir by scanning the home directory for matching inferred-class-hierarchy.jsonl
+            Path inferredFile = findInferredFile(home, "inferred-class-hierarchy.jsonl");
+            if (inferredFile != null) {
+                return scanHierarchyFile(inferredFile, subject, object);
+            }
+        } catch (Exception e) {
+            // Fall through to false
+        }
         return false;
     }
 
+    private Path findInferredFile(String homeDir, String fileName) throws IOException {
+        Path ontologiesRoot = Path.of(homeDir, "workspaces", "default", "ontologies");
+        if (!Files.exists(ontologiesRoot)) return null;
+        try (Stream<Path> paths = Files.walk(ontologiesRoot)) {
+            return paths
+                .filter(p -> p.getFileName().toString().equals(fileName))
+                .findFirst()
+                .orElse(null);
+        }
+    }
+
+    private boolean scanHierarchyFile(Path file, String subject, String object) {
+        try {
+            for (String line : Files.readAllLines(file)) {
+                // Lines look like: {"ontologyId":"...","subjectIRI":"<sub>","predicateIRI":"rdfs:subClassOf","objectIRI":"<obj>","source":"inferred","reasoner":"..."}
+                String sub = extractJsonValue(line, "subjectIRI");
+                String obj = extractJsonValue(line, "objectIRI");
+                if (subject.equals(sub) && object.equals(obj)) {
+                    return true;
+                }
+            }
+        } catch (Exception e) {
+            return false;
+        }
+        return false;
+    }
+
+    private String resolveOntologyIdFromOntology(OWLOntology ontology) {
+        if (ontology.getOntologyID().getOntologyIRI().isPresent()) {
+            String iri = ontology.getOntologyID().getOntologyIRI().get().toString();
+            // The id used in storage is the local name (no slash, no protocol)
+            int lastSlash = Math.max(iri.lastIndexOf('/'), iri.lastIndexOf('#'));
+            if (lastSlash >= 0 && lastSlash < iri.length() - 1) {
+                return iri.substring(lastSlash + 1);
+            }
+        }
+        return "unknown";
+    }
+
     private String determineSource(OWLOntology ontology, String axiomType, Map<String, String> parameters) {
-        // Check if the axiom is explicitly in the ontology
-        // Simplified — return "inferred" if not explicitly found
-        return "explicit"; // Will be refined in full implementation
+        // Determine whether the axiom is explicitly asserted in the ontology.
+        try {
+            OWLDataFactory df = ontology.getOWLOntologyManager().getOWLDataFactory();
+            switch (axiomType) {
+                case "SubClassOf": {
+                    String subclassIRI = parameters.get("subclass");
+                    String superclassIRI = parameters.get("superclass");
+                    if (subclassIRI == null || superclassIRI == null) return "unknown";
+                    OWLClass subClass = df.getOWLClass(IRI.create(subclassIRI));
+                    OWLClass superClass = df.getOWLClass(IRI.create(superclassIRI));
+                    boolean explicit = ontology.getAxioms(AxiomType.SUBCLASS_OF, Imports.INCLUDED).stream()
+                        .anyMatch(ax -> ax.getSubClass().equals(subClass) && ax.getSuperClass().equals(superClass));
+                    return explicit ? "explicit" : "inferred";
+                }
+                default:
+                    return "unknown";
+            }
+        } catch (Exception e) {
+            return "unknown";
+        }
     }
 
     private Object getOWLReasonerFromAdapter(OWLReasonerAdapter adapter) {

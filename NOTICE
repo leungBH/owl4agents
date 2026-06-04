@@ -1,0 +1,19 @@
+owl4agents
+Copyright 2026 leungBH
+
+This product is licensed under the Apache License, Version 2.0.
+
+This product includes or depends on third-party open-source components,
+including:
+
+- OWL API, licensed under Apache License 2.0 / LGPL notices as distributed by its project.
+- Apache Jena, licensed under Apache License 2.0.
+- Apache Commons components, licensed under Apache License 2.0.
+- HermiT OWL reasoner, distributed with its upstream license notices.
+- ELK OWL reasoner, licensed under Apache License 2.0.
+- Openllet, licensed under Apache License 2.0.
+- Gson, licensed under Apache License 2.0.
+- Picocli, licensed under Apache License 2.0.
+- JUnit 5, licensed under Eclipse Public License 2.0.
+
+Third-party component licenses remain with their respective copyright holders.

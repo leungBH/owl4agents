@@ -1,0 +1,55 @@
+@prefix : <http://example.org/v0.3#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+<http://example.org/v0.3-claim-verification> a owl:Ontology ;
+    rdfs:label "v0.3 Claim Verification Golden Ontology" ;
+    rdfs:comment "Golden ontology for testing claim verification across supported, contradicted, unknown, and out_of_scope verdicts." .
+
+# --- Class hierarchy (supported: Dog subClassOf Animal) ---
+:Animal a owl:Class .
+:Mammal a owl:Class ; rdfs:subClassOf :Animal .
+:Dog a owl:Class ; rdfs:subClassOf :Mammal .
+:Cat a owl:Class ; rdfs:subClassOf :Mammal .
+
+# --- Equivalent classes (supported: Canine = Dog) ---
+:Canine a owl:Class ; owl:equivalentClass :Dog .
+
+# --- Disjoint classes (contradicted: Dog disjointWith Cat — claiming Dog subClassOf Cat contradicts) ---
+:Dog owl:disjointWith :Cat .
+
+# --- Object property with domain/range ---
+:hasOwner a owl:ObjectProperty ;
+    rdfs:domain :Animal ;
+    rdfs:range :Person .
+
+:Person a owl:Class .
+
+# --- Data property with domain/range and datatype constraints ---
+:hasAge a owl:DatatypeProperty ;
+    rdfs:domain :Animal ;
+    rdfs:range xsd:nonNegativeInteger .
+
+:hasName a owl:DatatypeProperty ;
+    rdfs:domain :Animal ;
+    rdfs:range xsd:string .
+
+# --- Individual assertions (supported: Fido is a Dog) ---
+:Fido a :Dog .
+:Rex a :Dog .
+:Whiskers a :Cat .
+
+:Fido :hasOwner :PersonJohn .
+:Fido :hasAge 5 .
+:Fido :hasName "Fido" .
+
+:PersonJohn a :Person .
+
+# --- Sparse unknown: Fish/Goldfish have no axioms connecting them ---
+:Fish a owl:Class .
+:Goldfish a owl:Class .
+
+# --- Out-of-scope: UnconnectedThing has no relation to Animal ---
+:UnconnectedThing a owl:Class .

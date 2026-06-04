@@ -6,7 +6,16 @@ Local acceptance reports are stored under `reports/acceptance/` and are intentio
 
 ## Shared Output Schema
 
-This document defines the shared schema patterns used across all v0.1 and v0.2 output contracts.
+This document defines the shared schema patterns used across v0.1, v0.2, and v0.3 output contracts.
+
+## Contract Files
+
+| Contract | Purpose |
+| --- | --- |
+| `acceptance-report/contracts.md` | Required acceptance report structure, evidence, defect ledger, skip rules, and verdict rules |
+| `cli-mcp-parity/contracts.md` | Parity expectations for overlapping CLI and MCP operations |
+| `claim-verification/contracts.md` | v0.3 structured claim schema, verdicts, evidence paths, negative tests, and fixture expectations |
+| `release-readiness/contracts.md` | Release checklist and handoff quality expectations |
 
 ## Result Envelope
 
@@ -31,8 +40,8 @@ All error results return an error envelope:
 {
   "status": "error",
   "error": {
-    "code": "string — one of the defined error codes",
-    "message": "string — human-readable error description",
+    "code": "string - one of the defined error codes",
+    "message": "string - human-readable error description",
     "details": { ... }
   }
 }
@@ -59,9 +68,9 @@ Results that include evidence should provide:
   "evidence": {
     "ontologyId": "string",
     "graphScope": "explicit | inferred | union",
-    "entitySource": "string — IRI of the source entity",
-    "axiomSource": "string — axiom type, e.g. SubClassOf",
-    "tripleSource": "string — RDF triple pattern, optional",
+    "entitySource": "string - IRI of the source entity",
+    "axiomSource": "string - axiom type, e.g. SubClassOf",
+    "tripleSource": "string - RDF triple pattern, optional",
     "extractionStatus": "explicit | inferred | unknown"
   }
 }

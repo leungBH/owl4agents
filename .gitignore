@@ -40,6 +40,9 @@ modules/**/bin/
 # Ignore built jars but NOT the Gradle wrapper jar
 modules/**/build/libs/*.jar
 *.war
+# Maven metadata extracted by OWL API / Jena dependency resolution
+META-INF/
+/org/
 
 # OS
 .DS_Store

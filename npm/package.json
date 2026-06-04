@@ -1,7 +1,8 @@
 {
   "name": "owl4agents",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "description": "Local OWL ontology reasoning and MCP server for LLM agents",
+  "main": "./bin/owl4agents.js",
   "keywords": ["owl", "ontology", "mcp", "agents", "sparql"],
   "license": "Apache-2.0",
   "bin": {
@@ -15,6 +16,6 @@
   ],
   "repository": {
     "type": "git",
-    "url": ""
+    "url": "git+https://github.com/leungBH/owl4agents.git"
   }
 }

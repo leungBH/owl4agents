@@ -3,7 +3,7 @@ package org.owl4agents.mcp;
 import java.util.*;
 
 /**
- * Registry of v0.1 and v0.2 readonly MCP tools.
+ * Registry of v0.1, v0.2, and v0.3 readonly MCP tools.
  * Lists available tools and their schemas.
  * Write-style tools are not included.
  */
@@ -58,18 +58,24 @@ public class McpToolRegistry {
         "ontology_get_object_property_assertions",
         "ontology_get_data_property_assertions",
         "ontology_get_same_individuals",
-        "ontology_get_different_individuals"
+        "ontology_get_different_individuals",
+        // v0.3 claim verification and evidence grounding tools
+        "ontology_verify_claim",
+        "ontology_get_evidence_path",
+        "ontology_find_counterexamples",
+        "ontology_explain_unknown",
+        "ontology_detect_missing_entities"
     );
 
     /**
-     * Check if a tool name is a readonly tool (v0.1 or v0.2).
+     * Check if a tool name is a readonly tool.
      */
     public boolean isReadonlyTool(String toolName) {
         return READONLY_TOOLS.contains(toolName);
     }
 
     /**
-     * List all readonly tool schemas (v0.1 + v0.2).
+     * List all readonly tool schemas.
      */
     public List<Map<String, Object>> listToolSchemas() {
         List<Map<String, Object>> schemas = new ArrayList<>();
@@ -176,6 +182,22 @@ public class McpToolRegistry {
         schemas.add(toolSchema("ontology_get_different_individuals", "Get owl:differentFrom individuals for an individual",
             Map.of("ontology_id", stringParam("Ontology ID"), "individual_uri", stringParam("Individual URI"), "include_inferred", stringParam("Include inferred differentFrom (default false)"))));
 
+        // v0.3 Claim verification and evidence grounding tools
+        schemas.add(toolSchema("ontology_verify_claim", "Verify a structured claim against an ontology and return verdict with evidence",
+            Map.of("ontology_id", stringParam("Ontology ID"), "claim", objectParam("Structured claim object"), "reasoner", stringParam("Reasoner name or auto"))));
+        schemas.add(toolSchema("ontology_get_evidence_path", "Get evidence path for a verified claim with inferred facts and reasoning report enrichment",
+            Map.of("ontology_id", stringParam("Ontology ID"), "claim", objectParam("Structured claim object"))));
+        schemas.add(toolSchema("ontology_find_counterexamples", "Find counterexamples for a contradicted claim",
+            Map.of("ontology_id", stringParam("Ontology ID"), "claim", objectParam("Structured claim object"))));
+        schemas.add(toolSchema("ontology_explain_unknown", "Explain why a claim received an unknown verdict with reason category and suggested action",
+            Map.of("ontology_id", stringParam("Ontology ID"), "claim", objectParam("Structured claim object"))));
+        Map<String, Object> missingEntitiesSchema = new HashMap<>();
+        missingEntitiesSchema.put("ontology_id", stringParam("Ontology ID"));
+        missingEntitiesSchema.put("claim", objectParam("Structured claim object"));
+        missingEntitiesSchema.put("terms", objectParam("Alternative: list of entity IRIs as JSON array"));
+        schemas.add(toolSchema("ontology_detect_missing_entities", "Detect matched, ambiguous, missing, and out-of-scope entities in a claim",
+            missingEntitiesSchema));
+
         return schemas;
     }
 
@@ -193,5 +215,9 @@ public class McpToolRegistry {
 
     private Map<String, Object> intParam(String description, int defaultValue) {
         return Map.of("type", "integer", "description", description, "default", defaultValue);
+    }
+
+    private Map<String, Object> objectParam(String description) {
+        return Map.of("type", "object", "description", description);
     }
 }

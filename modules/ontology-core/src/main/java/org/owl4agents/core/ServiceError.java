@@ -77,4 +77,16 @@ public record ServiceError(
             "SPARQL query has syntax errors: " + parseError,
             Map.of("parseError", parseError));
     }
+
+    public static ServiceError invalidClaimSchema(String detail) {
+        return new ServiceError(ErrorCode.INVALID_CLAIM_SCHEMA,
+            "Claim schema validation failed: " + detail,
+            Map.of("detail", detail));
+    }
+
+    public static ServiceError unsupportedClaimType(String type, java.util.List<String> supportedTypes) {
+        return new ServiceError(ErrorCode.UNSUPPORTED_CLAIM_TYPE,
+            "Claim type '" + type + "' is not supported. Supported types: " + supportedTypes,
+            Map.of("claimType", type, "supportedTypes", supportedTypes));
+    }
 }

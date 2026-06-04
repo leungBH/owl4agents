@@ -1,8 +1,8 @@
-# v0.2.1 Release Readiness Acceptance Contract
+# Release Readiness Acceptance Contract
 
 ## Contract: Build verification gate
 
-The `.\gradlew.bat clean buildVerification` command SHALL exit with code 0 and all v0.1/v0.2 regression tests SHALL pass.
+The `.\gradlew.bat clean buildVerification` command SHALL exit with code 0 and all required regression tests for the release SHALL pass.
 
 - No test failures, no silently skipped required fixtures
 - Gradle deprecation warnings classified as: blocking (must fix), accepted (documented), or fixed
@@ -29,7 +29,7 @@ When `node npm/bin/owl4agents.js --help` is executed as a real child process:
 When `node npm/bin/owl4agents.js --version` is executed as a real child process:
 
 - Exit code SHALL be 0
-- stdout SHALL contain the project version string (e.g. "0.2.1")
+- stdout SHALL contain the project version string, for example `0.3.0`
 - stderr SHALL NOT contain crash text or stack traces
 
 ## Contract: Missing runtime diagnostics
@@ -58,9 +58,9 @@ When `node npm/bin/owl4agents.js mcp --readonly` is started as a real child proc
 - A bounded MCP initialize or tools/list interaction SHALL return a valid JSON-RPC response
 - The process SHALL shut down cleanly within timeout
 
-## Contract: v0.1/v0.2 regression
+## Contract: regression gates
 
-All existing v0.1 and v0.2 acceptance gates SHALL pass unchanged.
+All existing acceptance gates from earlier released versions SHALL pass unchanged. Feature releases SHALL also run their own version-specific fixtures and contracts, such as the v0.3 claim-verification fixtures.
 
 - CLI/MCP parity SHALL remain equivalent
 - Placeholder payloads, empty success payloads, and crash output SHALL fail tests

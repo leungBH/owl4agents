@@ -13,6 +13,8 @@ import org.owl4agents.reasoner.ReasonerLifecycleManager;
 import org.owl4agents.retrieval.*;
 import org.owl4agents.storage.*;
 import org.owl4agents.validation.ConsistencyAnalysisService;
+import org.owl4agents.validation.ClaimVerificationService;
+import org.owl4agents.validation.EvidenceGroundingService;
 
 import org.semanticweb.owlapi.apibinding.OWLManager;
 import org.semanticweb.owlapi.model.OWLOntology;
@@ -43,6 +45,8 @@ public class CliServiceFactory {
     private ReasonerServiceImpl reasonerService;
     private SemanticDeepeningService semanticDeepeningService;
     private ConsistencyAnalysisService consistencyAnalysisService;
+    private ClaimVerificationService claimVerificationService;
+    private EvidenceGroundingService evidenceGroundingService;
 
     public CliServiceFactory(String workspaceName, String homeDirectory) {
         this.workspaceName = workspaceName;
@@ -208,6 +212,35 @@ public class CliServiceFactory {
             consistencyAnalysisService = new ConsistencyAnalysisService(lifecycleManager, workspaceBasePath);
         }
         return consistencyAnalysisService;
+    }
+
+    /**
+     * Get the claim verification service instance.
+     */
+    public ClaimVerificationService getClaimVerificationService() {
+        if (claimVerificationService == null) {
+            claimVerificationService = new ClaimVerificationService(
+                getReasonerService(),
+                getConsistencyAnalysisService(),
+                getSemanticDeepeningService(),
+                getCatalogStore(),
+                getWorkspaceId()
+            );
+        }
+        return claimVerificationService;
+    }
+
+    /**
+     * Get the evidence grounding service instance.
+     */
+    public EvidenceGroundingService getEvidenceGroundingService() {
+        if (evidenceGroundingService == null) {
+            evidenceGroundingService = new EvidenceGroundingService(
+                getReasonerService(),
+                getConsistencyAnalysisService()
+            );
+        }
+        return evidenceGroundingService;
     }
 
     /**

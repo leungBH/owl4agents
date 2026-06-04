@@ -1,0 +1,11 @@
+{
+  "claimId": "claim-contradicted-001",
+  "type": "disjoint_classes",
+  "ontologyId": "v0.3-claim-verification",
+  "subject": { "kind": "class", "iri": "http://example.org/v0.3#Dog" },
+  "predicate": "disjointWith",
+  "object": { "kind": "class", "iri": "http://example.org/v0.3#Cat" },
+  "reasoner": null,
+  "graphScope": "explicit",
+  "options": { "includeEvidence": true }
+}

@@ -2,6 +2,7 @@ package org.owl4agents.mcp;
 
 import org.owl4agents.core.*;
 import org.owl4agents.core.model.*;
+import org.owl4agents.core.ClaimValidator;
 import org.owl4agents.owlapi.OntologySummaryExtractor;
 import org.owl4agents.query.*;
 import org.owl4agents.retrieval.*;
@@ -16,8 +17,9 @@ import java.util.*;
 import java.util.stream.Collectors;
 
 /**
- * MCP server adapter over the shared OntologyService.
- * v0.1 only exposes readonly tools.
+ * MCP server adapter over the shared ontology services.
+ * Exposes readonly tools from v0.1 import/query/context, v0.2 reasoning,
+ * and v0.3 claim verification / evidence grounding.
  * Write-style tool calls are rejected with readonly-policy errors.
  */
 public class McpServerAdapter {
@@ -36,6 +38,8 @@ public class McpServerAdapter {
     private org.owl4agents.reasoner.ReasonerServiceImpl reasonerService;
     private org.owl4agents.validation.ConsistencyAnalysisService consistencyAnalysisService;
     private org.owl4agents.owlapi.SemanticDeepeningService semanticDeepeningService;
+    private org.owl4agents.validation.ClaimVerificationService claimVerificationService;
+    private org.owl4agents.validation.EvidenceGroundingService evidenceGroundingService;
 
     /**
      * Get the cached reasoner service instance.
@@ -75,6 +79,29 @@ public class McpServerAdapter {
             semanticDeepeningService = new org.owl4agents.owlapi.SemanticDeepeningService(workspaceBasePath);
         }
         return semanticDeepeningService;
+    }
+
+    /**
+     * Get the cached claim verification service instance.
+     */
+    private org.owl4agents.validation.ClaimVerificationService getClaimVerificationService() {
+        if (claimVerificationService == null) {
+            claimVerificationService = new org.owl4agents.validation.ClaimVerificationService(
+                getReasonerService(), getConsistencyAnalysisService(), getSemanticDeepeningService(),
+                catalogStore, new WorkspaceId("default"));
+        }
+        return claimVerificationService;
+    }
+
+    /**
+     * Get the cached evidence grounding service instance.
+     */
+    private org.owl4agents.validation.EvidenceGroundingService getEvidenceGroundingService() {
+        if (evidenceGroundingService == null) {
+            evidenceGroundingService = new org.owl4agents.validation.EvidenceGroundingService(
+                getReasonerService(), getConsistencyAnalysisService());
+        }
+        return evidenceGroundingService;
     }
 
     public McpServerAdapter(Map<String, Object> serviceContext, String logFilePath) {
@@ -117,7 +144,20 @@ public class McpServerAdapter {
         String errorCode = result.containsKey("error") ?
             ((Map<String, Object>) result.get("error")).get("code").toString() : null;
 
-        callLogger.logCall(timestamp, toolName, ontologyId, resultStatus, errorCode);
+        // v0.3: Extract claimId and verdict for enhanced logging
+        String claimId = null;
+        String verdict = null;
+        if (result.containsKey("data")) {
+            Object dataObj = result.get("data");
+            if (dataObj instanceof Map) {
+                @SuppressWarnings("unchecked")
+                Map<String, Object> dataMap = (Map<String, Object>) dataObj;
+                claimId = (String) dataMap.getOrDefault("claimId", null);
+                verdict = (String) dataMap.getOrDefault("verdict", null);
+            }
+        }
+
+        callLogger.logCall(timestamp, toolName, ontologyId, claimId, verdict, resultStatus, errorCode);
         return result;
     }
 
@@ -179,6 +219,12 @@ public class McpServerAdapter {
             case "ontology_get_data_property_assertions" -> { return executeGetDataPropertyAssertions(arguments); }
             case "ontology_get_same_individuals" -> { return executeGetSameIndividuals(arguments); }
             case "ontology_get_different_individuals" -> { return executeGetDifferentIndividuals(arguments); }
+            // v0.3 claim verification and evidence grounding tools
+            case "ontology_verify_claim" -> { return executeVerifyClaim(arguments); }
+            case "ontology_get_evidence_path" -> { return executeGetEvidencePath(arguments); }
+            case "ontology_find_counterexamples" -> { return executeFindCounterexamples(arguments); }
+            case "ontology_explain_unknown" -> { return executeExplainUnknown(arguments); }
+            case "ontology_detect_missing_entities" -> { return executeDetectMissingEntities(arguments); }
             default -> { return errorResponse(ServiceError.readonlyViolation(toolName)); }
         }
     }
@@ -995,6 +1041,357 @@ public class McpServerAdapter {
             m.put("errorDetails", Map.of("errorCode", report.errorDetails().errorCode(), "message", report.errorDetails().message()));
         }
         return m;
+    }
+
+    // ── v0.3 claim verification and evidence grounding tools ──
+
+    private Map<String, Object> executeVerifyClaim(Map<String, Object> args) {
+        String ontologyIdStr = (String) args.get("ontology_id");
+        Object claimObj = args.get("claim");
+        String reasonerName = (String) args.getOrDefault("reasoner", "auto");
+        if (ontologyIdStr == null || claimObj == null) {
+            return errorResponse(ServiceError.of(ErrorCode.INVALID_CLAIM_SCHEMA, "ontology_id and claim are required"));
+        }
+
+        Claim claim = parseClaimFromMcpArgs(claimObj, reasonerName);
+        if (claim == null) {
+            return errorResponse(ServiceError.invalidClaimSchema("Failed to parse claim from arguments."));
+        }
+
+        // Validate
+        ClaimValidator validator = new ClaimValidator();
+        ServiceResult<Claim> validationResult = validator.validate(claim);
+        if (!validationResult.isSuccess()) {
+            return errorResponse(((ServiceResult.Error<Claim>) validationResult).error());
+        }
+
+        Claim validClaim = ((ServiceResult.Success<Claim>) validationResult).data();
+
+        // Verify
+        ServiceResult<ClaimVerificationResult> result = getClaimVerificationService().verify(validClaim);
+        if (!result.isSuccess()) {
+            return errorResponse(((ServiceResult.Error<ClaimVerificationResult>) result).error());
+        }
+
+        ClaimVerificationResult data = ((ServiceResult.Success<ClaimVerificationResult>) result).data();
+        Map<String, Object> responseData = new HashMap<>();
+        responseData.put("claimId", data.claimId());
+        responseData.put("ontologyId", data.ontologyId());
+        responseData.put("claimType", data.claimType().jsonName());
+        responseData.put("verdict", data.verdict().jsonName());
+        responseData.put("truncated", data.truncated());
+        responseData.put("totalEvidenceAvailable", data.totalEvidenceAvailable());
+        if (data.unknownReason().isPresent()) {
+            responseData.put("unknownReason", data.unknownReason().get().jsonName());
+        }
+        if (data.unknownExplanation().isPresent()) {
+            responseData.put("unknownExplanation", data.unknownExplanation().get());
+        }
+        if (data.reasonerName().isPresent()) {
+            responseData.put("reasonerName", data.reasonerName().get());
+        }
+        List<Map<String, Object>> evidenceItems = data.evidence().stream()
+            .map(e -> {
+                Map<String, Object> m = new HashMap<>();
+                m.put("evidenceId", e.evidenceId());
+                m.put("role", e.role());
+                m.put("kind", e.kind().jsonName());
+                m.put("value", e.value());
+                m.put("source", e.source());
+                m.put("confidence", e.confidence());
+                return m;
+            })
+            .collect(Collectors.toList());
+        responseData.put("evidence", evidenceItems);
+
+        return Map.of("status", "success", "data", responseData);
+    }
+
+    private Map<String, Object> executeGetEvidencePath(Map<String, Object> args) {
+        String ontologyIdStr = (String) args.get("ontology_id");
+        Object claimObj = args.get("claim");
+        if (ontologyIdStr == null || claimObj == null) {
+            return errorResponse(ServiceError.of(ErrorCode.INVALID_CLAIM_SCHEMA, "ontology_id and claim are required"));
+        }
+
+        Claim claim = parseClaimFromMcpArgs(claimObj, null);
+        if (claim == null) {
+            return errorResponse(ServiceError.invalidClaimSchema("Failed to parse claim from arguments."));
+        }
+
+        ClaimValidator validator = new ClaimValidator();
+        ServiceResult<Claim> validationResult = validator.validate(claim);
+        if (!validationResult.isSuccess()) {
+            return errorResponse(((ServiceResult.Error<Claim>) validationResult).error());
+        }
+        Claim validClaim = ((ServiceResult.Success<Claim>) validationResult).data();
+
+        ServiceResult<ClaimVerificationResult> verifyResult = getClaimVerificationService().verify(validClaim);
+        if (!verifyResult.isSuccess()) {
+            return errorResponse(((ServiceResult.Error<ClaimVerificationResult>) verifyResult).error());
+        }
+        ClaimVerificationResult verification = ((ServiceResult.Success<ClaimVerificationResult>) verifyResult).data();
+
+        ServiceResult<EvidencePath> result = getEvidenceGroundingService().getEvidencePath(validClaim, verification);
+        if (!result.isSuccess()) {
+            return errorResponse(((ServiceResult.Error<EvidencePath>) result).error());
+        }
+
+        EvidencePath path = ((ServiceResult.Success<EvidencePath>) result).data();
+        Map<String, Object> responseData = new HashMap<>();
+        responseData.put("claimId", path.claimId());
+        responseData.put("ontologyId", path.ontologyId());
+        responseData.put("truncated", path.truncated());
+        responseData.put("totalAvailable", path.totalAvailable());
+        List<Map<String, Object>> pathItems = path.items().stream()
+            .map(e -> {
+                Map<String, Object> m = new HashMap<>();
+                m.put("evidenceId", e.evidenceId());
+                m.put("role", e.role());
+                m.put("kind", e.kind().jsonName());
+                m.put("value", e.value());
+                m.put("source", e.source());
+                m.put("confidence", e.confidence());
+                return m;
+            })
+            .collect(Collectors.toList());
+        responseData.put("items", pathItems);
+
+        return Map.of("status", "success", "data", responseData);
+    }
+
+    private Map<String, Object> executeFindCounterexamples(Map<String, Object> args) {
+        String ontologyIdStr = (String) args.get("ontology_id");
+        Object claimObj = args.get("claim");
+        if (ontologyIdStr == null || claimObj == null) {
+            return errorResponse(ServiceError.of(ErrorCode.INVALID_CLAIM_SCHEMA, "ontology_id and claim are required"));
+        }
+
+        Claim claim = parseClaimFromMcpArgs(claimObj, null);
+        if (claim == null) {
+            return errorResponse(ServiceError.invalidClaimSchema("Failed to parse claim from arguments."));
+        }
+
+        ClaimValidator validator = new ClaimValidator();
+        ServiceResult<Claim> validationResult = validator.validate(claim);
+        if (!validationResult.isSuccess()) {
+            return errorResponse(((ServiceResult.Error<Claim>) validationResult).error());
+        }
+        Claim validClaim = ((ServiceResult.Success<Claim>) validationResult).data();
+
+        ServiceResult<ClaimVerificationResult> verifyResult = getClaimVerificationService().verify(validClaim);
+        if (!verifyResult.isSuccess()) {
+            return errorResponse(((ServiceResult.Error<ClaimVerificationResult>) verifyResult).error());
+        }
+        ClaimVerificationResult verification = ((ServiceResult.Success<ClaimVerificationResult>) verifyResult).data();
+
+        ServiceResult<List<EvidenceItem>> result = getEvidenceGroundingService().findCounterexamples(validClaim, verification);
+        if (!result.isSuccess()) {
+            return errorResponse(((ServiceResult.Error<List<EvidenceItem>>) result).error());
+        }
+
+        List<EvidenceItem> counterexamples = ((ServiceResult.Success<List<EvidenceItem>>) result).data();
+        List<Map<String, Object>> counterexampleMaps = counterexamples.stream()
+            .map(e -> {
+                Map<String, Object> m = new HashMap<>();
+                m.put("evidenceId", e.evidenceId());
+                m.put("role", e.role());
+                m.put("kind", e.kind().jsonName());
+                m.put("value", e.value());
+                m.put("source", e.source());
+                m.put("confidence", e.confidence());
+                return m;
+            })
+            .collect(Collectors.toList());
+
+        return Map.of("status", "success", "data", Map.of(
+            "claimId", validClaim.claimId(),
+            "verdict", verification.verdict().jsonName(),
+            "counterexamples", counterexampleMaps
+        ));
+    }
+
+    private Map<String, Object> executeExplainUnknown(Map<String, Object> args) {
+        String ontologyIdStr = (String) args.get("ontology_id");
+        Object claimObj = args.get("claim");
+        if (ontologyIdStr == null || claimObj == null) {
+            return errorResponse(ServiceError.of(ErrorCode.INVALID_CLAIM_SCHEMA, "ontology_id and claim are required"));
+        }
+
+        Claim claim = parseClaimFromMcpArgs(claimObj, null);
+        if (claim == null) {
+            return errorResponse(ServiceError.invalidClaimSchema("Failed to parse claim from arguments."));
+        }
+
+        ClaimValidator validator = new ClaimValidator();
+        ServiceResult<Claim> validationResult = validator.validate(claim);
+        if (!validationResult.isSuccess()) {
+            return errorResponse(((ServiceResult.Error<Claim>) validationResult).error());
+        }
+        Claim validClaim = ((ServiceResult.Success<Claim>) validationResult).data();
+
+        ServiceResult<ClaimVerificationResult> verifyResult = getClaimVerificationService().verify(validClaim);
+        if (!verifyResult.isSuccess()) {
+            return errorResponse(((ServiceResult.Error<ClaimVerificationResult>) verifyResult).error());
+        }
+        ClaimVerificationResult verification = ((ServiceResult.Success<ClaimVerificationResult>) verifyResult).data();
+
+        ServiceResult<UnknownExplanation> result = getEvidenceGroundingService().explainUnknown(validClaim, verification);
+        if (!result.isSuccess()) {
+            return errorResponse(((ServiceResult.Error<UnknownExplanation>) result).error());
+        }
+
+        UnknownExplanation explanation = ((ServiceResult.Success<UnknownExplanation>) result).data();
+        Map<String, Object> responseData = new HashMap<>();
+        responseData.put("claimId", explanation.claimId());
+        responseData.put("ontologyId", explanation.ontologyId());
+        responseData.put("reason", explanation.reason().jsonName());
+        responseData.put("relevantEntities", explanation.relevantEntities());
+        if (explanation.explanation().isPresent()) {
+            responseData.put("explanation", explanation.explanation().get());
+        }
+        if (explanation.suggestedAction().isPresent()) {
+            responseData.put("suggestedAction", explanation.suggestedAction().get());
+        }
+
+        return Map.of("status", "success", "data", responseData);
+    }
+
+    private Map<String, Object> executeDetectMissingEntities(Map<String, Object> args) {
+        String ontologyIdStr = (String) args.get("ontology_id");
+        Object claimObj = args.get("claim");
+        Object termsObj = args.get("terms");
+        if (ontologyIdStr == null) {
+            return errorResponse(ServiceError.of(ErrorCode.INVALID_CLAIM_SCHEMA, "ontology_id is required"));
+        }
+
+        Claim claim = null;
+        if (claimObj != null) {
+            claim = parseClaimFromMcpArgs(claimObj, null);
+        } else if (termsObj != null) {
+            // Build a minimal claim from terms list
+            String[] iris = parseTermsListFromMcpArgs(termsObj);
+            if (iris != null && iris.length > 0) {
+                ClaimEntity subject = new ClaimEntity("class", iris[0]);
+                ClaimEntity object = iris.length > 1 ? new ClaimEntity("class", iris[1]) : null;
+                claim = new Claim("missing-entities-check", ClaimType.SUBCLASS, ontologyIdStr,
+                    subject, null, object, Optional.empty(), Optional.empty(), Optional.empty());
+            }
+        }
+
+        if (claim == null) {
+            return errorResponse(ServiceError.invalidClaimSchema("Provide claim or terms with valid data."));
+        }
+
+        ServiceResult<MissingEntityResult> result = getEvidenceGroundingService().detectMissingEntities(claim);
+        if (!result.isSuccess()) {
+            return errorResponse(((ServiceResult.Error<MissingEntityResult>) result).error());
+        }
+
+        MissingEntityResult data = ((ServiceResult.Success<MissingEntityResult>) result).data();
+        return Map.of("status", "success", "data", Map.of(
+            "ontologyId", data.ontologyId(),
+            "matched", serializeEntityMatches(data.matched()),
+            "ambiguous", serializeEntityMatches(data.ambiguous()),
+            "missing", serializeEntityMatches(data.missing()),
+            "outOfScope", serializeEntityMatches(data.outOfScope())
+        ));
+    }
+
+    private List<Map<String, Object>> serializeEntityMatches(List<MissingEntityResult.EntityMatch> matches) {
+        return matches.stream()
+            .map(m -> {
+                Map<String, Object> map = new HashMap<>();
+                map.put("searchTerm", m.searchTerm());
+                map.put("matchedIRI", m.matchedIRI().orElse(null));
+                map.put("kind", m.kind().orElse(null));
+                map.put("label", m.label().orElse(null));
+                return map;
+            })
+            .collect(Collectors.toList());
+    }
+
+    /**
+     * Parse a Claim object from MCP arguments.
+     * The claim can be a Map (from JSON-RPC) or a JSON string.
+     */
+    private Claim parseClaimFromMcpArgs(Object claimObj, String reasonerOverride) {
+        try {
+            if (claimObj instanceof Map) {
+                @SuppressWarnings("unchecked")
+                Map<String, Object> claimMap = (Map<String, Object>) claimObj;
+                String claimId = (String) claimMap.getOrDefault("claimId", "");
+                String typeStr = (String) claimMap.getOrDefault("type", "");
+                String ontologyId = (String) claimMap.getOrDefault("ontologyId", "");
+                String predicate = (String) claimMap.getOrDefault("predicate", null);
+
+                ClaimEntity subject = parseEntityFromMap(claimMap.get("subject"));
+                ClaimEntity object = parseEntityFromMap(claimMap.get("object"));
+
+                ClaimType type = ClaimType.valueOf(typeStr.toUpperCase().replace("_", "_"));
+
+                Optional<String> reasoner = reasonerOverride != null && !"auto".equals(reasonerOverride)
+                    ? Optional.of(reasonerOverride)
+                    : Optional.ofNullable((String) claimMap.get("reasoner"));
+
+                Optional<GraphScope> graphScope = Optional.empty();
+                String scopeStr = (String) claimMap.getOrDefault("graphScope", null);
+                if (scopeStr != null) {
+                    graphScope = Optional.of(GraphScope.valueOf(scopeStr.toUpperCase()));
+                }
+
+                Optional<Map<String, Object>> options = Optional.empty();
+                Object optionsObj = claimMap.get("options");
+                if (optionsObj instanceof Map) {
+                    @SuppressWarnings("unchecked")
+                    Map<String, Object> optionsMap = (Map<String, Object>) optionsObj;
+                    options = Optional.of(optionsMap);
+                }
+
+                return new Claim(claimId, type, ontologyId, subject, predicate, object,
+                    reasoner, graphScope, options);
+            } else if (claimObj instanceof String) {
+                com.google.gson.Gson gson = new com.google.gson.Gson();
+                Claim parsed = gson.fromJson((String) claimObj, Claim.class);
+                if (parsed != null && reasonerOverride != null && !"auto".equals(reasonerOverride)) {
+                    return new Claim(parsed.claimId(), parsed.type(), parsed.ontologyId(),
+                        parsed.subject(), parsed.predicate(), parsed.object(),
+                        Optional.of(reasonerOverride), parsed.graphScope(), parsed.options());
+                }
+                return parsed;
+            }
+            return null;
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    private ClaimEntity parseEntityFromMap(Object entityObj) {
+        if (entityObj == null) return null;
+        if (entityObj instanceof Map) {
+            @SuppressWarnings("unchecked")
+            Map<String, Object> entityMap = (Map<String, Object>) entityObj;
+            String kind = (String) entityMap.getOrDefault("kind", "class");
+            String iri = (String) entityMap.getOrDefault("iri", "");
+            return new ClaimEntity(kind, iri);
+        }
+        return null;
+    }
+
+    private String[] parseTermsListFromMcpArgs(Object termsObj) {
+        try {
+            if (termsObj instanceof java.util.List) {
+                @SuppressWarnings("unchecked")
+                java.util.List<Object> list = (java.util.List<Object>) termsObj;
+                return list.stream().map(Object::toString).toArray(String[]::new);
+            } else if (termsObj instanceof String) {
+                com.google.gson.Gson gson = new com.google.gson.Gson();
+                return gson.fromJson((String) termsObj, String[].class);
+            }
+            return null;
+        } catch (Exception e) {
+            return null;
+        }
     }
 
     // ── Helper methods ──

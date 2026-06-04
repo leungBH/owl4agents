@@ -33,7 +33,7 @@ public class McpCommand implements Callable<Integer> {
     private String homeDirectory;
 
     private static final String PROTOCOL_VERSION = "2024-11-05";
-    private final Gson gson = new Gson();
+    private final Gson gson = GsonFactory.createGson();
 
     @Override
     public Integer call() {
@@ -117,7 +117,7 @@ public class McpCommand implements Callable<Integer> {
                 result.add("capabilities", capabilities);
                 JsonObject serverInfo = new JsonObject();
                 serverInfo.addProperty("name", "owl4agents");
-                serverInfo.addProperty("version", "0.2.1");
+                serverInfo.addProperty("version", "0.3.0");
                 result.add("serverInfo", serverInfo);
                 response.add("result", result);
             }

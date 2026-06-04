@@ -31,6 +31,23 @@ The following small smoke fixtures have been downloaded locally:
 | `benchmarks/owl2bench/UNIV-BENCH-OWL2EL.owl` | OWL2Bench EL TBox | OWL 2 EL profile and EL reasoner tests |
 | `benchmarks/owl2bench/UNIV-BENCH-OWL2QL.owl` | OWL2Bench QL TBox | OWL 2 QL profile tests |
 | `benchmarks/owl2bench/UNIV-BENCH-OWL2RL.owl` | OWL2Bench RL TBox | OWL 2 RL profile tests |
+| `golden/v0.3-claim-verification.owl` | Project golden ontology | Deterministic v0.3 claim verification, evidence, unknown, and out-of-scope acceptance tests |
+
+## v0.3 Claim Verification Fixtures
+
+v0.3 uses a small deterministic OWL fixture plus structured claim JSON files.
+
+| File | Purpose |
+| --- | --- |
+| `golden/v0.3-claim-verification.owl` | Golden ontology for supported, contradicted, unknown, in-scope, and out-of-scope verdict paths |
+| `../fixtures/v0.3/claim-supported.json` | Supported subclass claim with inferred evidence |
+| `../fixtures/v0.3/claim-contradicted.json` | Disjoint-class / counterevidence path fixture |
+| `../fixtures/v0.3/claim-unknown.json` | In-scope claim with insufficient axioms |
+| `../fixtures/v0.3/claim-out-of-scope.json` | In-scope ontology-scope control fixture |
+| `../fixtures/v0.3/claim-real-out-of-scope.json` | Real out-of-scope claim using an undeclared entity |
+| `../fixtures/v0.3/claim-malformed.json` | Negative schema fixture expecting `INVALID_CLAIM_SCHEMA` |
+| `../fixtures/v0.3/claim-unsupported-type.json` | Negative type fixture expecting `UNSUPPORTED_CLAIM_TYPE` |
+| `../fixtures/v0.3/claim-unknown-ontology.json` | Unknown ontology fixture used with CLI/MCP ontology ID checks |
 
 ## Recommended Golden Ontologies
 

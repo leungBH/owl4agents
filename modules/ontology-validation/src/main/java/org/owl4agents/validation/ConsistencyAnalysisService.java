@@ -352,6 +352,47 @@ public class ConsistencyAnalysisService {
         }
     }
 
+    // ── Entity existence check (used by v0.3 scope verification & missing-entities) ──
+
+    /**
+     * Check whether an entity IRI is declared in the ontology's signature.
+     * The {@code kind} parameter narrows the lookup to a specific entity type
+     * ("class", "objectProperty", "dataProperty", "individual"); when {@code null}
+     * or unknown, all four signatures are searched.
+     */
+    public boolean isEntityDeclared(OntologyId ontologyId, String entityIRI, String kind) {
+        if (entityIRI == null || entityIRI.isBlank()) return false;
+        try {
+            OWLOntology ontology = loadOntology(ontologyId);
+            String k = kind == null ? "" : kind.toLowerCase();
+            IRI iri = IRI.create(entityIRI);
+
+            if (k.equals("class") || k.isEmpty()) {
+                boolean isClass = ontology.getClassesInSignature(Imports.INCLUDED)
+                    .stream().anyMatch(c -> c.getIRI().equals(iri));
+                if (isClass) return true;
+            }
+            if (k.equals("objectproperty") || k.equals("property") || k.isEmpty()) {
+                boolean isObj = ontology.getObjectPropertiesInSignature(Imports.INCLUDED)
+                    .stream().anyMatch(p -> p.getIRI().equals(iri));
+                if (isObj) return true;
+            }
+            if (k.equals("dataproperty") || k.equals("property") || k.isEmpty()) {
+                boolean isData = ontology.getDataPropertiesInSignature(Imports.INCLUDED)
+                    .stream().anyMatch(p -> p.getIRI().equals(iri));
+                if (isData) return true;
+            }
+            if (k.equals("individual") || k.isEmpty()) {
+                boolean isInd = ontology.getIndividualsInSignature(Imports.INCLUDED)
+                    .stream().anyMatch(i -> i.getIRI().equals(iri));
+                if (isInd) return true;
+            }
+            return false;
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
     // ── Private Helpers ──
 
     private OWLOntology loadOntology(OntologyId ontologyId) throws OWLOntologyCreationException {

@@ -1,0 +1,8 @@
+{
+  "claimId": "claim-unknown-ontology-001",
+  "type": "subclass",
+  "ontologyId": "nonexistent-ontology",
+  "subject": { "kind": "class", "iri": "http://example.org/v0.3#Dog" },
+  "predicate": "subClassOf",
+  "object": { "kind": "class", "iri": "http://example.org/v0.3#Animal" }
+}

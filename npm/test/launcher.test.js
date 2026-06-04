@@ -2,7 +2,7 @@
 
 /**
  * owl4agents npm launcher smoke tests.
- * v0.2.1 hardened tests: help, version, command forwarding, missing runtime,
+ * Release-hardened tests: help, version, command forwarding, missing runtime,
  * real MCP startup, dependency matrix alignment, and placeholder rejection.
  *
  * Uses real child-process execution with strict exit-code, stdout, stderr assertions.
@@ -68,7 +68,7 @@ function runLauncher(args = [], options = {}) {
   };
 }
 
-console.log('\n  owl4agents v0.2.1 npm launcher smoke tests\n');
+console.log('\n  owl4agents npm launcher smoke tests\n');
 
 runTest('No arguments shows help output and exits 0 (V021-LAUNCH-001)', () => {
   const { stdout, stderr, code, signal, error } = runLauncher([]);

@@ -1,0 +1,5 @@
+{
+  "type": "subclass",
+  "ontologyId": "v0.3-claim-verification",
+  "subject": { "kind": "class", "iri": "http://example.org/v0.3#Dog" }
+}

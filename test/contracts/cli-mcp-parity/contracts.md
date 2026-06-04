@@ -51,6 +51,16 @@ The CLI and MCP adapters may differ in:
 | --- | --- | --- |
 | `owl4agents context <ontology-id> <question>` | `ontology_get_qa_context` | Same matched entities, context, warnings, evidence metadata |
 
+### Claim Verification Parity (v0.3)
+
+| CLI command | MCP tool | Parity requirement |
+| --- | --- | --- |
+| `owl4agents verify-claim <ontology-id> --claim <json>` | `ontology_verify_claim` | Both return same claimId, verdict, evidence items, unknownReason, unknownExplanation |
+| `owl4agents evidence <ontology-id> --claim <json>` | `ontology_get_evidence_path` | Both return same evidence items, reasoner, graphScope, truncation metadata |
+| `owl4agents counterexamples <ontology-id> --claim <json>` | `ontology_find_counterexamples` | Both return same counterexample items, totalAvailable, truncation |
+| `owl4agents explain-unknown <ontology-id> --claim <json>` | `ontology_explain_unknown` | Both return same reason, explanation, relevantEntities, suggestedAction |
+| `owl4agents missing-entities <ontology-id> --terms <json>` | `ontology_detect_missing_entities` | Both return same matched, ambiguous, missing, outOfScope classifications |
+
 ## Contract: Parity verification test
 
 Each parity test SHALL:

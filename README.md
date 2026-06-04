@@ -4,14 +4,14 @@ Local OWL ontology runtime, reasoner integration, SPARQL query layer, and readon
 
 `owl4agents` is a local-first OWL/RDF ontology runtime for researchers and agent developers. It imports, manages, reasons over, queries, and retrieves structured semantic context from OWL ontologies, then exposes those capabilities through both CLI commands and an MCP server.
 
-> Status: v0.2.1 stabilization release. v0.2.1 hardens the v0.2 feature surface: improved launcher diagnostics, strict child-process smoke tests, deterministic exit codes for missing runtime, `--version` output, and updated dependency matrix. Verified on Windows with JDK 22 via `.\gradlew.bat clean buildVerification` and `node npm/test/launcher.test.js`.
+> Status: v0.3 claim verification and evidence grounding release. v0.3 adds structured claim verification, evidence path assembly, counterexample search, unknown explanation, and missing entity detection through CLI commands and readonly MCP tools. Agents can now verify claims as `supported`, `contradicted`, `unknown`, or `out_of_scope` with typed evidence items.
 
-## v0.2.1 Quick Start
+## v0.3 Quick Start
 
 ### Requirements
 
 - Windows, macOS, or Linux
-- Java 22 for the current v0.2.1 build, with `JAVA_HOME` pointing to the JDK
+- Java 22 for the current v0.3 build, with `JAVA_HOME` pointing to the JDK
 - Node.js 18+ for the npm launcher and MCP client entry point
 
 On Windows, prefer `JAVA_HOME` over the Oracle `javapath` shim. The local npm launcher and MCP wrapper use `JAVA_HOME\bin\java.exe` when it is available.
@@ -40,7 +40,7 @@ modules/ontology-cli/build/libs/owl4agents.jar
 
 ### CLI from Source
 
-Use the local npm launcher during v0.2 development:
+Use the local npm launcher during v0.3 development:
 
 ```powershell
 node npm/bin/owl4agents.js init
@@ -58,6 +58,31 @@ node npm/bin/owl4agents.js realize pizza --reasoner hermit
 ```
 
 > **Note:** `reason`, `classify`, `realize`, and `consistency` may recompute reasoner state for the current command. The `reason` command persists `reasoning-report.json` and inferred artifacts under the ontology workspace, so `report` can read the latest report in a later CLI or MCP process. Commands that need inferred facts still require reasoning artifacts to exist for the ontology.
+
+v0.3 claim verification commands:
+
+```powershell
+# Import and reason over the deterministic v0.3 claim-verification fixture
+node npm/bin/owl4agents.js import test/corpus/golden/v0.3-claim-verification.owl v0.3-claim-verification
+node npm/bin/owl4agents.js reason v0.3-claim-verification --reasoner hermit
+
+# Verify supported, unknown, and out-of-scope claims
+node npm/bin/owl4agents.js verify-claim v0.3-claim-verification --claim test/fixtures/v0.3/claim-supported.json
+node npm/bin/owl4agents.js verify-claim v0.3-claim-verification --claim test/fixtures/v0.3/claim-unknown.json
+node npm/bin/owl4agents.js verify-claim v0.3-claim-verification --claim test/fixtures/v0.3/claim-real-out-of-scope.json
+
+# Get evidence path for a verified claim
+node npm/bin/owl4agents.js evidence v0.3-claim-verification --claim test/fixtures/v0.3/claim-supported.json
+
+# Explain why a claim is unknown
+node npm/bin/owl4agents.js explain-unknown v0.3-claim-verification --claim test/fixtures/v0.3/claim-unknown.json
+
+# Detect missing or ambiguous entities in a claim
+node npm/bin/owl4agents.js missing-entities v0.3-claim-verification --claim test/fixtures/v0.3/claim-real-out-of-scope.json
+
+# Counterexamples are available only when a claim verdict is contradicted
+node npm/bin/owl4agents.js counterexamples v0.3-claim-verification --claim test/fixtures/v0.3/claim-supported.json
+```
 
 Or run the fat jar directly:
 
@@ -83,7 +108,7 @@ The default workspace is:
 
 ### Deploy for Local Agents
 
-For v0.2, the supported deployment mode is source checkout plus local launcher. Publishing a self-contained npm package is planned for a later release.
+For v0.3, the supported deployment mode is source checkout plus local launcher. The npm `bin` entry is present so the local launcher can be exercised from this repository and packaged later, but publishing a self-contained npm registry package is planned for a later release.
 
 1. Clone or copy this repository.
 2. Install Java 22 and Node.js 18+.
@@ -139,9 +164,9 @@ On Windows, if your client has trouble with stdin/stdout through Node, use the b
 }
 ```
 
-v0.2 MCP is readonly. Import ontologies with the CLI first, then let agents query and reason over them through MCP.
+v0.3 MCP is readonly. Import ontologies with the CLI first, then let agents query, reason, verify structured claims, and retrieve evidence through MCP.
 
-Useful v0.2 MCP tools include:
+Useful v0.3 MCP tools include the inherited readonly query/reasoning surface plus the new claim verification surface. The v0.3 acceptance gate verifies 16 representative MCP tools: 11 inherited core/reasoning tools plus 5 new claim verification and evidence grounding tools.
 
 | Tool | Purpose |
 | --- | --- |
@@ -172,6 +197,16 @@ Useful v0.2 MCP tools include:
 | `ontology_check_class_compatibility` | Check whether two classes can overlap or conflict |
 | `ontology_check_individual_membership` | Check explicit or inferred individual class membership |
 | `ontology_check_relation_assertion` | Check explicit or inferred object property assertions |
+
+### v0.3 Claim Verification and Evidence Grounding Tools
+
+| Tool | Purpose |
+| --- | --- |
+| `ontology_verify_claim` | Verify a structured claim and return verdict: `supported`, `contradicted`, `unknown`, or `out_of_scope` |
+| `ontology_get_evidence_path` | Assemble evidence path with inferred facts and reasoning report for a verified claim |
+| `ontology_find_counterexamples` | Find counterexamples for a contradicted claim |
+| `ontology_explain_unknown` | Explain why a claim received an unknown verdict with reason category and suggested action |
+| `ontology_detect_missing_entities` | Detect matched, ambiguous, missing, and out-of-scope entities in a claim |
 
 ## Why owl4agents
 
@@ -252,7 +287,7 @@ The desired future user experience is:
 npx -y owl4agents mcp
 ```
 
-In v0.2, use the local launcher from a source checkout after building the runnable jar:
+In v0.3, use the local launcher from a source checkout after building the runnable jar:
 
 ```bash
 ./gradlew :modules:ontology-cli:shadowJar
@@ -389,7 +424,7 @@ The architecture separates concerns so new features can be added without changin
 
 ### Pinned Dependency Versions
 
-v0.2 pins the Semantic Web and runtime dependencies that affect parser, reasoner, and launcher compatibility:
+v0.3 pins the Semantic Web and runtime dependencies that affect parser, reasoner, verification, launcher, and MCP compatibility:
 
 | Component | Maven / tool coordinate | Version | Used by |
 | --- | --- | --- | --- |
@@ -420,7 +455,7 @@ For every version or OpenSpec change, developers must provide:
 - Evidence that CLI and MCP behavior are checked through the same service contracts where both interfaces expose the same capability.
 - Evidence that required fixtures are present and missing required fixtures fail the test run.
 
-The default v0.2 verification command should be:
+The default verification command should be:
 
 ```powershell
 .\gradlew.bat clean buildVerification
@@ -434,18 +469,22 @@ To run the CLI or MCP launcher from source after a clean checkout, also build th
 
 The Gradle wrapper is part of the delivery contract. The repository must include `gradlew`, `gradlew.bat`, `gradle/wrapper/gradle-wrapper.jar`, and `gradle/wrapper/gradle-wrapper.properties` unless the project explicitly replaces Gradle with another documented build entry point.
 
-### v0.2.1 Release Checklist
+### v0.3.0 Release Checklist
 
-Before releasing v0.2.1 or any subsequent stabilization version, verify each step:
+Before releasing v0.3.0 or any subsequent version, verify each step:
 
 1. **Build**: `.\gradlew.bat clean buildVerification` exits 0
 2. **Shadow jar**: `.\gradlew.bat :modules:ontology-cli:shadowJar` produces `modules/ontology-cli/build/libs/owl4agents.jar`
-3. **Launcher tests**: `node npm/test/launcher.test.js` exits 0
-4. **Smoke commands**: `node npm/bin/owl4agents.js --help`, `--version`, and `list-reasoners` all work
-5. **Version alignment**: Gradle version, npm package.json version, Picocli `version` attribute, and MCP `serverInfo.version` all match
-6. **Acceptance report**: Timestamped report under `reports/acceptance/` with environment, commands, gate results, and verdict
-7. **Git tag**: Tag the release commit (e.g. `v0.2.1`)
-8. **Push**: Push the tag and commit to the remote
+3. **Unit and contract tests**: `.\gradlew.bat test` exits 0
+4. **Launcher tests**: `node npm/test/launcher.test.js` exits 0 when launcher changes are included
+5. **Smoke commands**: `node npm/bin/owl4agents.js --help`, `--version`, and `list-reasoners` all work
+6. **v0.3 claim fixtures**: supported, contradicted, unknown, out-of-scope, malformed, unsupported-type, and unknown-ontology fixtures pass their expected gates
+7. **CLI/MCP parity**: overlapping v0.3 tools return equivalent verdicts, evidence shapes, and error codes
+8. **Version alignment**: Gradle version, npm package.json version, Picocli `version` attribute, and MCP `serverInfo.version` all match
+9. **Acceptance report**: Timestamped report under `reports/acceptance/` with environment, commands, gate results, defects, retest notes, skipped scenarios, and verdict
+10. **Git hygiene**: required source, tests, contracts, and fixtures are tracked; local reports, OpenSpec files, private ontologies, generated classes, and build outputs are ignored
+11. **Git tag**: Tag the release commit, for example `v0.3.0`
+12. **Push**: Push the commit and tag to the remote
 
 Acceptance reports are stored locally under:
 
@@ -496,8 +535,8 @@ npm/
 | `ontology-reasoner` | Unified adapters for HermiT, ELK, and Openllet |
 | `ontology-query` | Apache Jena ARQ query execution, SPARQL validation, graph scope selection |
 | `ontology-retrieval` | Entity search, graph neighborhood, hierarchy context, relation context, QA context construction |
-| `ontology-validation` | Entailment checks, class compatibility, literal validation, and later claim / answer verification |
-| `ontology-provenance` | Source tracking, reasoning reports, support/contradiction traces, and later evidence paths |
+| `ontology-validation` | Entailment checks, class compatibility, literal validation, claim verification, and evidence grounding |
+| `ontology-provenance` | Source tracking, reasoning reports, support/contradiction traces (future: extended provenance) |
 | `ontology-storage` | Local workspace, catalog, metadata, snapshots, indexes, audit logs |
 | `ontology-cli` | Picocli-based command adapter |
 | `ontology-mcp` | MCP-compatible JSON-RPC stdin/stdout tool adapter |
@@ -645,7 +684,7 @@ Object properties are essential for relation correctness. They prevent agents fr
 | `ontology_get_equivalent_properties` | v0.2 | Return equivalent property axioms |
 | `ontology_get_disjoint_properties` | v0.2 | Return disjoint property axioms |
 | `ontology_get_property_characteristics` | v0.2 | Return functional, inverse functional, transitive, symmetric, asymmetric, reflexive, and irreflexive flags |
-| `ontology_get_property_chain_axioms` | v0.3 | Return property chain axioms |
+| `ontology_get_property_chain_axioms` | v0.7 | Return property chain axioms |
 | `ontology_find_relations_between_entities` | v0.2 | Find object property relations between two entities or individuals |
 
 ### Data property and datatype tools
@@ -659,7 +698,7 @@ Data properties help agents avoid wrong values, wrong units, invalid datatypes, 
 | `ontology_get_datatype_constraints` | v0.2 | Return datatype facets such as min/max, pattern, enumeration, and cardinality constraints |
 | `ontology_get_data_property_assertions` | v0.2 | Return literal values for an individual |
 | `ontology_validate_literal` | v0.2 | Validate a literal against datatype, range, and known constraints |
-| `ontology_find_individuals_by_data_property` | v0.3 | Find individuals by data property value or value range |
+| `ontology_find_individuals_by_data_property` | v0.4 | Find individuals by data property value or value range |
 
 ### Individual and assertion tools
 
@@ -701,12 +740,12 @@ SPARQL safety rules:
 | --- | --- | --- |
 | `ontology_list_reasoners` | v0.2 | List installed reasoners and capabilities |
 | `ontology_run_reasoner` | v0.2 | Run selected reasoning tasks |
-| `ontology_check_consistency` | v0.1 → v0.2 | Check ontology consistency (v0.2: extended with reasoner integration) |
+| `ontology_check_consistency` | v0.1 to v0.2 | Check ontology consistency (v0.2: extended with reasoner integration) |
 | `ontology_classify` | v0.2 | Compute inferred class hierarchy |
 | `ontology_realize_instances` | v0.2 | Infer individual class memberships |
 | `ontology_check_entailment` | v0.2 | Check whether a supported structured OWL axiom is entailed |
 | `ontology_get_inferred_facts` | v0.2 | Return inferred axioms or triples for an entity or graph scope |
-| `ontology_explain_entailment` | v0.3 | Explain why a conclusion is entailed |
+| `ontology_explain_entailment` | v0.3.1 | Explain why a conclusion is entailed |
 | `ontology_explain_inconsistency` | v0.2 | Explain inconsistent axioms |
 | `ontology_get_reasoning_report` | v0.2 | Return the latest reasoning report |
 
@@ -716,12 +755,12 @@ These are the tools that turn ontology access into answer verification.
 
 | Tool | Stage | Description |
 | --- | --- | --- |
-| `ontology_verify_claim` | v0.3 | Verify one structured claim as `supported`, `contradicted`, `unknown`, or `out_of_scope` |
-| `ontology_verify_answer` | v0.3 | Verify multiple claims extracted from an agent answer |
-| `ontology_ground_claims` | v0.3 | Attach evidence paths, axioms, triples, and query results to claims |
-| `ontology_find_counterexamples` | v0.3 | Find facts or axioms that contradict a claim |
-| `ontology_check_constraints` | v0.3 | Validate data with SHACL or ontology-derived constraints |
-| `ontology_explain_unknown` | v0.3 | Explain why a claim cannot be verified |
+| `ontology_verify_claim` | v0.3 ✓ | Verify one structured claim as `supported`, `contradicted`, `unknown`, or `out_of_scope` |
+| `ontology_verify_answer` | v0.5 | Verify multiple claims extracted from an agent answer |
+| `ontology_ground_claims` | v0.5 | Attach evidence paths, axioms, triples, and query results to claims |
+| `ontology_find_counterexamples` | v0.3 ✓ | Find facts or axioms that contradict a claim |
+| `ontology_check_constraints` | v0.7 | Validate data with SHACL or ontology-derived constraints |
+| `ontology_explain_unknown` | v0.3 ✓ | Explain why a claim cannot be verified |
 | `ontology_assess_answer_coverage` | v0.5 | Check whether an answer missed important classes, relations, restrictions, or known exceptions |
 
 ### Retrieval and QA context tools
@@ -732,9 +771,9 @@ These are the tools that turn ontology access into answer verification.
 | `ontology_get_entity_context` | v0.1 | Return labels, comments, class/property/individual context, and related facts |
 | `ontology_get_graph_neighborhood` | v0.1 | Return local graph neighborhood around an entity |
 | `ontology_get_qa_context` | v0.1 | Build ontology-grounded context for an agent question |
-| `ontology_get_evidence_path` | v0.3 | Return the path from matched entities to supporting facts |
+| `ontology_get_evidence_path` | v0.3 ✓ | Return the path from matched entities to supporting facts |
 | `ontology_get_scope` | v0.2 | Describe ontology domain coverage and known limitations |
-| `ontology_detect_missing_entities` | v0.3 | Find terms in a question that are not covered by the ontology |
+| `ontology_detect_missing_entities` | v0.3 ✓ | Find terms in a question that are not covered by the ontology |
 
 ### Editing, snapshot, and audit tools
 
@@ -966,7 +1005,7 @@ Large downloads are opt-in because some resources are hundreds of MB or more.
 
 The roadmap is organized by user-visible capability. Version numbers start at v0.1 so each milestone can be treated as a publishable project state.
 
-After the v0.1 and v0.2 releases, the roadmap intentionally narrows each milestone. Reasoner integration and dependency compatibility proved to be high-risk enough that future releases separate stabilization, verification, distribution, evaluation, and write operations instead of bundling them into one large change.
+After the v0.1 and v0.2 releases, the roadmap intentionally narrows each milestone. Reasoner integration and dependency compatibility proved to be high-risk enough that future releases separate stabilization, verification, distribution, evaluation, workflow integration, and write operations instead of bundling them into one large change. Major feature releases should be followed by a small hardening release when the new surface affects CLI/MCP contracts, launcher behavior, evidence payloads, or acceptance gates.
 
 ### v0.1 Local Ontology Reader and Readonly MCP
 
@@ -1017,7 +1056,7 @@ Goal: make v0.2 easier to install, debug, and maintain without expanding the fea
 
 Released support:
 
-- [x] Review and classify Gradle deprecation warnings — all accepted (shadow plugin + OWL API deprecation + unchecked generics)
+- [x] Review and classify Gradle deprecation warnings; all accepted (shadow plugin + OWL API deprecation + unchecked generics)
 - [x] Improved launcher error messages with deterministic exit codes for missing runtime, missing jar, missing Java
 - [x] `--version` support in npm launcher reading from package.json
 - [x] Strict npm launcher smoke tests for help, version, runtime discovery, exit code preservation, and MCP startup path
@@ -1030,18 +1069,35 @@ Released support:
 
 Goal: turn ontology access into anti-hallucination verification tools.
 
+Released support:
+
+- [x] Structured claim schema for subclass, membership, relation, consistency, property domain/range, and literal validation claims
+- [x] Claim-level verification built on v0.2 entailment, membership, relation, compatibility, literal validation, and scope primitives
+- [x] `ontology_verify_claim` returning `supported`, `contradicted`, `unknown`, or `out_of_scope`
+- [x] Evidence path generation for supported claims using source axioms, explicit triples, inferred facts, and reasoner metadata
+- [x] Counterexample search for contradicted claims
+- [x] Unknown explanation for missing entities, missing relations, unsupported profiles, or insufficient axioms
+- [x] Missing entity detection with matched, ambiguous, missing, and out-of-scope classifications
+- [x] Evidence truncation using `maxEvidence` option
+- [x] CLI commands: `verify-claim`, `evidence`, `counterexamples`, `explain-unknown`, `missing-entities`
+- [x] MCP tools: `ontology_verify_claim`, `ontology_get_evidence_path`, `ontology_find_counterexamples`, `ontology_explain_unknown`, `ontology_detect_missing_entities`
+- [x] CLI and MCP parity for claim verification results
+- [x] No free-text claim parsing in v0.3; agents must pass structured claims
+- [x] No ontology write operations in v0.3
+
+### v0.3.1 Claim Verification Stabilization
+
+Goal: harden v0.3 claim verification before expanding into answer-level evaluation or distribution-heavy workflows.
+
 Planned support:
 
-- [ ] Structured claim schema for subclass, membership, relation, consistency, property domain/range, and literal validation claims
-- [ ] Claim-level verification built on v0.2 entailment, membership, relation, compatibility, literal validation, and scope primitives
-- [ ] `ontology_verify_claim` returning `supported`, `contradicted`, `unknown`, or `out_of_scope`
-- [ ] Evidence path generation for supported claims using source axioms, explicit triples, inferred facts, and reasoner metadata
-- [ ] Counterexample search for contradicted claims
-- [ ] Unknown explanation for missing entities, missing relations, unsupported profiles, or insufficient axioms
-- [ ] CLI and MCP parity for claim verification results
-- [ ] Acceptance fixtures for supported, contradicted, unknown, and out_of_scope verdicts
-- [ ] No free-text claim parsing in v0.3; agents must pass structured claims
-- [ ] No ontology write operations in v0.3
+- [ ] Stabilize claim JSON schema, verdict fields, evidence item shape, and error codes
+- [ ] Strengthen CLI/MCP parity tests for all v0.3 claim and evidence tools
+- [ ] Add real Agent smoke workflows using structured claims produced outside owl4agents
+- [ ] Improve unknown and out_of_scope explanations based on v0.3 acceptance feedback
+- [ ] Add regression fixtures for edge cases found during v0.3 testing
+- [ ] Keep v0.3.1 free of answer verification, SHACL, ROBOT integration, and write operations
+- [ ] Produce a timestamped v0.3.1 acceptance report before release
 
 ### v0.4 Agent Usability and Distribution
 
@@ -1050,6 +1106,7 @@ Goal: make owl4agents easy for local agents and GitHub users to install, configu
 Planned support:
 
 - [ ] Source-checkout setup script for Windows, macOS, and Linux
+- [ ] GitHub Release assets for the runnable CLI jar and checksum
 - [ ] Better local npm launcher flow that can build or locate `owl4agents.jar` predictably
 - [ ] MCP configuration templates for common local agent clients
 - [ ] Example workspace setup using Pizza and selected golden fixtures
@@ -1069,7 +1126,6 @@ Planned support:
 - [ ] Context export JSONL format
 - [ ] Benchmark runner
 - [ ] Reasoner comparison reports
-- [ ] Evaluate optional ROBOT integration for reusable ontology workflow operations and benchmark preprocessing
 - [ ] Answer verification reports
 - [ ] Coverage assessment for missing entities, relations, restrictions, and constraints
 - [ ] Ontology-agent QA evaluation helper
@@ -1092,6 +1148,18 @@ Planned support:
 - [ ] Dry-run mode for proposed edits
 - [ ] Write audit log for CLI operations and MCP tool calls
 - [ ] Security tests for readonly mode, write mode, file access limits, dry-run, and rollback behavior
+
+### v0.7 Ontology Workflow Integrations
+
+Goal: integrate optional ontology workflow tooling only after readonly verification, packaging, evaluation, and write-safety foundations are stable.
+
+Planned support:
+
+- [ ] Evaluate optional ROBOT integration for reusable ontology workflow operations and benchmark preprocessing
+- [ ] Evaluate SHACL support for explicit constraint validation workflows
+- [ ] Property chain inspection and advanced OWL axiom browsing
+- [ ] Ontology preprocessing pipeline for imports, subsets, profile checks, and benchmark packs
+- [ ] Integration tests proving optional tools are detected, versioned, and fail gracefully when unavailable
 
 ### v1.0 Stable Release
 

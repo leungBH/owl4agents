@@ -25,10 +25,21 @@ public class McpToolCallLogger {
      */
     public void logCall(Instant timestamp, String toolName, String ontologyId,
                         String resultStatus, String errorCode) {
-        String entry = String.format("{\"timestamp\":\"%s\",\"tool\":\"%s\",\"ontologyId\":\"%s\",\"resultStatus\":\"%s\",\"errorCode\":\"%s\"}%n",
+        logCall(timestamp, toolName, ontologyId, null, null, resultStatus, errorCode);
+    }
+
+    /**
+     * Log an MCP tool call with claim verification details (v0.3).
+     */
+    public void logCall(Instant timestamp, String toolName, String ontologyId,
+                        String claimId, String verdict,
+                        String resultStatus, String errorCode) {
+        String entry = String.format("{\"timestamp\":\"%s\",\"tool\":\"%s\",\"ontologyId\":\"%s\",\"claimId\":\"%s\",\"verdict\":\"%s\",\"resultStatus\":\"%s\",\"errorCode\":\"%s\"}%n",
             timestamp.toString(),
             toolName,
             ontologyId != null ? ontologyId : "",
+            claimId != null ? claimId : "",
+            verdict != null ? verdict : "",
             resultStatus,
             errorCode != null ? errorCode : "");
 
