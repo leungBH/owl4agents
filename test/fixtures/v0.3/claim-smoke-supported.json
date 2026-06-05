@@ -1,0 +1,11 @@
+{
+  "claimId": "claim-smoke-supported-001",
+  "type": "ontology_scope",
+  "ontologyId": "v0.3-claim-verification",
+  "subject": { "kind": "class", "iri": "http://example.org/v0.3#Animal" },
+  "predicate": "inScopeOf",
+  "object": { "kind": "class", "iri": "http://example.org/v0.3#Animal" },
+  "reasoner": null,
+  "graphScope": "explicit",
+  "options": { "includeEvidence": true }
+}

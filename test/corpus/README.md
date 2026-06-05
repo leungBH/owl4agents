@@ -33,6 +33,17 @@ The following small smoke fixtures have been downloaded locally:
 | `benchmarks/owl2bench/UNIV-BENCH-OWL2RL.owl` | OWL2Bench RL TBox | OWL 2 RL profile tests |
 | `golden/v0.3-claim-verification.owl` | Project golden ontology | Deterministic v0.3 claim verification, evidence, unknown, and out-of-scope acceptance tests |
 
+## Fixture Attribution
+
+| Fixture | Source | License | Attribution |
+| --- | --- | --- | --- |
+| `smoke/pizza.owl` | [Protégé Pizza Ontology](https://protege.stanford.edu/ontologies/pizza/pizza.owl) | Creative Commons Attribution 4.0 (CC BY 4.0) | Stanford University / Protégé project. Used for class hierarchy, object property, and restriction smoke tests. |
+| `smoke/bfo.owl` | [OBO Foundry BFO PURL](http://purl.obolibrary.org/obo/bfo.owl) | CC BY 4.0 | BFO2 Ontology, OBO Foundry. Used for upper ontology and import profile smoke. |
+| `golden/v0.3-claim-verification.owl` | Project-created golden ontology | Apache-2.0 (project) | owl4agents project. Hand-made deterministic ontology for claim verification acceptance tests. |
+| `golden/*-minimal.owl` through `09-malformed-rdf.owl` | Project-created golden fixtures | Apache-2.0 (project) | owl4agents project. Deterministic OWL feature test ontologies. |
+| `benchmarks/lubm/univ-bench.owl` | [Lehigh University Benchmark](http://swat.cse.lehigh.edu/projects/lubm/) | Academic use | Lehigh University. Used for university-domain benchmark schema tests. |
+| `benchmarks/owl2bench/*` | [OWL2Bench](https://github.com/IIIT-Delhi/OWL2Bench) | MIT License | IIIT-Delhi OWL2Bench. Used for OWL 2 profile and reasoner tests. |
+
 ## v0.3 Claim Verification Fixtures
 
 v0.3 uses a small deterministic OWL fixture plus structured claim JSON files.
@@ -48,6 +59,7 @@ v0.3 uses a small deterministic OWL fixture plus structured claim JSON files.
 | `../fixtures/v0.3/claim-malformed.json` | Negative schema fixture expecting `INVALID_CLAIM_SCHEMA` |
 | `../fixtures/v0.3/claim-unsupported-type.json` | Negative type fixture expecting `UNSUPPORTED_CLAIM_TYPE` |
 | `../fixtures/v0.3/claim-unknown-ontology.json` | Unknown ontology fixture used with CLI/MCP ontology ID checks |
+| `../fixtures/v0.3/claim-smoke-supported.json` | Ontology_scope supported claim for v0.3.1 onboarding smoke (entity in-scope) |
 
 ## Recommended Golden Ontologies
 

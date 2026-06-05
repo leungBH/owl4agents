@@ -260,5 +260,98 @@ runTest('Launcher forwards multiple arguments correctly', () => {
   assert(stdout.includes('pizza'), 'Should forward "pizza"');
 });
 
+// v0.3.1 launcher forwarding tests
+
+runTest('Help output includes v0.3.1 commands (V031-LAUNCH-001)', () => {
+  const { stdout, code } = runLauncher([]);
+  assert.strictEqual(code, 0);
+  assert(stdout.includes('setup'), 'Help should list setup command');
+  assert(stdout.includes('smoke'), 'Help should list smoke command');
+  assert(stdout.includes('mcp-config'), 'Help should list mcp-config command');
+});
+
+runTest('Launcher forwards setup command to runtime (V031-LAUNCH-002)', () => {
+  const fakeRuntimePath = path.resolve(__dirname, 'fixtures', 'fake-runtime.js');
+  const { stdout, code, signal } = runLauncher(['setup', '--check'], {
+    runtime: fakeRuntimePath
+  });
+
+  assert(!signal, `Should not crash with signal: ${signal}`);
+  assert.strictEqual(code, 0, `Expected exit code 0, got ${code}`);
+  assert(stdout.includes('setup'), 'Should forward "setup"');
+  assert(stdout.includes('--check'), 'Should forward "--check"');
+});
+
+runTest('Launcher forwards smoke command to runtime (V031-LAUNCH-002)', () => {
+  const fakeRuntimePath = path.resolve(__dirname, 'fixtures', 'fake-runtime.js');
+  const { stdout, code, signal } = runLauncher(['smoke'], {
+    runtime: fakeRuntimePath
+  });
+
+  assert(!signal, `Should not crash with signal: ${signal}`);
+  assert.strictEqual(code, 0, `Expected exit code 0, got ${code}`);
+  assert(stdout.includes('smoke'), 'Should forward "smoke"');
+});
+
+runTest('Launcher forwards mcp-config command to runtime (V031-LAUNCH-002)', () => {
+  const fakeRuntimePath = path.resolve(__dirname, 'fixtures', 'fake-runtime.js');
+  const { stdout, code, signal } = runLauncher(['mcp-config', '--client', 'generic'], {
+    runtime: fakeRuntimePath
+  });
+
+  assert(!signal, `Should not crash with signal: ${signal}`);
+  assert.strictEqual(code, 0, `Expected exit code 0, got ${code}`);
+  assert(stdout.includes('mcp-config'), 'Should forward "mcp-config"');
+  assert(stdout.includes('--client'), 'Should forward "--client"');
+  assert(stdout.includes('generic'), 'Should forward "generic"');
+});
+
+runTest('Missing runtime diagnostic mentions shadowJar and setup guidance (V031-LAUNCH-003)', () => {
+  const nonexistentPath = path.join(os.tmpdir(), 'owl4agents-missing-diagnostic-' + Date.now() + '.jar');
+  assert(!fs.existsSync(nonexistentPath), 'Non-existent path should not exist');
+
+  const { stderr, code } = runLauncher(['list'], {
+    env: { OWL4AGENTS_RUNTIME: nonexistentPath }
+  });
+
+  assert.strictEqual(code, 2, `Expected exit code 2, got ${code}`);
+  assert(stderr.includes('shadowJar'), `stderr should mention shadowJar: ${stderr}`);
+  assert(stderr.includes('OWL4AGENTS_RUNTIME'), `stderr should mention OWL4AGENTS_RUNTIME: ${stderr}`);
+  assert(!stderr.includes('Exception'), `stderr should not contain stack trace: ${stderr}`);
+  assert(!stderr.includes('access violation'), `stderr should not contain access violation: ${stderr}`);
+});
+
+runTest('Launcher does not treat arbitrary nonzero exit as success (V031-LAUNCH-004)', () => {
+  const exitCodeScript = path.join(os.tmpdir(), 'arbitrary-exit-test.js');
+  fs.writeFileSync(exitCodeScript, 'process.exit(7);');
+
+  const { code, stderr } = runLauncher(['list'], {
+    runtime: exitCodeScript,
+    timeout: 10000
+  });
+
+  assert.strictEqual(code, 7, `Should preserve exact exit code 7, got ${code}`);
+  assert(!stderr.includes('success'), `Should not label error as success: ${stderr}`);
+  try { fs.unlinkSync(exitCodeScript); } catch {}
+});
+
+runTest('OWL4AGENTS_RUNTIME has precedence over repository jar discovery (V031-LAUNCH-005)', () => {
+  const fakeRuntimePath = path.resolve(__dirname, 'fixtures', 'fake-runtime.js');
+  const { stdout, code } = runLauncher(['list'], {
+    runtime: fakeRuntimePath
+  });
+
+  assert.strictEqual(code, 0, `Should use OWL4AGENTS_RUNTIME when set, got ${code}`);
+  assert(stdout.includes('fake-runtime'), `Should identify as fake-runtime, not jar: ${stdout}`);
+});
+
+runTest('Help output does not contain placeholder text or empty success (V031-SMOKE-002)', () => {
+  const { stdout, code } = runLauncher([]);
+  assert.strictEqual(code, 0);
+  assert(stdout.length > 100, 'Help should be substantive, not placeholder');
+  assert(!stdout.includes('TODO'), 'Help should not contain TODO');
+  assert(!stdout.includes('placeholder'), 'Help should not contain "placeholder"');
+});
+
 console.log(`\n  Results: ${passed} passed, ${failed} failed\n`);
 process.exit(failed > 0 ? 1 : 0);

@@ -117,7 +117,7 @@ public class McpCommand implements Callable<Integer> {
                 result.add("capabilities", capabilities);
                 JsonObject serverInfo = new JsonObject();
                 serverInfo.addProperty("name", "owl4agents");
-                serverInfo.addProperty("version", "0.3.0");
+                serverInfo.addProperty("version", "0.3.1");
                 result.add("serverInfo", serverInfo);
                 response.add("result", result);
             }

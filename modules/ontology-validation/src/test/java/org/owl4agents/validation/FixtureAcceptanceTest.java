@@ -111,6 +111,29 @@ class FixtureAcceptanceTest {
             Path contract = CONTRACTS_BASE.resolve("contracts.md");
             assertTrue(Files.exists(contract), "Required contract missing: " + contract);
         }
+
+        @Test
+        @DisplayName("v0.3.1 onboarding smoke claim fixture exists and is non-empty")
+        void smokeSupportedClaimFixturePresent() {
+            Path fixture = FIXTURES_BASE.resolve("claim-smoke-supported.json");
+            assertTrue(Files.exists(fixture), "Required v0.3.1 onboarding fixture missing: " + fixture);
+            assertFalse(isEmptyJson(fixture), "Required v0.3.1 onboarding fixture is empty: " + fixture);
+        }
+
+        @Test
+        @DisplayName("Pizza ontology smoke fixture exists and is non-empty")
+        void pizzaFixturePresent() {
+            Path fixture = PROJECT_ROOT.resolve("test/corpus/smoke/pizza.owl");
+            assertTrue(Files.exists(fixture), "Required Pizza ontology fixture missing: " + fixture);
+            assertFalse(isEmptyFile(fixture), "Required Pizza ontology fixture is empty: " + fixture);
+        }
+
+        @Test
+        @DisplayName("v0.3.1 acceptance contract exists")
+        void v031AcceptanceContractPresent() {
+            Path contract = PROJECT_ROOT.resolve("test/contracts/v031-acceptance/contracts.md");
+            assertTrue(Files.exists(contract), "Required v0.3.1 acceptance contract missing: " + contract);
+        }
     }
 
     // --- Fixture content validation tests ---

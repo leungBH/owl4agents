@@ -4,19 +4,43 @@ Local OWL ontology runtime, reasoner integration, SPARQL query layer, and readon
 
 `owl4agents` is a local-first OWL/RDF ontology runtime for researchers and agent developers. It imports, manages, reasons over, queries, and retrieves structured semantic context from OWL ontologies, then exposes those capabilities through both CLI commands and an MCP server.
 
-> Status: v0.3 claim verification and evidence grounding release. v0.3 adds structured claim verification, evidence path assembly, counterexample search, unknown explanation, and missing entity detection through CLI commands and readonly MCP tools. Agents can now verify claims as `supported`, `contradicted`, `unknown`, or `out_of_scope` with typed evidence items.
+> Status: v0.3.1 usability and release hardening. v0.3.1 adds source-checkout setup, onboarding smoke tests, MCP configuration generation, and CI/release automation on top of the v0.3 claim verification and evidence grounding release.
 
-## v0.3 Quick Start
+## v0.3.1 Quick Start
 
 ### Requirements
 
 - Windows, macOS, or Linux
-- Java 22 for the current v0.3 build, with `JAVA_HOME` pointing to the JDK
+- Java 22, with `JAVA_HOME` pointing to the JDK
 - Node.js 18+ for the npm launcher and MCP client entry point
 
-On Windows, prefer `JAVA_HOME` over the Oracle `javapath` shim. The local npm launcher and MCP wrapper use `JAVA_HOME\bin\java.exe` when it is available.
+On Windows, prefer `JAVA_HOME` over the Oracle `javapath` shim. The npm launcher uses `JAVA_HOME\bin\java.exe` when it is available. Note: `java -jar owl4agents.jar` may crash with `ACCESS_VIOLATION` on some Windows environments — use `node npm/bin/owl4agents.js` or `.\gradlew.bat run --args="..."` instead.
 
-Verify the release from a fresh checkout:
+### From Clone to Smoke Test
+
+```powershell
+# 1. Build and verify
+.\gradlew.bat clean buildVerification
+.\gradlew.bat :modules:ontology-cli:shadowJar
+
+# 2. Check that your environment is ready
+node npm/bin/owl4agents.js setup --check
+
+# 3. Initialize workspace and import onboarding fixtures
+node npm/bin/owl4agents.js setup --init
+
+# 4. Run onboarding smoke test
+node npm/bin/owl4agents.js smoke
+
+# 5. Generate MCP client configuration
+node npm/bin/owl4agents.js mcp-config --client claude
+```
+
+`setup --check` verifies Java, Gradle, source layout, workspace, npm launcher, and runtime jar. `setup --init` creates the workspace and imports the Pizza ontology and v0.3 claim-verification golden ontology. `smoke` runs a complete onboarding cycle: fixture import, ontology list, summary, reasoner list, classification, and claim verification. `mcp-config --client claude` prints a ready-to-paste JSON configuration for Claude Desktop.
+
+All four commands are idempotent — rerunning them reports existing resources.
+
+### Verify Release from Fresh Checkout
 
 ```powershell
 .\gradlew.bat clean buildVerification
@@ -40,7 +64,7 @@ modules/ontology-cli/build/libs/owl4agents.jar
 
 ### CLI from Source
 
-Use the local npm launcher during v0.3 development:
+Use the local npm launcher during v0.3.1 development:
 
 ```powershell
 node npm/bin/owl4agents.js init
@@ -84,14 +108,16 @@ node npm/bin/owl4agents.js missing-entities v0.3-claim-verification --claim test
 node npm/bin/owl4agents.js counterexamples v0.3-claim-verification --claim test/fixtures/v0.3/claim-supported.json
 ```
 
-Or run the fat jar directly:
+Or run the fat jar directly (Linux and macOS):
 
-```powershell
+```bash
 java -jar modules/ontology-cli/build/libs/owl4agents.jar init
 java -jar modules/ontology-cli/build/libs/owl4agents.jar import test/corpus/smoke/pizza.owl pizza
 java -jar modules/ontology-cli/build/libs/owl4agents.jar summary pizza
 java -jar modules/ontology-cli/build/libs/owl4agents.jar consistency pizza --reasoner hermit
 ```
+
+> **Windows limitation:** `java -jar owl4agents.jar` may crash with `ACCESS_VIOLATION` on some Windows environments. This is a known JVM/OWL API interaction issue. On Windows, prefer `node npm/bin/owl4agents.js <command>` or `.\gradlew.bat run --args="<command>"` instead. CI runs `java -jar` on Ubuntu without issues.
 
 To keep a workspace outside the default user home location:
 
@@ -128,7 +154,30 @@ node npm/bin/owl4agents.js mcp --readonly
 
 ### MCP Client Configuration
 
-Use this form for MCP clients that accept a JSON server config, such as Claude Desktop, Cursor-style MCP configuration, or other local agent runtimes:
+The recommended way to configure MCP clients is the `mcp-config` command, which generates a ready-to-paste JSON configuration with the correct command, args, and environment for your client:
+
+```powershell
+# Generate Claude Desktop config
+node npm/bin/owl4agents.js mcp-config --client claude
+
+# Generate generic config (any stdio-based MCP client)
+node npm/bin/owl4agents.js mcp-config --client generic
+
+# Generate Cursor config
+node npm/bin/owl4agents.js mcp-config --client cursor
+
+# Override workspace location
+node npm/bin/owl4agents.js mcp-config --client claude --workspace-home D:/owl4agents-workspace
+
+# Write config to file
+node npm/bin/owl4agents.js mcp-config --client claude --out claude-mcp-config.json
+```
+
+> **Note:** `codex` and `codex-cli` config templates are deferred until their public client naming and configuration format stabilize. They are not advertised as supported clients in v0.3.1.
+
+The generated config uses the source-checkout npm launcher and sets `OWL4AGENTS_HOME` to your workspace. Unknown client names are rejected with a supported-client list.
+
+Alternatively, you can write the config manually. Use this form for MCP clients that accept a JSON server config, such as Claude Desktop, Cursor-style MCP configuration, or other local agent runtimes:
 
 ```json
 {
@@ -148,7 +197,7 @@ Use this form for MCP clients that accept a JSON server config, such as Claude D
 }
 ```
 
-On Windows, if your client has trouble with stdin/stdout through Node, use the bundled command wrapper:
+On Windows, if your client has trouble with stdin/stdout through Node, use the bundled command wrapper. This wrapper runs MCP directly through Java in classpath mode (`java -cp`), bypassing Node's stdin forwarding issues and the `java -jar` ACCESS_VIOLATION crash:
 
 ```json
 {
@@ -333,14 +382,14 @@ If `JAVA_HOME` is not set, the launcher falls back to `java` on PATH, then to th
 
 ### Reasoner selection
 
-- **HermiT**: OWL 2 DL reasoning — consistency, classification, realization. Does not support explanation.
-- **ELK**: OWL 2 EL reasoning — fast classification and consistency for EL-profile ontologies. Does not support explanation.
-- **Openllet**: Explanation-oriented workflows — inconsistency explanation, unsatisfiable class explanation. Supports all OWL 2 DL reasoning tasks.
-- **auto**: Profile-based selection — OWL 2 EL → ELK, OWL 2 DL → HermiT, explanation requested → Openllet.
+- **HermiT**: OWL 2 DL reasoning - consistency, classification, realization. Does not support explanation.
+- **ELK**: OWL 2 EL reasoning - fast classification and consistency for EL-profile ontologies. Does not support explanation.
+- **Openllet**: Explanation-oriented workflows - inconsistency explanation, unsatisfiable class explanation. Supports all OWL 2 DL reasoning tasks.
+- **auto**: Profile-based selection - OWL 2 EL -> ELK, OWL 2 DL -> HermiT, explanation requested -> Openllet.
 
 ### MCP stdio issues on Windows
 
-The MCP protocol uses stdin/stdout for JSON-RPC. On Windows, Node's `execSync` with `stdio: 'inherit'` may not forward stdin correctly for MCP sessions. The bundled `bin/owl4agents-mcp.cmd` wrapper bypasses Node for MCP, running `java -jar owl4agents.jar mcp` directly. Use this wrapper when MCP clients have trouble connecting through Node.
+The MCP protocol uses stdin/stdout for JSON-RPC. On Windows, Node's `execSync` with `stdio: 'inherit'` may not forward stdin correctly for MCP sessions. The bundled `bin/owl4agents-mcp.cmd` wrapper runs MCP directly through Java in classpath mode (`java -cp`), bypassing Node's forwarding issues and the `java -jar` ACCESS_VIOLATION crash. Use this wrapper when MCP clients have trouble connecting through the npm launcher.
 
 ### Launcher startup failures
 
@@ -355,6 +404,46 @@ The npm launcher follows a deterministic runtime discovery order:
 7. Gradle wrapper (last resort; MCP stdin not supported)
 
 If none of these paths are available, the launcher exits with code 2 and prints actionable guidance including the `shadowJar` build command and Java version requirement.
+
+### Setup check failures
+
+`setup --check` validates six environment prerequisites. If any check fails:
+
+- **Java not found**: Install Java 22 and set `JAVA_HOME`. See the "Java not found" section above.
+- **Gradle wrapper missing**: Ensure `gradlew` or `gradlew.bat` exists in the project root. Clone the full repository rather than a partial copy.
+- **Source layout missing**: The project expects `modules/` and `npm/` directories under the project root. Run from within the cloned repository.
+- **Workspace not writable**: The default workspace is `~/.owl4agents/workspaces/default/`. Ensure the parent directory exists and is writable, or set `OWL4AGENTS_HOME` to a writable location.
+- **npm launcher files missing**: Ensure `npm/bin/owl4agents.js` and `npm/package.json` exist under the project root.
+- **Runtime jar missing**: Run `.\gradlew.bat :modules:ontology-cli:shadowJar` to build the fat jar. See the "Missing fat jar" section above.
+
+`setup --check --dry-run` reports planned remediation actions without modifying any files.
+
+### Smoke test failures
+
+`smoke` runs a full onboarding cycle. Common failure causes:
+
+- **Fixture import fails**: The smoke test imports `test/corpus/smoke/pizza.owl` and `test/corpus/golden/v0.3-claim-verification.owl`. If these files are missing, the smoke test fails. Clone the full repository or download the fixtures.
+- **Workspace not writable**: `smoke` defaults to a temporary workspace. If the system temp directory is not writable, use `--workspace <path>` to specify an explicit home directory. The workspace will be created under `<path>/workspaces/default/`. If you pass a path that already ends with `workspaces/default`, the parent directory is used automatically.
+- **Claim verification fails**: The smoke test verifies a supported claim and an out-of-scope claim. If the golden ontology or claim fixtures are missing or corrupted, verification fails. Check `test/fixtures/v0.3/claim-smoke-supported.json` and `test/fixtures/v0.3/claim-real-out-of-scope.json`.
+
+### mcp-config failures
+
+- **Unknown client**: `mcp-config --client unknown` exits nonzero and prints a list of supported clients (`claude`, `cursor`, `generic`).
+- **Generated JSON has empty command**: Ensure the project root is discoverable (contains `build.gradle.kts` and `settings.gradle.kts`) so the launcher path can be resolved.
+- **Write flags in generated config**: The generated config never includes `--allow-write`. If you see write flags, you are using a manually constructed config, not the output of `mcp-config`.
+
+### Release asset verification
+
+Download the jar, checksum, and release notes from the GitHub Actions artifact or release page:
+
+> **Windows note:** The release jar is a runnable fat jar on Linux and macOS. On Windows, it may crash with `ACCESS_VIOLATION` when invoked as `java -jar owl4agents.jar`. Use the npm launcher (`node npm/bin/owl4agents.js`) instead.
+
+```powershell
+# Verify checksum
+$hash = (Get-FileHash owl4agents.jar -Algorithm SHA256).Hash
+$expected = (Get-Content owl4agents.jar.sha256 -Raw).Trim().Split()[0]
+if ($hash -eq $expected) { "Checksum OK" } else { "Checksum MISMATCH" }
+```
 
 ## Planned Architecture
 
@@ -469,9 +558,9 @@ To run the CLI or MCP launcher from source after a clean checkout, also build th
 
 The Gradle wrapper is part of the delivery contract. The repository must include `gradlew`, `gradlew.bat`, `gradle/wrapper/gradle-wrapper.jar`, and `gradle/wrapper/gradle-wrapper.properties` unless the project explicitly replaces Gradle with another documented build entry point.
 
-### v0.3.0 Release Checklist
+### Release Checklist
 
-Before releasing v0.3.0 or any subsequent version, verify each step:
+Before releasing any version, verify each step:
 
 1. **Build**: `.\gradlew.bat clean buildVerification` exits 0
 2. **Shadow jar**: `.\gradlew.bat :modules:ontology-cli:shadowJar` produces `modules/ontology-cli/build/libs/owl4agents.jar`
@@ -483,7 +572,7 @@ Before releasing v0.3.0 or any subsequent version, verify each step:
 8. **Version alignment**: Gradle version, npm package.json version, Picocli `version` attribute, and MCP `serverInfo.version` all match
 9. **Acceptance report**: Timestamped report under `reports/acceptance/` with environment, commands, gate results, defects, retest notes, skipped scenarios, and verdict
 10. **Git hygiene**: required source, tests, contracts, and fixtures are tracked; local reports, OpenSpec files, private ontologies, generated classes, and build outputs are ignored
-11. **Git tag**: Tag the release commit, for example `v0.3.0`
+11. **Git tag**: Tag the release commit, for example `v0.3.1`
 12. **Push**: Push the commit and tag to the remote
 
 Acceptance reports are stored locally under:
@@ -652,7 +741,7 @@ The most important tools for reducing hallucinations are not only context retrie
 | `ontology_get_metadata` | v0.1 | Return ontology IRI, version IRI, source path, canonical path, and timestamps |
 | `ontology_get_imports` | v0.2 | Inspect import closure and imported ontology metadata |
 | `ontology_get_profile` | v0.1 | Return OWL profile information and profile violations |
-| `ontology_list_graphs` | v0.1 → v0.2 | List queryable graph scopes (`explicit` in v0.1; adds `inferred`, `union` in v0.2) |
+| `ontology_list_graphs` | v0.1 to v0.2 | List queryable graph scopes (`explicit` in v0.1; adds `inferred`, `union` in v0.2) |
 
 ### Class tools
 
@@ -698,7 +787,7 @@ Data properties help agents avoid wrong values, wrong units, invalid datatypes, 
 | `ontology_get_datatype_constraints` | v0.2 | Return datatype facets such as min/max, pattern, enumeration, and cardinality constraints |
 | `ontology_get_data_property_assertions` | v0.2 | Return literal values for an individual |
 | `ontology_validate_literal` | v0.2 | Validate a literal against datatype, range, and known constraints |
-| `ontology_find_individuals_by_data_property` | v0.4 | Find individuals by data property value or value range |
+| `ontology_find_individuals_by_data_property` | v0.7 | Find individuals by data property value or value range |
 
 ### Individual and assertion tools
 
@@ -745,7 +834,7 @@ SPARQL safety rules:
 | `ontology_realize_instances` | v0.2 | Infer individual class memberships |
 | `ontology_check_entailment` | v0.2 | Check whether a supported structured OWL axiom is entailed |
 | `ontology_get_inferred_facts` | v0.2 | Return inferred axioms or triples for an entity or graph scope |
-| `ontology_explain_entailment` | v0.3.1 | Explain why a conclusion is entailed |
+| `ontology_explain_entailment` | v0.7 | Explain why a conclusion is entailed |
 | `ontology_explain_inconsistency` | v0.2 | Explain inconsistent axioms |
 | `ontology_get_reasoning_report` | v0.2 | Return the latest reasoning report |
 
@@ -755,12 +844,12 @@ These are the tools that turn ontology access into answer verification.
 
 | Tool | Stage | Description |
 | --- | --- | --- |
-| `ontology_verify_claim` | v0.3 ✓ | Verify one structured claim as `supported`, `contradicted`, `unknown`, or `out_of_scope` |
+| `ontology_verify_claim` | v0.3 released | Verify one structured claim as `supported`, `contradicted`, `unknown`, or `out_of_scope` |
 | `ontology_verify_answer` | v0.5 | Verify multiple claims extracted from an agent answer |
 | `ontology_ground_claims` | v0.5 | Attach evidence paths, axioms, triples, and query results to claims |
-| `ontology_find_counterexamples` | v0.3 ✓ | Find facts or axioms that contradict a claim |
+| `ontology_find_counterexamples` | v0.3 released | Find facts or axioms that contradict a claim |
 | `ontology_check_constraints` | v0.7 | Validate data with SHACL or ontology-derived constraints |
-| `ontology_explain_unknown` | v0.3 ✓ | Explain why a claim cannot be verified |
+| `ontology_explain_unknown` | v0.3 released | Explain why a claim cannot be verified |
 | `ontology_assess_answer_coverage` | v0.5 | Check whether an answer missed important classes, relations, restrictions, or known exceptions |
 
 ### Retrieval and QA context tools
@@ -771,9 +860,9 @@ These are the tools that turn ontology access into answer verification.
 | `ontology_get_entity_context` | v0.1 | Return labels, comments, class/property/individual context, and related facts |
 | `ontology_get_graph_neighborhood` | v0.1 | Return local graph neighborhood around an entity |
 | `ontology_get_qa_context` | v0.1 | Build ontology-grounded context for an agent question |
-| `ontology_get_evidence_path` | v0.3 ✓ | Return the path from matched entities to supporting facts |
+| `ontology_get_evidence_path` | v0.3 released | Return the path from matched entities to supporting facts |
 | `ontology_get_scope` | v0.2 | Describe ontology domain coverage and known limitations |
-| `ontology_detect_missing_entities` | v0.3 ✓ | Find terms in a question that are not covered by the ontology |
+| `ontology_detect_missing_entities` | v0.3 released | Find terms in a question that are not covered by the ontology |
 
 ### Editing, snapshot, and audit tools
 
@@ -781,13 +870,13 @@ These tools require `--allow-write`.
 
 | Tool | Stage | Description |
 | --- | --- | --- |
-| `ontology_import` | v0.6 | Import an ontology into a workspace through write-enabled MCP |
-| `ontology_export` | v0.6 | Export ontology in a selected format |
-| `ontology_edit_axiom` | v0.6 | Apply structured ontology edits |
-| `ontology_diff` | v0.6 | Show differences between snapshots or ontology versions |
-| `ontology_snapshot` | v0.6 | Create a named snapshot |
-| `ontology_rollback` | v0.6 | Roll back to a snapshot |
-| `ontology_get_audit_log` | v0.6 | Inspect write operations and MCP tool calls |
+| `ontology_import` | v0.8 | Import an ontology into a workspace through write-enabled MCP |
+| `ontology_export` | v0.8 | Export ontology in a selected format |
+| `ontology_edit_axiom` | v0.8 | Apply structured ontology edits |
+| `ontology_diff` | v0.8 | Show differences between snapshots or ontology versions |
+| `ontology_snapshot` | v0.8 | Create a named snapshot |
+| `ontology_rollback` | v0.8 | Roll back to a snapshot |
+| `ontology_get_audit_log` | v0.8 | Inspect write operations and MCP tool calls |
 
 Example MCP client configuration:
 
@@ -1005,7 +1094,7 @@ Large downloads are opt-in because some resources are hundreds of MB or more.
 
 The roadmap is organized by user-visible capability. Version numbers start at v0.1 so each milestone can be treated as a publishable project state.
 
-After the v0.1 and v0.2 releases, the roadmap intentionally narrows each milestone. Reasoner integration and dependency compatibility proved to be high-risk enough that future releases separate stabilization, verification, distribution, evaluation, workflow integration, and write operations instead of bundling them into one large change. Major feature releases should be followed by a small hardening release when the new surface affects CLI/MCP contracts, launcher behavior, evidence payloads, or acceptance gates.
+After the v0.1 to v0.3 releases, the roadmap intentionally prioritizes adoption before deeper feature expansion. Reasoning, claim verification, and evidence grounding now exist; the next releases should lower installation and MCP-configuration friction, provide benchmark examples that show the platform's value, and then expand into agent workflows, evaluation, ontology workflow integrations, and controlled write operations. Major feature releases should be followed by a small hardening release when the new surface affects CLI/MCP contracts, launcher behavior, evidence payloads, or acceptance gates.
 
 ### v0.1 Local Ontology Reader and Readonly MCP
 
@@ -1085,56 +1174,89 @@ Released support:
 - [x] No free-text claim parsing in v0.3; agents must pass structured claims
 - [x] No ontology write operations in v0.3
 
-### v0.3.1 Claim Verification Stabilization
+### v0.3.1 Usability and Release Hardening
 
-Goal: harden v0.3 claim verification before expanding into answer-level evaluation or distribution-heavy workflows.
+Goal: let a new GitHub user run owl4agents and connect MCP in minutes.
+
+Released support:
+
+- [x] One-command local setup for Windows, macOS, and Linux source checkouts (`setup --check`, `setup --init`)
+- [x] Launcher flow that can build, locate, or diagnose `owl4agents.jar` predictably (`setup --check` validates runtime jar)
+- [x] MCP configuration generator for common local agent clients (`mcp-config --client claude/cursor/generic`)
+- [x] First-run workspace initialization and smoke test (`setup --init`, `smoke`)
+- [x] Example ontology bootstrap using Pizza and the v0.3 claim verification fixture (`setup --init` imports both)
+- [x] Productized diagnostics for Java version, `JAVA_HOME`, missing jar, stale workspace state, and MCP stdio issues (`setup --check` covers all six checks)
+- [x] GitHub Actions CI for build, unit tests, launcher smoke tests, and release-readiness checks
+- [x] GitHub Release assets for runnable jar, checksum, and release notes
+- [x] Public acceptance report template and automated release checklist
+- [x] Keep v0.3.1 free of new OWL feature surface, SHACL, ROBOT integration, and write operations
+
+### v0.4 Benchmark Examples and Demo Packs
+
+Goal: make owl4agents easy to understand, demo, and promote through copy-pasteable scenarios before adding deeper product surface.
 
 Planned support:
 
-- [ ] Stabilize claim JSON schema, verdict fields, evidence item shape, and error codes
-- [ ] Strengthen CLI/MCP parity tests for all v0.3 claim and evidence tools
-- [ ] Add real Agent smoke workflows using structured claims produced outside owl4agents
-- [ ] Improve unknown and out_of_scope explanations based on v0.3 acceptance feedback
-- [ ] Add regression fixtures for edge cases found during v0.3 testing
-- [ ] Keep v0.3.1 free of answer verification, SHACL, ROBOT integration, and write operations
-- [ ] Produce a timestamped v0.3.1 acceptance report before release
+- [ ] `examples/` directory with runnable CLI and MCP demos
+- [ ] `examples/claim-verification` showing hallucination checking with supported, contradicted, unknown, and out_of_scope claims
+- [ ] `examples/pizza-reasoning` showing class hierarchy, restrictions, disjointness, and inferred facts
+- [ ] `examples/agent-mcp` showing Claude/Cursor/generic MCP configuration and tool call samples
+- [ ] Biomedical demo using HPO / GO / Mondo small fixtures or download scripts
+- [ ] Research workflow demo using BFO / OBI style ontology context
+- [ ] Each example includes ontology inputs, setup commands, claim JSON, sample questions, expected outputs, and README
+- [ ] README front page links to "Try in 3 minutes" examples and a short showcase table
+- [ ] Demo validation tests to keep examples from drifting
+- [ ] Screenshots or terminal transcript snippets for GitHub readers
+- [ ] No write operations; examples remain reproducible and readonly
 
-### v0.4 Agent Usability and Distribution
+### v0.5 Agent Claim Workflow
 
-Goal: make owl4agents easy for local agents and GitHub users to install, configure, and use.
+Goal: move from individual tools to repeatable agent workflows for claim extraction, verification, and evidence-grounded answers.
 
 Planned support:
 
-- [ ] Source-checkout setup script for Windows, macOS, and Linux
-- [ ] GitHub Release assets for the runnable CLI jar and checksum
-- [ ] Better local npm launcher flow that can build or locate `owl4agents.jar` predictably
-- [ ] MCP configuration templates for common local agent clients
-- [ ] Example workspace setup using Pizza and selected golden fixtures
-- [ ] Agent usage cookbook for search, context, SPARQL, reasoning, and claim verification workflows
-- [ ] Troubleshooting guide for Java version, `JAVA_HOME`, stale workspace state, and stdio MCP issues
-- [ ] Stable examples for CLI and MCP outputs
-- [ ] Cross-platform launcher acceptance tests
-- [ ] Keep MCP readonly by default
+- [ ] Natural-language-to-structured-claim handoff schema for agents, with examples but no hidden LLM dependency
+- [ ] Batch claim verification for answer-level checking
+- [ ] Evidence compact context format optimized for LLM consumption
+- [ ] Agent self-check workflow: extract claims, verify claims, explain unknowns, cite evidence, and refuse out-of-scope claims
+- [ ] Coverage assessment for missed entities, relations, restrictions, and known exceptions
+- [ ] Answer verification reports with per-claim verdicts and evidence summaries
+- [ ] CLI and MCP workflow templates for common agent loops
+- [ ] Regression fixtures from real agent-generated claims
+- [ ] Clear failure modes for malformed claims, unsupported natural-language extraction, and missing ontology scope
 
-### v0.5 Research Evaluation and Benchmarks
+### v0.6 Research Evaluation and Benchmarks
 
-Goal: support reproducible experiments for ontology-grounded agents.
+Goal: prove and compare the value of ontology grounding with reproducible experiments.
 
 Planned support:
 
 - [ ] `context-batch` for question sets
 - [ ] Context export JSONL format
-- [ ] Benchmark runner
+- [ ] Benchmark runner for golden, Pizza, OWL2Bench, LUBM, and selected real-world corpus subsets
 - [ ] Reasoner comparison reports
-- [ ] Answer verification reports
-- [ ] Coverage assessment for missing entities, relations, restrictions, and constraints
-- [ ] Ontology-agent QA evaluation helper
+- [ ] Grounded vs ungrounded QA evaluation helper
+- [ ] Hallucination reduction benchmark using structured claims
 - [ ] Reproducible experiment configuration files
 - [ ] Example benchmark packs for small, medium, inconsistent, OWL 2 EL, and OWL 2 DL ontologies
+- [ ] Generated reports that can be attached to papers, issues, or release notes
 
-### v0.6 Controlled Editing, Snapshots, and Audit
+### v0.7 Ontology Workflow Integrations
 
-Goal: safely allow controlled ontology updates from CLI and MCP after readonly reasoning and verification are stable.
+Goal: integrate optional ontology workflow tooling after installation, examples, and agent workflows are stable.
+
+Planned support:
+
+- [ ] Evaluate optional ROBOT integration for reusable ontology workflow operations and benchmark preprocessing
+- [ ] Evaluate SHACL support for explicit constraint validation workflows
+- [ ] Property chain inspection and advanced OWL axiom browsing
+- [ ] Ontology preprocessing pipeline for imports, subsets, profile checks, and benchmark packs
+- [ ] Import closure management and ontology diff planning
+- [ ] Integration tests proving optional tools are detected, versioned, and fail gracefully when unavailable
+
+### v0.8 Controlled Editing, Snapshots, and Audit
+
+Goal: safely allow controlled ontology updates from CLI and MCP after readonly reasoning, verification, examples, and evaluation are stable.
 
 Planned support:
 
@@ -1148,18 +1270,6 @@ Planned support:
 - [ ] Dry-run mode for proposed edits
 - [ ] Write audit log for CLI operations and MCP tool calls
 - [ ] Security tests for readonly mode, write mode, file access limits, dry-run, and rollback behavior
-
-### v0.7 Ontology Workflow Integrations
-
-Goal: integrate optional ontology workflow tooling only after readonly verification, packaging, evaluation, and write-safety foundations are stable.
-
-Planned support:
-
-- [ ] Evaluate optional ROBOT integration for reusable ontology workflow operations and benchmark preprocessing
-- [ ] Evaluate SHACL support for explicit constraint validation workflows
-- [ ] Property chain inspection and advanced OWL axiom browsing
-- [ ] Ontology preprocessing pipeline for imports, subsets, profile checks, and benchmark packs
-- [ ] Integration tests proving optional tools are detected, versioned, and fail gracefully when unavailable
 
 ### v1.0 Stable Release
 

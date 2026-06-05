@@ -39,6 +39,7 @@ modules/**/bin/
 *.class
 # Ignore built jars but NOT the Gradle wrapper jar
 modules/**/build/libs/*.jar
+modules/**/build/libs/*.sha256
 *.war
 # Maven metadata extracted by OWL API / Jena dependency resolution
 META-INF/

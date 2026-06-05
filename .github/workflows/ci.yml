@@ -1,0 +1,133 @@
+name: CI Build Verification
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Java 22
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '22'
+
+      - name: Cache Gradle packages
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle.kts', 'gradle/wrapper/gradle-wrapper.properties') }}
+          restore-keys: ${{ runner.os }}-gradle-
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Run Gradle build verification (includes v0.1-v0.3 regression suites)
+        run: ./gradlew clean buildVerification
+
+      - name: Build shadow jar
+        run: ./gradlew :modules:ontology-cli:shadowJar
+
+      - name: Run npm launcher smoke tests
+        working-directory: npm
+        run: |
+          export OWL4AGENTS_RUNTIME="$GITHUB_WORKSPACE/modules/ontology-cli/build/libs/owl4agents.jar"
+          node test/launcher.test.js
+
+      - name: Verify setup --check
+        run: java -jar modules/ontology-cli/build/libs/owl4agents.jar setup --check
+
+      - name: Verify setup --init (idempotent)
+        run: |
+          java -jar modules/ontology-cli/build/libs/owl4agents.jar setup --init
+          java -jar modules/ontology-cli/build/libs/owl4agents.jar setup --init
+          # Second run should still exit 0 (idempotent)
+
+      - name: Verify setup --check --dry-run (no side effects)
+        run: java -jar modules/ontology-cli/build/libs/owl4agents.jar setup --check --dry-run
+
+      - name: Verify smoke test (includes MCP readiness)
+        run: |
+          export OWL4AGENTS_HOME="$RUNNER_TEMP/owl4agents-smoke-home"
+          export OWL4AGENTS_RUNTIME="$GITHUB_WORKSPACE/modules/ontology-cli/build/libs/owl4agents.jar"
+          java -jar modules/ontology-cli/build/libs/owl4agents.jar smoke --workspace "$RUNNER_TEMP/owl4agents-smoke-ws" --mcp-readiness --timeout 30
+
+      - name: Verify mcp-config --client generic
+        run: java -jar modules/ontology-cli/build/libs/owl4agents.jar mcp-config --client generic
+
+      - name: Verify mcp-config --client claude
+        run: java -jar modules/ontology-cli/build/libs/owl4agents.jar mcp-config --client claude
+
+      - name: Verify mcp-config rejects unknown client
+        run: |
+          # Must exit nonzero and stderr must contain "Unsupported client"
+          if java -jar modules/ontology-cli/build/libs/owl4agents.jar mcp-config --client unknown 2>/dev/null; then
+            echo "FAIL: unknown client should exit nonzero"
+            exit 1
+          fi
+          if ! java -jar modules/ontology-cli/build/libs/owl4agents.jar mcp-config --client unknown 2>&1 | grep -q "Unsupported client"; then
+            echo "FAIL: stderr should mention Unsupported client"
+            exit 1
+          fi
+          echo "PASS: unknown client rejected with nonzero exit and diagnostic"
+
+      - name: Verify --version
+        run: java -jar modules/ontology-cli/build/libs/owl4agents.jar --version | grep -q "0.3.1"
+
+  release-assets:
+    needs: build-and-test
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Java 22
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '22'
+
+      - name: Build release jar
+        run: ./gradlew :modules:ontology-cli:shadowJar
+
+      - name: Validate CHANGELOG has current version entry
+        run: |
+          grep -q "## 0.3.1" CHANGELOG.md || { echo "FAIL: CHANGELOG.md missing 0.3.1 entry"; exit 1; }
+
+      - name: Generate checksum
+        run: |
+          sha256sum modules/ontology-cli/build/libs/owl4agents.jar > modules/ontology-cli/build/libs/owl4agents.jar.sha256
+          echo "Checksum generated:"
+          cat modules/ontology-cli/build/libs/owl4agents.jar.sha256
+
+      - name: Generate release notes from CHANGELOG
+        run: |
+          # Extract the v0.3.1 section from CHANGELOG.md (from "## 0.3.1" to the next "##" header)
+          sed -n '/^## 0\.3\.1/,/^## [0-9]/{ /^## [0-9]/!p; }' CHANGELOG.md > modules/ontology-cli/build/libs/release-notes-v0.3.1.md
+          echo "Release notes generated:"
+          cat modules/ontology-cli/build/libs/release-notes-v0.3.1.md
+          # Verify it is non-empty
+          if [ ! -s modules/ontology-cli/build/libs/release-notes-v0.3.1.md ]; then
+            echo "FAIL: release notes file is empty"
+            exit 1
+          fi
+
+      - name: Upload release assets
+        uses: actions/upload-artifact@v4
+        with:
+          name: owl4agents-release
+          path: |
+            modules/ontology-cli/build/libs/owl4agents.jar
+            modules/ontology-cli/build/libs/owl4agents.jar.sha256
+            modules/ontology-cli/build/libs/release-notes-v0.3.1.md
+          retention-days: 30

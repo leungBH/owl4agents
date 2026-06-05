@@ -131,11 +131,13 @@ function javaExecutable() {
 function buildJavaCommand(runtime, args) {
   const { platform: detectedPlatform } = detectPlatform();
 
-  if (os.platform() === 'win32' && args[0] === 'mcp') {
-    const mcpWrapper = path.resolve(__dirname, '..', '..', 'bin', 'owl4agents-mcp.cmd');
-    if (fs.existsSync(mcpWrapper)) {
-      return [mcpWrapper, ...args.slice(1)];
-    }
+  // On Windows, use java -cp instead of java -jar for the MCP command.
+  // This avoids two problems:
+  // 1. ACCESS_VIOLATION crash that java -jar produces on some Windows environments
+  // 2. Recursive call if we forwarded to owl4agents-mcp.cmd which then calls npm launcher again
+  // java -cp works with the shadow jar because it contains all merged classes without relocation.
+  if (os.platform() === 'win32' && args[0] === 'mcp' && runtime.type === 'jar') {
+    return [javaExecutable(), '-cp', runtime.path, 'org.owl4agents.cli.Owl4AgentsCli', ...args];
   }
 
   if (runtime.type === 'jar') {
@@ -178,9 +180,9 @@ function main() {
     const pkgPath = path.resolve(__dirname, '..', 'package.json');
     try {
       const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf-8'));
-      console.log(pkg.version || '0.3.0');
+      console.log(pkg.version || '0.3.1');
     } catch {
-      console.log('0.3.0');
+      console.log('0.3.1');
     }
     process.exit(0);
   }
@@ -204,6 +206,15 @@ function main() {
     console.log('  realize    Infer individual class memberships');
     console.log('  consistency  Check ontology consistency');
     console.log('  list-reasoners List available reasoner adapters');
+    console.log('  setup      Check and prepare source checkout environment');
+    console.log('  smoke      Run onboarding smoke test');
+    console.log('  mcp-config Generate MCP client configuration');
+    // v0.3 claim verification commands
+    console.log('  verify-claim   Verify a structured claim');
+    console.log('  evidence       Get evidence path for a claim');
+    console.log('  counterexamples Find counterexamples for a claim');
+    console.log('  explain-unknown Explain unknown verdict for a claim');
+    console.log('  missing-entities Detect missing entities for a claim');
     process.exit(0);
   }
 

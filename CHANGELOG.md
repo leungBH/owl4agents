@@ -2,6 +2,35 @@
 
 All notable release changes for owl4agents are tracked here.
 
+## 0.3.1 - 2026-06-05
+
+### Added
+
+- Added `setup --check` command validating Java, Gradle, source layout, workspace, npm launcher, and runtime jar.
+- Added `setup --check --dry-run` behavior reporting planned actions without modifying files.
+- Added `setup --init` command initializing workspace and importing Pizza and v0.3 golden ontology idempotently.
+- Added `smoke` command running fixture import, ontology list, summary, reasoner list, classification, and claim verification.
+- Added `mcp-config --client generic/claude/cursor` command generating MCP client JSON configuration.
+- Added `mcp-config --workspace-home` and `--out` options for workspace propagation and file output.
+- Added GitHub Actions CI workflow for build verification, launcher smoke tests, MCP readiness smoke, and release asset generation.
+- Added sha256sum checksum generation and release notes artifact generation for release jar.
+- Added v0.3.1 acceptance contract and required fixture definitions.
+- Added fixture attribution documentation for Pizza, BFO, and benchmark ontologies.
+
+### Changed
+
+- Updated project version to 0.3.1 across Gradle, CLI, MCP server info, npm package, and npm launcher fallback.
+- Updated README quick start, troubleshooting, MCP configuration, and roadmap for v0.3.1.
+- Updated Windows MCP launcher path to use Java classpath mode for MCP startup.
+- Deferred codex/codex-cli config templates until client naming and format stabilize.
+
+### Fixed
+
+- Fixed Apache-2.0 LICENSE boilerplate copyright placeholder.
+- Fixed Windows MCP wrapper recursion by avoiding npm-wrapper round trips.
+- Documented the Windows `java -jar` ACCESS_VIOLATION boundary and supported npm/Gradle alternatives.
+- Fixed smoke workspace path doubling by normalizing paths ending in `workspaces/<name>`.
+
 ## 0.3.0 - 2026-06-04
 
 ### Added
