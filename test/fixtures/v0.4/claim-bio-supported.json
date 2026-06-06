@@ -1,0 +1,11 @@
+{
+  "claimId": "bio-supported-001",
+  "type": "subclass",
+  "ontologyId": "v0.4-biomedical-grounding",
+  "subject": { "kind": "class", "iri": "http://example.org/v0.4-biomedical#Hypertension" },
+  "predicate": "subClassOf",
+  "object": { "kind": "class", "iri": "http://example.org/v0.4-biomedical#Disease" },
+  "reasoner": null,
+  "graphScope": "explicit",
+  "options": { "includeEvidence": true }
+}

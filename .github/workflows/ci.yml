@@ -82,7 +82,53 @@ jobs:
           echo "PASS: unknown client rejected with nonzero exit and diagnostic"
 
       - name: Verify --version
-        run: java -jar modules/ontology-cli/build/libs/owl4agents.jar --version | grep -q "0.3.1"
+        run: java -jar modules/ontology-cli/build/libs/owl4agents.jar --version | grep -q "0.4.0"
+
+      - name: v0.4 Example validation — claim verification
+        run: |
+          export OWL4AGENTS_RUNTIME="$GITHUB_WORKSPACE/modules/ontology-cli/build/libs/owl4agents.jar"
+          WS_HOME="$RUNNER_TEMP/owl4agents-example-claim-verification"
+          # Import golden ontology
+          node npm/bin/owl4agents.js import test/corpus/golden/v0.3-claim-verification.owl v0.3-claim-verification --workspace "$WS_HOME"
+          # Verify supported claim
+          node npm/bin/owl4agents.js verify-claim v0.3-claim-verification --claim test/fixtures/v0.3/claim-supported.json --workspace "$WS_HOME" --json | grep -q "supported"
+          # Verify unknown claim
+          node npm/bin/owl4agents.js verify-claim v0.3-claim-verification --claim test/fixtures/v0.3/claim-unknown.json --workspace "$WS_HOME" --json | grep -q "unknown"
+          # Verify out_of_scope claim
+          node npm/bin/owl4agents.js verify-claim v0.3-claim-verification --claim test/fixtures/v0.3/claim-real-out-of-scope.json --workspace "$WS_HOME" --json | grep -q "out_of_scope"
+          echo "PASS: claim-verification example validation"
+
+      - name: v0.4 Example validation — pizza reasoning
+        run: |
+          export OWL4AGENTS_RUNTIME="$GITHUB_WORKSPACE/modules/ontology-cli/build/libs/owl4agents.jar"
+          WS_HOME="$RUNNER_TEMP/owl4agents-example-pizza"
+          # Import Pizza ontology
+          node npm/bin/owl4agents.js import test/corpus/smoke/pizza.owl pizza --workspace "$WS_HOME"
+          # Get summary
+          node npm/bin/owl4agents.js summary pizza --workspace "$WS_HOME" | grep -q "pizza"
+          # Classify
+          node npm/bin/owl4agents.js classify pizza --workspace "$WS_HOME" | grep -qi "hermit"
+          echo "PASS: pizza-reasoning example validation"
+
+      - name: v0.4 Example validation — biomedical grounding
+        run: |
+          export OWL4AGENTS_RUNTIME="$GITHUB_WORKSPACE/modules/ontology-cli/build/libs/owl4agents.jar"
+          WS_HOME="$RUNNER_TEMP/owl4agents-example-biomedical"
+          # Import biomedical golden ontology
+          node npm/bin/owl4agents.js import test/corpus/golden/v0.4-biomedical-grounding.owl v0.4-biomedical-grounding --workspace "$WS_HOME"
+          # Search for Hypertension
+          node npm/bin/owl4agents.js search v0.4-biomedical-grounding Hypertension --workspace "$WS_HOME" | grep -q "Hypertension"
+          # Verify supported claim
+          node npm/bin/owl4agents.js verify-claim v0.4-biomedical-grounding --claim test/fixtures/v0.4/claim-bio-supported.json --workspace "$WS_HOME" --json | grep -q "supported"
+          # Verify out_of_scope claim
+          node npm/bin/owl4agents.js verify-claim v0.4-biomedical-grounding --claim test/fixtures/v0.4/claim-bio-out-of-scope.json --workspace "$WS_HOME" --json | grep -q "out_of_scope"
+          echo "PASS: biomedical-grounding example validation"
+
+      - name: v0.4 Example validation — MCP readiness (agent-mcp)
+        run: |
+          export OWL4AGENTS_RUNTIME="$GITHUB_WORKSPACE/modules/ontology-cli/build/libs/owl4agents.jar"
+          node npm/bin/owl4agents.js smoke --workspace "$RUNNER_TEMP/owl4agents-example-mcp" --mcp-readiness --timeout 30
+          echo "PASS: agent-mcp MCP readiness validation"
 
   release-assets:
     needs: build-and-test
@@ -102,7 +148,7 @@ jobs:
 
       - name: Validate CHANGELOG has current version entry
         run: |
-          grep -q "## 0.3.1" CHANGELOG.md || { echo "FAIL: CHANGELOG.md missing 0.3.1 entry"; exit 1; }
+          grep -q "## 0.4.0" CHANGELOG.md || { echo "FAIL: CHANGELOG.md missing 0.4.0 entry"; exit 1; }
 
       - name: Generate checksum
         run: |
@@ -112,12 +158,12 @@ jobs:
 
       - name: Generate release notes from CHANGELOG
         run: |
-          # Extract the v0.3.1 section from CHANGELOG.md (from "## 0.3.1" to the next "##" header)
-          sed -n '/^## 0\.3\.1/,/^## [0-9]/{ /^## [0-9]/!p; }' CHANGELOG.md > modules/ontology-cli/build/libs/release-notes-v0.3.1.md
+          # Extract the v0.4.0 section from CHANGELOG.md (from "## 0.4.0" to the next "##" header)
+          sed -n '/^## 0\.4\.0/,/^## [0-9]/{ /^## [0-9]/!p; }' CHANGELOG.md > modules/ontology-cli/build/libs/release-notes-v0.4.0.md
           echo "Release notes generated:"
-          cat modules/ontology-cli/build/libs/release-notes-v0.3.1.md
+          cat modules/ontology-cli/build/libs/release-notes-v0.4.0.md
           # Verify it is non-empty
-          if [ ! -s modules/ontology-cli/build/libs/release-notes-v0.3.1.md ]; then
+          if [ ! -s modules/ontology-cli/build/libs/release-notes-v0.4.0.md ]; then
             echo "FAIL: release notes file is empty"
             exit 1
           fi
@@ -129,5 +175,5 @@ jobs:
           path: |
             modules/ontology-cli/build/libs/owl4agents.jar
             modules/ontology-cli/build/libs/owl4agents.jar.sha256
-            modules/ontology-cli/build/libs/release-notes-v0.3.1.md
+            modules/ontology-cli/build/libs/release-notes-v0.4.0.md
           retention-days: 30

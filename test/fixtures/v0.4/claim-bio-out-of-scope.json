@@ -1,0 +1,11 @@
+{
+  "claimId": "bio-out-of-scope-001",
+  "type": "ontology_scope",
+  "ontologyId": "v0.4-biomedical-grounding",
+  "subject": { "kind": "class", "iri": "http://example.org/v0.4-biomedical#CancerStage" },
+  "predicate": "inScopeOf",
+  "object": { "kind": "class", "iri": "http://example.org/v0.4-biomedical#Disease" },
+  "reasoner": null,
+  "graphScope": "explicit",
+  "options": { "includeEvidence": true }
+}

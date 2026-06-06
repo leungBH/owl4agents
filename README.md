@@ -4,9 +4,9 @@ Local OWL ontology runtime, reasoner integration, SPARQL query layer, and readon
 
 `owl4agents` is a local-first OWL/RDF ontology runtime for researchers and agent developers. It imports, manages, reasons over, queries, and retrieves structured semantic context from OWL ontologies, then exposes those capabilities through both CLI commands and an MCP server.
 
-> Status: v0.3.1 usability and release hardening. v0.3.1 adds source-checkout setup, onboarding smoke tests, MCP configuration generation, and CI/release automation on top of the v0.3 claim verification and evidence grounding release.
+> Status: v0.4 benchmark examples and demo packs. v0.4 adds runnable example packs under `examples/` for claim verification, pizza reasoning, MCP agent integration, and biomedical grounding, plus automated example validation as a release gate.
 
-## v0.3.1 Quick Start
+## v0.4 Quick Start
 
 ### Requirements
 
@@ -39,6 +39,37 @@ node npm/bin/owl4agents.js mcp-config --client claude
 `setup --check` verifies Java, Gradle, source layout, workspace, npm launcher, and runtime jar. `setup --init` creates the workspace and imports the Pizza ontology and v0.3 claim-verification golden ontology. `smoke` runs a complete onboarding cycle: fixture import, ontology list, summary, reasoner list, classification, and claim verification. `mcp-config --client claude` prints a ready-to-paste JSON configuration for Claude Desktop.
 
 All four commands are idempotent — rerunning them reports existing resources.
+
+### Try in 3 Minutes — v0.4 Example Packs
+
+After building the jar, run any of these examples from the repository root:
+
+```powershell
+# Claim verification — supported, contradicted, unknown, out_of_scope
+node npm/bin/owl4agents.js import test/corpus/golden/v0.3-claim-verification.owl v0.3-claim-verification --workspace temp/examples/claim-verification
+node npm/bin/owl4agents.js verify-claim v0.3-claim-verification --claim test/fixtures/v0.3/claim-supported.json --workspace temp/examples/claim-verification --json
+
+# Pizza reasoning — import, summary, classify
+node npm/bin/owl4agents.js import test/corpus/smoke/pizza.owl pizza --workspace temp/examples/pizza-reasoning
+node npm/bin/owl4agents.js summary pizza --workspace temp/examples/pizza-reasoning
+
+# Biomedical grounding — disease hierarchy and claim verification
+node npm/bin/owl4agents.js import test/corpus/golden/v0.4-biomedical-grounding.owl v0.4-biomedical-grounding --workspace temp/examples/biomedical-grounding
+node npm/bin/owl4agents.js verify-claim v0.4-biomedical-grounding --claim test/fixtures/v0.4/claim-bio-supported.json --workspace temp/examples/biomedical-grounding --json
+```
+
+See [examples/README.md](examples/README.md) for full step-by-step commands, expected output snippets, and troubleshooting.
+
+### v0.4 Example Showcase
+
+| Example | What it demonstrates | Interface | Fixture | Run time |
+| --- | --- | --- | --- | --- |
+| [claim-verification](examples/claim-verification/) | Supported, contradicted, unknown, and out_of_scope claim checking | CLI | `test/corpus/golden/v0.3-claim-verification.owl` | ~5 seconds |
+| [pizza-reasoning](examples/pizza-reasoning/) | Ontology import, summary, hierarchy, restrictions, classification | CLI | `test/corpus/smoke/pizza.owl` | ~10 seconds |
+| [agent-mcp](examples/agent-mcp/) | MCP client configuration, readonly startup, tool list, tool-call samples | MCP | None (starts MCP server) | ~5 seconds |
+| [biomedical-grounding](examples/biomedical-grounding/) | Biomedical-style grounding using a project-owned golden fixture | CLI | `test/corpus/golden/v0.4-biomedical-grounding.owl` | ~5 seconds |
+
+All examples use `node npm/bin/owl4agents.js` as the CLI entry point. See each example's README for prerequisites, commands, and expected output.
 
 ### Verify Release from Fresh Checkout
 
@@ -154,7 +185,7 @@ node npm/bin/owl4agents.js mcp --readonly
 
 ### MCP Client Configuration
 
-The recommended way to configure MCP clients is the `mcp-config` command, which generates a ready-to-paste JSON configuration with the correct command, args, and environment for your client:
+The recommended way to configure MCP clients is the `mcp-config` command, which generates a ready-to-paste JSON configuration with the correct command, args, and environment for your client. For a complete MCP demo with config snippets and a sanitized tool-call transcript, see [examples/agent-mcp/](examples/agent-mcp/).
 
 ```powershell
 # Generate Claude Desktop config
@@ -568,12 +599,16 @@ Before releasing any version, verify each step:
 4. **Launcher tests**: `node npm/test/launcher.test.js` exits 0 when launcher changes are included
 5. **Smoke commands**: `node npm/bin/owl4agents.js --help`, `--version`, and `list-reasoners` all work
 6. **v0.3 claim fixtures**: supported, contradicted, unknown, out-of-scope, malformed, unsupported-type, and unknown-ontology fixtures pass their expected gates
-7. **CLI/MCP parity**: overlapping v0.3 tools return equivalent verdicts, evidence shapes, and error codes
-8. **Version alignment**: Gradle version, npm package.json version, Picocli `version` attribute, and MCP `serverInfo.version` all match
-9. **Acceptance report**: Timestamped report under `reports/acceptance/` with environment, commands, gate results, defects, retest notes, skipped scenarios, and verdict
-10. **Git hygiene**: required source, tests, contracts, and fixtures are tracked; local reports, OpenSpec files, private ontologies, generated classes, and build outputs are ignored
-11. **Git tag**: Tag the release commit, for example `v0.3.1`
-12. **Push**: Push the commit and tag to the remote
+7. **v0.4 example validation**: each required example pack (claim-verification, pizza-reasoning, agent-mcp, biomedical-grounding) passes manifest, fixture, execution, sanitization, and drift checks
+8. **Example manifest checks**: every `examples/*/example.yaml` contains required fields (id, title, description, interfaces, fixtures, commands, expectedOutputs, ciRequired, attribution) and fixture paths reference existing files
+9. **README link checks**: root README links to every required example and MCP section references `examples/agent-mcp/`; no stale or broken links
+10. **Fixture attribution checks**: `test/corpus/README.md` documents source, attribution, and license for every required fixture
+11. **CLI/MCP parity**: overlapping v0.3 tools return equivalent verdicts, evidence shapes, and error codes
+12. **Version alignment**: Gradle version, npm package.json version, Picocli `version` attribute, and MCP `serverInfo.version` all match
+13. **Acceptance report**: Timestamped report under `reports/acceptance/` with environment, commands, gate results, defects, retest notes, skipped scenarios, and verdict
+14. **Git hygiene**: required source, tests, contracts, fixtures, and examples are tracked; local reports, OpenSpec files, private ontologies, generated classes, build outputs, and `temp/examples/` are ignored
+15. **Git tag**: Tag the release commit, for example `v0.4.0`
+16. **Push**: Push the commit and tag to the remote
 
 Acceptance reports are stored locally under:
 
@@ -1195,21 +1230,37 @@ Released support:
 
 Goal: make owl4agents easy to understand, demo, and promote through copy-pasteable scenarios before adding deeper product surface.
 
-Planned support:
+Released support:
 
-- [ ] `examples/` directory with runnable CLI and MCP demos
-- [ ] `examples/claim-verification` showing hallucination checking with supported, contradicted, unknown, and out_of_scope claims
-- [ ] `examples/pizza-reasoning` showing class hierarchy, restrictions, disjointness, and inferred facts
-- [ ] `examples/agent-mcp` showing Claude/Cursor/generic MCP configuration and tool call samples
-- [ ] Biomedical demo using HPO / GO / Mondo small fixtures or download scripts
-- [ ] Research workflow demo using BFO / OBI style ontology context
-- [ ] Each example includes ontology inputs, setup commands, claim JSON, sample questions, expected outputs, and README
-- [ ] README front page links to "Try in 3 minutes" examples and a short showcase table
-- [ ] Demo validation tests to keep examples from drifting
-- [ ] Screenshots or terminal transcript snippets for GitHub readers
-- [ ] No write operations; examples remain reproducible and readonly
+- [x] `examples/` directory with runnable CLI and MCP demos
+- [x] `examples/claim-verification` showing hallucination checking with supported, contradicted, unknown, and out_of_scope claims
+- [x] `examples/pizza-reasoning` showing class hierarchy, restrictions, disjointness, and inferred facts
+- [x] `examples/agent-mcp` showing Claude/Cursor/generic MCP configuration and sanitized tool-call transcript samples
+- [x] `examples/biomedical-grounding` showing disease hierarchy and claim verification using project-owned golden fixture
+- [x] Each example includes manifest (example.yaml), README, commands, claim JSON or references, expected output assertions, and run scripts
+- [x] README front page links to "Try in 3 minutes" examples and showcase table
+- [x] Demo validation tests (manifest, fixture, drift, sanitization) to keep examples from drifting
+- [x] CI runs v0.4 example validation as a release gate
+- [x] No CLI `examples`/`demo` discovery command — examples are script-driven (deferred to future release)
+- [x] No write operations; examples remain reproducible and readonly
+- [x] No large external ontology downloads required for default CI — biomedical fixture is project-owned
 
 ### v0.5 Agent Claim Workflow
+
+Goal: move from individual tools to repeatable agent workflows for claim extraction, verification, and evidence-grounded answers.
+
+Planned support:
+
+- [ ] Natural-language-to-structured-claim handoff schema for agents, with examples but no hidden LLM dependency
+- [ ] Batch claim verification for answer-level checking
+- [ ] Evidence compact context format optimized for LLM consumption
+- [ ] Agent self-check workflow: extract claims, verify claims, explain unknowns, cite evidence, and refuse out-of-scope claims
+- [ ] Coverage assessment for missed entities, relations, restrictions, and known exceptions
+- [ ] Answer verification reports with per-claim verdicts and evidence summaries
+- [ ] CLI and MCP workflow templates for common agent loops
+- [ ] Regression fixtures from real agent-generated claims
+- [ ] Clear failure modes for malformed claims, unsupported natural-language extraction, and missing ontology scope
+- [ ] Optional CLI `examples`/`demo` discovery command based on v0.4 example pack experience
 
 Goal: move from individual tools to repeatable agent workflows for claim extraction, verification, and evidence-grounded answers.
 

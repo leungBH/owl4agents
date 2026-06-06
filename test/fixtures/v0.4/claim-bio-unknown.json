@@ -1,0 +1,11 @@
+{
+  "claimId": "bio-unknown-001",
+  "type": "subclass",
+  "ontologyId": "v0.4-biomedical-grounding",
+  "subject": { "kind": "class", "iri": "http://example.org/v0.4-biomedical#Arthritis" },
+  "predicate": "subClassOf",
+  "object": { "kind": "class", "iri": "http://example.org/v0.4-biomedical#InfectiousDisease" },
+  "reasoner": null,
+  "graphScope": "explicit",
+  "options": { "includeEvidence": true }
+}

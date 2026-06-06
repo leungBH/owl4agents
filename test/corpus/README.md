@@ -32,6 +32,7 @@ The following small smoke fixtures have been downloaded locally:
 | `benchmarks/owl2bench/UNIV-BENCH-OWL2QL.owl` | OWL2Bench QL TBox | OWL 2 QL profile tests |
 | `benchmarks/owl2bench/UNIV-BENCH-OWL2RL.owl` | OWL2Bench RL TBox | OWL 2 RL profile tests |
 | `golden/v0.3-claim-verification.owl` | Project golden ontology | Deterministic v0.3 claim verification, evidence, unknown, and out-of-scope acceptance tests |
+| `golden/v0.4-biomedical-grounding.owl` | Project golden ontology | Deterministic v0.4 biomedical grounding: disease hierarchy, phenotype, organ system, object/data properties, equivalent class, disjointness, and claim verification examples |
 
 ## Fixture Attribution
 
@@ -40,6 +41,7 @@ The following small smoke fixtures have been downloaded locally:
 | `smoke/pizza.owl` | [Protégé Pizza Ontology](https://protege.stanford.edu/ontologies/pizza/pizza.owl) | Creative Commons Attribution 4.0 (CC BY 4.0) | Stanford University / Protégé project. Used for class hierarchy, object property, and restriction smoke tests. |
 | `smoke/bfo.owl` | [OBO Foundry BFO PURL](http://purl.obolibrary.org/obo/bfo.owl) | CC BY 4.0 | BFO2 Ontology, OBO Foundry. Used for upper ontology and import profile smoke. |
 | `golden/v0.3-claim-verification.owl` | Project-created golden ontology | Apache-2.0 (project) | owl4agents project. Hand-made deterministic ontology for claim verification acceptance tests. |
+| `golden/v0.4-biomedical-grounding.owl` | Project-created golden ontology | Apache-2.0 (project) | owl4agents project. Hand-made deterministic biomedical ontology for v0.4 grounding examples. Simplified educational model — not a clinical reference. |
 | `golden/*-minimal.owl` through `09-malformed-rdf.owl` | Project-created golden fixtures | Apache-2.0 (project) | owl4agents project. Deterministic OWL feature test ontologies. |
 | `benchmarks/lubm/univ-bench.owl` | [Lehigh University Benchmark](http://swat.cse.lehigh.edu/projects/lubm/) | Academic use | Lehigh University. Used for university-domain benchmark schema tests. |
 | `benchmarks/owl2bench/*` | [OWL2Bench](https://github.com/IIIT-Delhi/OWL2Bench) | MIT License | IIIT-Delhi OWL2Bench. Used for OWL 2 profile and reasoner tests. |
@@ -60,6 +62,17 @@ v0.3 uses a small deterministic OWL fixture plus structured claim JSON files.
 | `../fixtures/v0.3/claim-unsupported-type.json` | Negative type fixture expecting `UNSUPPORTED_CLAIM_TYPE` |
 | `../fixtures/v0.3/claim-unknown-ontology.json` | Unknown ontology fixture used with CLI/MCP ontology ID checks |
 | `../fixtures/v0.3/claim-smoke-supported.json` | Ontology_scope supported claim for v0.3.1 onboarding smoke (entity in-scope) |
+
+## v0.4 Biomedical Grounding Fixtures
+
+v0.4 uses a small project-owned biomedical golden ontology plus structured claim JSON files.
+
+| File | Purpose |
+| --- | --- |
+| `golden/v0.4-biomedical-grounding.owl` | Golden ontology for disease hierarchy, phenotype, organ, disjointness, and grounding examples |
+| `../fixtures/v0.4/claim-bio-supported.json` | Supported subclass claim — Hypertension subClassOf Disease |
+| `../fixtures/v0.4/claim-bio-unknown.json` | Unknown claim — Arthritis subClassOf InfectiousDisease (no direct axiom, contradicting disjointness exists) |
+| `../fixtures/v0.4/claim-bio-out-of-scope.json` | Out_of_scope claim — CancerStage entity not in ontology |
 
 ## Recommended Golden Ontologies
 

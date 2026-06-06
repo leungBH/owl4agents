@@ -180,9 +180,9 @@ function main() {
     const pkgPath = path.resolve(__dirname, '..', 'package.json');
     try {
       const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf-8'));
-      console.log(pkg.version || '0.3.1');
+      console.log(pkg.version || '0.4.0');
     } catch {
-      console.log('0.3.1');
+      console.log('0.4.0');
     }
     process.exit(0);
   }

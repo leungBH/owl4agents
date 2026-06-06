@@ -12,6 +12,9 @@ reports/
 temp/
 local/
 
+# Generated example outputs (runtime logs, transcripts, screenshots)
+temp/examples/
+
 # Private or sensitive ontology inputs
 test/owl_files/
 test/corpus/realworld-local/

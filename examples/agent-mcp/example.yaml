@@ -1,0 +1,32 @@
+id: agent-mcp
+title: MCP Agent Integration Demo
+description: Demonstrates how a local agent connects to owl4agents through readonly MCP, including client configuration, startup, tool discovery, and sanitized tool-call transcript samples.
+interfaces:
+  - mcp
+fixtures: []
+commands:
+  - step: Start MCP server and verify initialize response
+    exec: node npm/bin/owl4agents.js mcp
+    exitCode: 0
+    prerequisite: null
+    note: This is a long-running MCP server process. Validation starts it, sends initialize and tools/list, then terminates.
+expectedOutputs:
+  - field: capabilities
+    present: true
+    value: any-non-empty
+    snippet: '"capabilities": { "tools": {} }'
+  - field: serverInfo.name
+    present: true
+    value: owl4agents
+    snippet: '"name": "owl4agents"'
+  - field: tools[].name
+    present: true
+    value: ontology_verify_claim
+    snippet: '"name": "ontology_verify_claim"'
+ciRequired: true
+platformLimitations:
+  - platform: windows
+    note: Use bin/owl4agents-mcp.cmd or node npm/bin/owl4agents.js mcp. Both use java -cp classpath mode for Windows compatibility.
+attribution:
+  source: project
+  license: Apache-2.0

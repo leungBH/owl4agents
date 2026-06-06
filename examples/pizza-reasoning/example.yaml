@@ -1,0 +1,54 @@
+id: pizza-reasoning
+title: Pizza Ontology Reasoning Demo
+description: Demonstrates ontology import, summary, class context, property context, classification, and inferred knowledge using the public Pizza fixture.
+interfaces:
+  - cli
+fixtures:
+  - path: test/corpus/smoke/pizza.owl
+    required: true
+    attribution: "Protégé Pizza Ontology, Stanford University. CC BY 4.0."
+commands:
+  - step: Import Pizza ontology into workspace
+    exec: node npm/bin/owl4agents.js import test/corpus/smoke/pizza.owl pizza --workspace temp/examples/pizza-reasoning
+    exitCode: 0
+    prerequisite: null
+  - step: Get ontology summary
+    exec: node npm/bin/owl4agents.js summary pizza --workspace temp/examples/pizza-reasoning
+    exitCode: 0
+    prerequisite: import must succeed first
+  - step: Get class context for Margherita
+    exec: node npm/bin/owl4agents.js class-context pizza http://www.co-ode.org/ontologies/pizza/pizza.owl#Margherita --workspace temp/examples/pizza-reasoning
+    exitCode: 0
+    prerequisite: import must succeed first
+  - step: Run reasoner classification
+    exec: node npm/bin/owl4agents.js classify pizza --workspace temp/examples/pizza-reasoning
+    exitCode: 0
+    prerequisite: import must succeed first
+  - step: Get property context for hasTopping
+    exec: node npm/bin/owl4agents.js property-context pizza http://www.co-ode.org/ontologies/pizza/pizza.owl#hasTopping --workspace temp/examples/pizza-reasoning
+    exitCode: 0
+    prerequisite: import must succeed first
+expectedOutputs:
+  - field: ontologyId
+    present: true
+    value: any-non-empty
+    snippet: '"ontologyId": "pizza"'
+  - field: classCount
+    present: true
+    value: any-positive-integer
+    snippet: '"classCount": 20'
+  - field: reasonerName
+    present: true
+    value: any-non-empty
+    snippet: '"reasonerName": "HermiT"'
+  - field: consistent
+    present: true
+    value: any-non-empty
+    snippet: '"consistent": true'
+ciRequired: true
+platformLimitations:
+  - platform: windows
+    note: Use node npm/bin/owl4agents.js entry point; direct jar execution may crash on some Windows setups
+attribution:
+  source: "Protégé Pizza Ontology, https://protege.stanford.edu/ontologies/pizza/pizza.owl"
+  license: "CC BY 4.0"

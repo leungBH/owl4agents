@@ -391,7 +391,7 @@ public class SmokeCommand implements Callable<Integer> {
             Process mcpProcess = pb.start();
 
             // Send initialize request via stdin
-            String initRequest = "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{\"protocolVersion\":\"2024-11-05\",\"capabilities\":{},\"clientInfo\":{\"name\":\"smoke\",\"version\":\"0.3.1\"}}}\n";
+            String initRequest = "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{\"protocolVersion\":\"2024-11-05\",\"capabilities\":{},\"clientInfo\":{\"name\":\"smoke\",\"version\":\"0.4.0\"}}}\n";
             mcpProcess.getOutputStream().write(initRequest.getBytes(java.nio.charset.StandardCharsets.UTF_8));
             mcpProcess.getOutputStream().flush();
 

@@ -1,0 +1,65 @@
+@prefix : <http://example.org/v0.4-biomedical#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+<http://example.org/v0.4-biomedical-grounding> a owl:Ontology ;
+    rdfs:label "v0.4 Biomedical Grounding Golden Ontology" ;
+    rdfs:comment "Project-owned golden ontology for biomedical grounding examples. Covers disease hierarchy, phenotype, organ system, object property, data property, equivalent class, disjointness, and claims for supported/unknown/out_of_scope verification." .
+
+# --- Disease hierarchy (subclass chains) ---
+:Disease a owl:Class .
+:InfectiousDisease a owl:Class ; rdfs:subClassOf :Disease .
+:ChronicDisease a owl:Class ; rdfs:subClassOf :Disease .
+:CardiovascularDisease a owl:Class ; rdfs:subClassOf :ChronicDisease .
+:Hypertension a owl:Class ; rdfs:subClassOf :CardiovascularDisease .
+:Tuberculosis a owl:Class ; rdfs:subClassOf :InfectiousDisease .
+
+# --- Disjointness (InfectiousDisease disjoint with ChronicDisease, Disease disjoint with Phenotype) ---
+:InfectiousDisease owl:disjointWith :ChronicDisease .
+:Disease owl:disjointWith :Phenotype .
+
+# --- Phenotype ---
+:Phenotype a owl:Class .
+:ElevatedBloodPressure a owl:Class ; rdfs:subClassOf :Phenotype .
+:Cough a owl:Class ; rdfs:subClassOf :Phenotype .
+
+# --- Organ system ---
+:Organ a owl:Class .
+:Heart a owl:Class ; rdfs:subClassOf :Organ .
+:Lung a owl:Class ; rdfs:subClassOf :Organ .
+:Heart owl:disjointWith :Lung .
+
+# --- Equivalent class (Hypertension = Disease with ElevatedBloodPressure phenotype) ---
+:Hypertension owl:equivalentClass [
+    a owl:Class ;
+    owl:intersectionOf (
+        :Disease
+        [ a owl:Restriction ;
+          owl:onProperty :hasPhenotype ;
+          owl:someValuesFrom :ElevatedBloodPressure ]
+    )
+] .
+
+# --- Object property with domain/range ---
+:hasPhenotype a owl:ObjectProperty ;
+    rdfs:domain :Disease ;
+    rdfs:range :Phenotype .
+
+# --- Data property with domain/range ---
+:hasSeverity a owl:DatatypeProperty ;
+    rdfs:domain :Disease ;
+    rdfs:range xsd:string .
+
+# --- Individual assertions (supported: HypertensivePatient has phenotype ElevatedBloodPressure) ---
+:PatientA a :Hypertension ;
+    :hasPhenotype :ElevatedBloodPressure ;
+    :hasSeverity "moderate" .
+
+:PatientB a :Tuberculosis ;
+    :hasPhenotype :Cough ;
+    :hasSeverity "severe" .
+
+# --- Sparse unknown: Arthritis has no phenotype axioms ---
+:Arthritis a owl:Class ; rdfs:subClassOf :ChronicDisease .

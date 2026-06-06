@@ -1,5 +1,40 @@
 # Changelog
 
+## 0.4.0 - 2026-06-05
+
+### Added
+
+- Added `examples/` top-level directory with runnable example packs for claim verification, pizza reasoning, MCP agent integration, and biomedical grounding.
+- Added `examples/claim-verification/` demonstrating supported, contradicted, unknown, and out_of_scope claim verification.
+- Added `examples/pizza-reasoning/` demonstrating ontology import, summary, class context, classification, and property context.
+- Added `examples/agent-mcp/` demonstrating MCP client configuration, startup, tool list, and sanitized tool-call transcript.
+- Added `examples/biomedical-grounding/` demonstrating biomedical grounding using project-owned golden fixture.
+- Added `example.yaml` manifests for each required example pack with commands, fixtures, expected outputs, and attribution.
+- Added `test/corpus/golden/v0.4-biomedical-grounding.owl` — project-owned biomedical golden ontology with disease hierarchy, phenotype, organ system, object/data properties, equivalent class, and disjointness axioms.
+- Added `test/fixtures/v0.4/` claim fixtures for biomedical grounding examples.
+- Added `test/contracts/example-demo-packs/contracts.md` — public contract for example IDs, manifest schema, fixture policy, and sanitized output policy.
+- Added `test/contracts/example-validation/contracts.md` — public contract for example validation, child-process execution, JSON field assertions, MCP timeout, and crash/placeholder rejection.
+- Added `test/contracts/example-output-schema/contracts.md` — public contract defining schema/field assertions for each example output.
+- Added `test/contracts/v04-acceptance/contracts.md` — public contract defining v0.4 acceptance gates, required fixtures, and PASS invalidation rules.
+- Added JUnit example validation tests: `ExampleValidationTest` (manifest, fixture, sanitization, doc drift), `ExampleExecutionTest` (CLI child-process execution, JSON field assertions), `McpExampleValidationTest` (MCP startup, tools/list, transcript validation).
+- Added CI workflow steps for v0.4 example validation (claim verification, pizza reasoning, biomedical grounding, MCP readiness).
+
+### Changed
+
+- Updated README with v0.4 "Try in 3 minutes" flow, example showcase table, and MCP configuration link to `examples/agent-mcp/`.
+- Updated README roadmap to mark v0.4 delivered items and refresh v0.5+ based on example-first strategy.
+- Updated `test/corpus/README.md` with v0.4 biomedical grounding fixture attribution and claim fixture entries.
+- Updated `.gitignore` to explicitly exclude `temp/examples/` generated outputs.
+- Updated CI workflow with v0.4 example validation steps using npm launcher and public fixtures.
+
+### Notes
+
+- v0.4 examples are script-driven — no CLI `examples` or `demo` discovery command is provided. This is explicitly deferred to a future release.
+- Example scripts use `node npm/bin/owl4agents.js` as the entry point — direct `java -jar` is not used due to the known Windows ACCESS_VIOLATION limitation.
+- Expected outputs use schema/field assertions, not byte-for-byte full-output snapshots.
+- Contradicted and unknown claim examples document reasoning prerequisites.
+- The `research-context` example is deferred to v0.5 pending fixture license and size review.
+
 All notable release changes for owl4agents are tracked here.
 
 ## 0.3.1 - 2026-06-05

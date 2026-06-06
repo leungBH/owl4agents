@@ -1,0 +1,67 @@
+id: biomedical-grounding
+title: Biomedical Grounding Demo
+description: Demonstrates how owl4agents can ground agent answers in a domain ontology, using a small project-owned biomedical fixture for disease, phenotype, and organ hierarchy verification.
+interfaces:
+  - cli
+fixtures:
+  - path: test/corpus/golden/v0.4-biomedical-grounding.owl
+    required: true
+    attribution: project
+  - path: test/fixtures/v0.4/claim-bio-supported.json
+    required: true
+    attribution: project
+  - path: test/fixtures/v0.4/claim-bio-unknown.json
+    required: true
+    attribution: project
+  - path: test/fixtures/v0.4/claim-bio-out-of-scope.json
+    required: true
+    attribution: project
+commands:
+  - step: Import biomedical golden ontology
+    exec: node npm/bin/owl4agents.js import test/corpus/golden/v0.4-biomedical-grounding.owl v0.4-biomedical-grounding --workspace temp/examples/biomedical-grounding
+    exitCode: 0
+    prerequisite: null
+  - step: Search for Hypertension
+    exec: node npm/bin/owl4agents.js search v0.4-biomedical-grounding Hypertension --workspace temp/examples/biomedical-grounding
+    exitCode: 0
+    prerequisite: import must succeed first
+  - step: Get class context for Hypertension
+    exec: node npm/bin/owl4agents.js class-context v0.4-biomedical-grounding http://example.org/v0.4-biomedical#Hypertension --workspace temp/examples/biomedical-grounding
+    exitCode: 0
+    prerequisite: import must succeed first
+  - step: Verify supported claim — Hypertension is a Disease
+    exec: node npm/bin/owl4agents.js verify-claim v0.4-biomedical-grounding --claim test/fixtures/v0.4/claim-bio-supported.json --workspace temp/examples/biomedical-grounding --json
+    exitCode: 0
+    prerequisite: null
+  - step: Verify unknown claim — Arthritis is an InfectiousDisease
+    exec: node npm/bin/owl4agents.js verify-claim v0.4-biomedical-grounding --claim test/fixtures/v0.4/claim-bio-unknown.json --workspace temp/examples/biomedical-grounding --json
+    exitCode: 0
+    prerequisite: null
+  - step: Verify out_of_scope claim — CancerStage is not in ontology
+    exec: node npm/bin/owl4agents.js verify-claim v0.4-biomedical-grounding --claim test/fixtures/v0.4/claim-bio-out-of-scope.json --workspace temp/examples/biomedical-grounding --json
+    exitCode: 0
+    prerequisite: null
+expectedOutputs:
+  - field: ontologyId
+    present: true
+    value: any-non-empty
+    snippet: '"ontologyId": "v0.4-biomedical-grounding"'
+  - field: verdict
+    present: true
+    value: supported
+    snippet: '"verdict": "supported"'
+  - field: unknownReason
+    present: true
+    value: any-non-empty
+    snippet: '"unknownReason": "insufficient_axioms"'
+  - field: verdict
+    present: true
+    value: out_of_scope
+    snippet: '"verdict": "out_of_scope"'
+ciRequired: true
+platformLimitations:
+  - platform: windows
+    note: Use node npm/bin/owl4agents.js entry point; direct jar execution may crash on some Windows setups
+attribution:
+  source: project
+  license: Apache-2.0
