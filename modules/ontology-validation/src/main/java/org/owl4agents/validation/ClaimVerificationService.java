@@ -97,7 +97,8 @@ public class ClaimVerificationService {
 
         return buildResult(claim, ontId, verdict, evidence,
             entailment.result().equals(EntailmentResult.UNSUPPORTED_AXIOM_TYPE)
-                ? Optional.of(UnknownReason.UNSUPPORTED_CLAIM_TYPE) : Optional.empty(),
+                ? Optional.of(UnknownReason.UNSUPPORTED_CLAIM_TYPE)
+                : (verdict == Verdict.UNKNOWN ? Optional.of(UnknownReason.INSUFFICIENT_AXIOMS) : Optional.empty()),
             Optional.empty());
     }
 

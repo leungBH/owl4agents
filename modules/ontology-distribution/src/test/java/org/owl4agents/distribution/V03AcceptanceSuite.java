@@ -179,8 +179,8 @@ class V03AcceptanceSuite {
             ClaimVerificationResult result = verify(claim);
 
             assertEquals(Verdict.UNKNOWN, result.verdict());
-            assertTrue(result.unknownReason().isEmpty(),
-                "Simple non-entailment should be unknown without inventing a contradiction reason");
+            assertEquals(Optional.of(UnknownReason.INSUFFICIENT_AXIOMS), result.unknownReason(),
+                "Non-entailed subclass claim should have insufficient_axioms reason");
         }
 
         @Test
