@@ -21,27 +21,27 @@ fixtures:
     attribution: project
 commands:
   - step: Import the golden ontology into workspace
-    exec: node npm/bin/owl4agents.js import test/corpus/golden/v0.3-claim-verification.owl v0.3-claim-verification --workspace temp/examples/claim-verification
+    exec: node npm/bin/owl4agents.js import test/corpus/golden/v0.3-claim-verification.owl v0.3-claim-verification --workspace claim-demo
     exitCode: 0
     prerequisite: null
   - step: Verify supported claim — Dog is a subclass of Animal
-    exec: node npm/bin/owl4agents.js verify-claim v0.3-claim-verification --claim test/fixtures/v0.3/claim-supported.json --workspace temp/examples/claim-verification --json
+    exec: node npm/bin/owl4agents.js verify-claim v0.3-claim-verification --claim test/fixtures/v0.3/claim-supported.json --workspace claim-demo --json
     exitCode: 0
     prerequisite: null
   - step: Run reasoner before contradicted verification
-    exec: node npm/bin/owl4agents.js reason v0.3-claim-verification --workspace temp/examples/claim-verification
+    exec: node npm/bin/owl4agents.js reason v0.3-claim-verification --workspace claim-demo
     exitCode: 0
     prerequisite: required for contradicted and unknown verdicts that depend on inferred facts
-  - step: Verify contradicted claim — Dog is disjoint with Cat
-    exec: node npm/bin/owl4agents.js verify-claim v0.3-claim-verification --claim test/fixtures/v0.3/claim-contradicted.json --workspace temp/examples/claim-verification --json
+  - step: Verify contradicted claim — Dog is compatible with Cat (but they are disjoint)
+    exec: node npm/bin/owl4agents.js verify-claim v0.3-claim-verification --claim test/fixtures/v0.3/claim-contradicted.json --workspace claim-demo --json
     exitCode: 0
     prerequisite: reason must be run first
   - step: Verify unknown claim — Goldfish is a subclass of Fish (no connecting axioms)
-    exec: node npm/bin/owl4agents.js verify-claim v0.3-claim-verification --claim test/fixtures/v0.3/claim-unknown.json --workspace temp/examples/claim-verification --json
+    exec: node npm/bin/owl4agents.js verify-claim v0.3-claim-verification --claim test/fixtures/v0.3/claim-unknown.json --workspace claim-demo --json
     exitCode: 0
     prerequisite: null
   - step: Verify out_of_scope claim — DeliveryPrice is not in ontology scope
-    exec: node npm/bin/owl4agents.js verify-claim v0.3-claim-verification --claim test/fixtures/v0.3/claim-real-out-of-scope.json --workspace temp/examples/claim-verification --json
+    exec: node npm/bin/owl4agents.js verify-claim v0.3-claim-verification --claim test/fixtures/v0.3/claim-real-out-of-scope.json --workspace claim-demo --json
     exitCode: 0
     prerequisite: null
 expectedOutputs:

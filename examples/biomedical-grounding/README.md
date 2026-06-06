@@ -5,7 +5,7 @@ This example demonstrates how owl4agents can ground agent answers in a domain on
 ## What it demonstrates
 
 - **Search**: Find ontology entities by label or keyword (e.g., searching for "Hypertension")
-- **Class context**: Explore disease hierarchy, phenotypes, and organ relationships
+- **Entity context**: Explore disease hierarchy, phenotypes, and organ relationships
 - **Claim verification**: Verify whether a biomedical claim is supported, contradicted, unknown, or out of scope
 
 The fixture is intentionally small (8-12 classes) so that CI can run it deterministically. Large real-world ontologies like GO, HPO, or Mondo are referenced in documentation only — they are not required for this example.
@@ -33,13 +33,13 @@ Run from the repository root:
 ### 1. Import the biomedical golden ontology
 
 ```bash
-node npm/bin/owl4agents.js import test/corpus/golden/v0.4-biomedical-grounding.owl v0.4-biomedical-grounding --workspace temp/examples/biomedical-grounding
+node npm/bin/owl4agents.js import test/corpus/golden/v0.4-biomedical-grounding.owl v0.4-biomedical-grounding --workspace bio-demo
 ```
 
 ### 2. Search for Hypertension
 
 ```bash
-node npm/bin/owl4agents.js search v0.4-biomedical-grounding Hypertension --workspace temp/examples/biomedical-grounding
+node npm/bin/owl4agents.js search v0.4-biomedical-grounding Hypertension --workspace bio-demo
 ```
 
 Expected output snippet:
@@ -52,18 +52,26 @@ Expected output snippet:
 }
 ```
 
-### 3. Get class context for Hypertension
+### 3. Get entity context for Hypertension
 
 ```bash
-node npm/bin/owl4agents.js class-context v0.4-biomedical-grounding http://example.org/v0.4-biomedical#Hypertension --workspace temp/examples/biomedical-grounding
+node npm/bin/owl4agents.js entity v0.4-biomedical-grounding http://example.org/v0.4-biomedical#Hypertension --workspace bio-demo
 ```
 
 Expected: shows Hypertension → CardiovascularDisease → ChronicDisease → Disease hierarchy.
 
-### 4. Verify supported claim — Hypertension is a Disease
+### 4. Run reasoner for inferred facts
 
 ```bash
-node npm/bin/owl4agents.js verify-claim v0.4-biomedical-grounding --claim test/fixtures/v0.4/claim-bio-supported.json --workspace temp/examples/biomedical-grounding --json
+node npm/bin/owl4agents.js reason v0.4-biomedical-grounding --workspace bio-demo
+```
+
+Expected: reasoner classifies the ontology, produces inferred hierarchy and type information.
+
+### 5. Verify supported claim — Hypertension is a Disease
+
+```bash
+node npm/bin/owl4agents.js verify-claim v0.4-biomedical-grounding --claim test/fixtures/v0.4/claim-bio-supported.json --workspace bio-demo --json
 ```
 
 Expected output snippet:
@@ -76,10 +84,10 @@ Expected output snippet:
 }
 ```
 
-### 5. Verify unknown claim — Arthritis is an InfectiousDisease
+### 6. Verify unknown claim — Arthritis is an InfectiousDisease
 
 ```bash
-node npm/bin/owl4agents.js verify-claim v0.4-biomedical-grounding --claim test/fixtures/v0.4/claim-bio-unknown.json --workspace temp/examples/biomedical-grounding --json
+node npm/bin/owl4agents.js verify-claim v0.4-biomedical-grounding --claim test/fixtures/v0.4/claim-bio-unknown.json --workspace bio-demo --json
 ```
 
 Expected output snippet:
@@ -93,10 +101,10 @@ Expected output snippet:
 
 Arthritis IS a ChronicDisease (subclass), but NOT an InfectiousDisease. The ontology marks InfectiousDisease as disjoint with ChronicDisease, so a reasoner would classify this as `contradicted`. Without the reasoner, it returns `unknown` because no direct axiom connects Arthritis to InfectiousDisease.
 
-### 6. Verify out_of_scope claim — CancerStage is not in ontology
+### 7. Verify out_of_scope claim — CancerStage is not in ontology
 
 ```bash
-node npm/bin/owl4agents.js verify-claim v0.4-biomedical-grounding --claim test/fixtures/v0.4/claim-bio-out-of-scope.json --workspace temp/examples/biomedical-grounding --json
+node npm/bin/owl4agents.js verify-claim v0.4-biomedical-grounding --claim test/fixtures/v0.4/claim-bio-out-of-scope.json --workspace bio-demo --json
 ```
 
 Expected output snippet:

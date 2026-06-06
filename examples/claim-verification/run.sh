@@ -4,7 +4,7 @@
 
 set -e
 
-WS_HOME="temp/examples/claim-verification"
+WS_HOME="claim-demo"
 
 echo "=== Step 1: Import golden ontology ==="
 node npm/bin/owl4agents.js import test/corpus/golden/v0.3-claim-verification.owl v0.3-claim-verification --workspace "$WS_HOME"

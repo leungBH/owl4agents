@@ -25,6 +25,7 @@ public class ReasonerServiceImpl implements ReasonerService {
     private final ReasonerLifecycleManager lifecycleManager;
     private final CatalogStore catalogStore;
     private final String workspaceBasePath;
+    private final String workspaceName;
 
     /**
      * Get the lifecycle manager for sharing with other services (e.g. consistency analysis).
@@ -34,9 +35,14 @@ public class ReasonerServiceImpl implements ReasonerService {
     }
 
     public ReasonerServiceImpl(CatalogStore catalogStore, String workspaceBasePath) {
+        this(catalogStore, workspaceBasePath, "default");
+    }
+
+    public ReasonerServiceImpl(CatalogStore catalogStore, String workspaceBasePath, String workspaceName) {
         this.lifecycleManager = new ReasonerLifecycleManager();
         this.catalogStore = catalogStore;
         this.workspaceBasePath = workspaceBasePath;
+        this.workspaceName = workspaceName;
     }
 
     @Override
@@ -376,7 +382,7 @@ public class ReasonerServiceImpl implements ReasonerService {
     }
 
     private Path resolveOntologyPath(OntologyId ontologyId) {
-        return Path.of(workspaceBasePath, "default", "ontologies", ontologyId.id(), "canonical", "ontology.owl");
+        return Path.of(workspaceBasePath, workspaceName, "ontologies", ontologyId.id(), "canonical", "ontology.owl");
     }
 
     private String detectProfile(OWLOntology ontology) {
@@ -408,7 +414,7 @@ public class ReasonerServiceImpl implements ReasonerService {
     }
 
     private Path getInferredDir(OntologyId ontologyId) {
-        return Path.of(workspaceBasePath, "default", "ontologies", ontologyId.id(), "inferred");
+        return Path.of(workspaceBasePath, workspaceName, "ontologies", ontologyId.id(), "inferred");
     }
 
     private void storeInferredData(OntologyId ontologyId,
@@ -658,7 +664,7 @@ public class ReasonerServiceImpl implements ReasonerService {
             if (home == null || home.isBlank()) {
                 // Heuristic: look in the current user's home for the owl4agents default workspace
                 String userHome = System.getProperty("user.home");
-                Path candidate = Path.of(userHome, ".owl4agents", "workspaces", "default", "ontologies",
+                Path candidate = Path.of(userHome, ".owl4agents", "workspaces", workspaceName, "ontologies",
                     resolveOntologyIdFromOntology(ontology), "inferred", "inferred-class-hierarchy.jsonl");
                 if (Files.exists(candidate)) {
                     return scanHierarchyFile(candidate, subject, object);
@@ -677,7 +683,7 @@ public class ReasonerServiceImpl implements ReasonerService {
     }
 
     private Path findInferredFile(String homeDir, String fileName) throws IOException {
-        Path ontologiesRoot = Path.of(homeDir, "workspaces", "default", "ontologies");
+        Path ontologiesRoot = Path.of(homeDir, "workspaces", workspaceName, "ontologies");
         if (!Files.exists(ontologiesRoot)) return null;
         try (Stream<Path> paths = Files.walk(ontologiesRoot)) {
             return paths

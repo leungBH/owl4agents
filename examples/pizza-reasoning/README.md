@@ -8,9 +8,9 @@ owl4agents can import a real-world ontology, summarize its structure, explore cl
 
 - **Import**: Load an OWL ontology from file into the workspace catalog
 - **Summary**: Get entity counts (classes, properties, individuals)
-- **Class context**: Explore subclass hierarchy, restrictions, and equivalent classes
+- **Entity context**: Explore subclass hierarchy, restrictions, and equivalent classes
 - **Classification**: Run a reasoner and get inferred taxonomy
-- **Property context**: Inspect object property domain, range, and characteristics
+- **Property characteristics**: Inspect object property domain, range, and characteristics
 
 ## Prerequisites
 
@@ -25,7 +25,7 @@ Run from the repository root:
 ### 1. Import the Pizza ontology
 
 ```bash
-node npm/bin/owl4agents.js import test/corpus/smoke/pizza.owl pizza --workspace temp/examples/pizza-reasoning
+node npm/bin/owl4agents.js import test/corpus/smoke/pizza.owl pizza --workspace pizza-demo
 ```
 
 Expected: exit code 0, ontology ID `pizza` registered in workspace.
@@ -33,7 +33,7 @@ Expected: exit code 0, ontology ID `pizza` registered in workspace.
 ### 2. Get ontology summary
 
 ```bash
-node npm/bin/owl4agents.js summary pizza --workspace temp/examples/pizza-reasoning
+node npm/bin/owl4agents.js summary pizza --workspace pizza-demo
 ```
 
 Expected output snippet:
@@ -46,10 +46,10 @@ Expected output snippet:
 }
 ```
 
-### 3. Explore class context (Margherita pizza)
+### 3. Explore entity context (Margherita pizza)
 
 ```bash
-node npm/bin/owl4agents.js class-context pizza http://www.co-ode.org/ontologies/pizza/pizza.owl#Margherita --workspace temp/examples/pizza-reasoning
+node npm/bin/owl4agents.js entity pizza http://www.co-ode.org/ontologies/pizza/pizza.owl#Margherita --workspace pizza-demo
 ```
 
 Expected: class hierarchy showing Margherita as a subclass of NamedPizza, with restrictions on toppings.
@@ -57,7 +57,7 @@ Expected: class hierarchy showing Margherita as a subclass of NamedPizza, with r
 ### 4. Run reasoner classification
 
 ```bash
-node npm/bin/owl4agents.js classify pizza --workspace temp/examples/pizza-reasoning
+node npm/bin/owl4agents.js classify pizza --workspace pizza-demo
 ```
 
 Expected output snippet:
@@ -69,10 +69,10 @@ Expected output snippet:
 }
 ```
 
-### 5. Explore property context (hasTopping)
+### 5. Explore property characteristics (hasTopping)
 
 ```bash
-node npm/bin/owl4agents.js property-context pizza http://www.co-ode.org/ontologies/pizza/pizza.owl#hasTopping --workspace temp/examples/pizza-reasoning
+node npm/bin/owl4agents.js properties pizza --property http://www.co-ode.org/ontologies/pizza/pizza.owl#hasTopping --workspace pizza-demo
 ```
 
 Expected: property domain, range, and characteristics.

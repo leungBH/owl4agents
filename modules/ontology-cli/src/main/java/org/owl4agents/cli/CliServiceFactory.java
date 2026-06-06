@@ -174,15 +174,15 @@ public class CliServiceFactory {
 
     /**
      * Get the reasoner service instance.
-     * ReasonerServiceImpl resolves ontology paths as workspaceBasePath/default/ontologies/{id}/...
-     * The importer stores ontologies at homeDir/workspaces/default/ontologies/{id}/...
-     * So we pass homeDir/workspaces as the base path so the "default" segment aligns.
+     * ReasonerServiceImpl resolves ontology paths as workspaceBasePath/{workspaceName}/ontologies/{id}/...
+     * The importer stores ontologies at homeDir/workspaces/{workspaceName}/ontologies/{id}/...
+     * So we pass homeDir/workspaces as the base path and the workspace name.
      */
     public ReasonerServiceImpl getReasonerService() {
         if (reasonerService == null) {
             String workspaceBasePath = getHomeResolver().resolveHomeDirectory()
                 .resolve("workspaces").toString();
-            reasonerService = new ReasonerServiceImpl(getCatalogStore(), workspaceBasePath);
+            reasonerService = new ReasonerServiceImpl(getCatalogStore(), workspaceBasePath, workspaceName);
         }
         return reasonerService;
     }

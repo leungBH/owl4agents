@@ -7,7 +7,7 @@ This example demonstrates all four claim verification verdicts: **supported**, *
 owl4agents can verify structured claims against an OWL ontology and return a verdict with evidence:
 
 - **Supported**: The ontology entails the claim (Dog is a subclass of Animal)
-- **Contradicted**: The ontology contradicts the claim (Dog is disjoint with Cat)
+- **Contradicted**: The ontology contradicts the claim (Dog is compatible with Cat, but they are disjoint)
 - **Unknown**: The ontology does not entail or contradict the claim (Goldfish → Fish has no connecting axioms)
 - **Out of scope**: The claim references an entity not in the ontology (DeliveryPrice is not in the Animal ontology)
 
@@ -24,13 +24,13 @@ Run from the repository root:
 ### 1. Import the golden ontology
 
 ```bash
-node npm/bin/owl4agents.js import test/corpus/golden/v0.3-claim-verification.owl v0.3-claim-verification --workspace temp/examples/claim-verification
+node npm/bin/owl4agents.js import test/corpus/golden/v0.3-claim-verification.owl v0.3-claim-verification --workspace claim-demo
 ```
 
 ### 2. Verify a supported claim
 
 ```bash
-node npm/bin/owl4agents.js verify-claim v0.3-claim-verification --claim test/fixtures/v0.3/claim-supported.json --workspace temp/examples/claim-verification --json
+node npm/bin/owl4agents.js verify-claim v0.3-claim-verification --claim test/fixtures/v0.3/claim-supported.json --workspace claim-demo --json
 ```
 
 Expected output snippet:
@@ -49,7 +49,7 @@ Expected output snippet:
 ### 3. Run reasoner (required before contradicted verification)
 
 ```bash
-node npm/bin/owl4agents.js reason v0.3-claim-verification --workspace temp/examples/claim-verification
+node npm/bin/owl4agents.js reason v0.3-claim-verification --workspace claim-demo
 ```
 
 **Note:** The contradicted claim relies on explicit disjointness axioms. Reasoning is recommended for full evidence but the basic disjointness check works with explicit scope.
@@ -57,7 +57,7 @@ node npm/bin/owl4agents.js reason v0.3-claim-verification --workspace temp/examp
 ### 4. Verify a contradicted claim
 
 ```bash
-node npm/bin/owl4agents.js verify-claim v0.3-claim-verification --claim test/fixtures/v0.3/claim-contradicted.json --workspace temp/examples/claim-verification --json
+node npm/bin/owl4agents.js verify-claim v0.3-claim-verification --claim test/fixtures/v0.3/claim-contradicted.json --workspace claim-demo --json
 ```
 
 Expected output snippet:
@@ -75,7 +75,7 @@ Expected output snippet:
 ### 5. Verify an unknown claim
 
 ```bash
-node npm/bin/owl4agents.js verify-claim v0.3-claim-verification --claim test/fixtures/v0.3/claim-unknown.json --workspace temp/examples/claim-verification --json
+node npm/bin/owl4agents.js verify-claim v0.3-claim-verification --claim test/fixtures/v0.3/claim-unknown.json --workspace claim-demo --json
 ```
 
 Expected output snippet:
@@ -91,7 +91,7 @@ Expected output snippet:
 ### 6. Verify an out_of_scope claim
 
 ```bash
-node npm/bin/owl4agents.js verify-claim v0.3-claim-verification --claim test/fixtures/v0.3/claim-real-out-of-scope.json --workspace temp/examples/claim-verification --json
+node npm/bin/owl4agents.js verify-claim v0.3-claim-verification --claim test/fixtures/v0.3/claim-real-out-of-scope.json --workspace claim-demo --json
 ```
 
 Expected output snippet:

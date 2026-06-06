@@ -3,7 +3,7 @@ REM Pizza reasoning example runner for Windows
 REM Uses npm launcher as entry point
 setlocal
 
-set WS_HOME=temp\examples\pizza-reasoning
+set WS_HOME=pizza-demo
 
 echo === Step 1: Import Pizza ontology ===
 node npm\bin\owl4agents.js import test\corpus\smoke\pizza.owl pizza --workspace %WS_HOME%
@@ -19,10 +19,10 @@ if %errorlevel% neq 0 (
     exit /b %errorlevel%
 )
 
-echo === Step 3: Class context ===
-node npm\bin\owl4agents.js class-context pizza http://www.co-ode.org/ontologies/pizza/pizza.owl#Margherita --workspace %WS_HOME%
+echo === Step 3: Entity context ===
+node npm\bin\owl4agents.js entity pizza http://www.co-ode.org/ontologies/pizza/pizza.owl#Margherita --workspace %WS_HOME%
 if %errorlevel% neq 0 (
-    echo FAILED: Class context step failed with exit code %errorlevel%
+    echo FAILED: Entity context step failed with exit code %errorlevel%
     exit /b %errorlevel%
 )
 
@@ -33,10 +33,10 @@ if %errorlevel% neq 0 (
     exit /b %errorlevel%
 )
 
-echo === Step 5: Property context ===
-node npm\bin\owl4agents.js property-context pizza http://www.co-ode.org/ontologies/pizza/pizza.owl#hasTopping --workspace %WS_HOME%
+echo === Step 5: Property characteristics ===
+node npm\bin\owl4agents.js properties pizza --property http://www.co-ode.org/ontologies/pizza/pizza.owl#hasTopping --workspace %WS_HOME%
 if %errorlevel% neq 0 (
-    echo FAILED: Property context step failed with exit code %errorlevel%
+    echo FAILED: Property characteristics step failed with exit code %errorlevel%
     exit /b %errorlevel%
 )
 

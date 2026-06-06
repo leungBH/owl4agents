@@ -153,11 +153,11 @@ class FixtureAcceptanceTest {
         }
 
         @Test
-        @DisplayName("Contradicted claim fixture contains DISJOINT_CLASSES type")
-        void contradictedClaimContainsDisjointType() {
+        @DisplayName("Contradicted claim fixture contains CLASS_COMPATIBILITY type")
+        void contradictedClaimContainsClassCompatibilityType() {
             Path fixture = FIXTURES_BASE.resolve("claim-contradicted.json");
             String content = readFile(fixture);
-            assertTrue(content.contains("disjoint_classes"), "Contradicted fixture must contain disjoint_classes claim type");
+            assertTrue(content.contains("class_compatibility"), "Contradicted fixture must contain class_compatibility claim type");
         }
 
         @Test
