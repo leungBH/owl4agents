@@ -57,14 +57,24 @@ This is a sanitized transcript showing a real MCP tool call to `ontology_verify_
   "result": {
     "tools": [
       {
-        "name": "ontology_import",
-        "description": "Import an OWL ontology from a file path",
-        "inputSchema": { "type": "object", "properties": { "filePath": { "type": "string" }, "workspaceHome": { "type": "string" } }, "required": ["filePath"] }
+        "name": "ontology_summary",
+        "description": "Get a summary of an ontology's classes, properties, and individuals",
+        "inputSchema": { "type": "object", "properties": { "ontologyId": { "type": "string" } }, "required": ["ontologyId"] }
       },
       {
         "name": "ontology_verify_claim",
         "description": "Verify a structured claim against an ontology",
         "inputSchema": { "type": "object", "properties": { "ontologyId": { "type": "string" }, "claim": { "type": "object" } }, "required": ["ontologyId", "claim"] }
+      },
+      {
+        "name": "ontology_classify",
+        "description": "Classify an ontology using a reasoner",
+        "inputSchema": { "type": "object", "properties": { "ontologyId": { "type": "string" }, "reasonerName": { "type": "string" } }, "required": ["ontologyId"] }
+      },
+      {
+        "name": "ontology_get_evidence_path",
+        "description": "Get the evidence path for a claim verification result",
+        "inputSchema": { "type": "object", "properties": { "ontologyId": { "type": "string" }, "claimId": { "type": "string" } }, "required": ["ontologyId", "claimId"] }
       }
     ]
   }

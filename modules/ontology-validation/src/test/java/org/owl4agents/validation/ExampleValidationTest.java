@@ -258,13 +258,33 @@ class ExampleValidationTest {
         }
 
         @Test
-        @DisplayName("Root README exists and links examples section")
+        @DisplayName("Root README exists and links all four example packs")
         void rootReadmeLinksExamples() {
             Path readme = PROJECT_ROOT.resolve("README.md");
             assertTrue(Files.exists(readme), "Root README must exist");
             String content = readFile(readme);
-            // Will be updated in task 6.1 — for now just verify README exists
-            // The full "links every required example" check will pass after task 6.1 is done
+
+            // Verify README links each required example pack
+            for (String id : REQUIRED_EXAMPLE_IDS) {
+                assertTrue(content.contains("examples/" + id + "/") || content.contains("examples/" + id + ")"),
+                    "Root README must link example pack '" + id + "' — expected 'examples/" + id + "/' or 'examples/" + id + ")'");
+            }
+
+            // Verify quick start uses short workspace names, not path-style
+            // Only check code-block commands, not prose references like gitignore rules
+            java.util.regex.Pattern codeBlockPattern = java.util.regex.Pattern.compile("--workspace\\s+(\\S+)");
+            java.util.regex.Matcher wsMatcher = codeBlockPattern.matcher(content);
+            while (wsMatcher.find()) {
+                String wsValue = wsMatcher.group(1).trim();
+                assertFalse(wsValue.startsWith("temp/"),
+                    "Quick start --workspace values must be short names, not path-style: found '--workspace " + wsValue + "'");
+            }
+            assertTrue(content.contains("claim-demo"),
+                "Root README must reference workspace 'claim-demo' in quick start");
+            assertTrue(content.contains("pizza-demo"),
+                "Root README must reference workspace 'pizza-demo' in quick start");
+            assertTrue(content.contains("bio-demo"),
+                "Root README must reference workspace 'bio-demo' in quick start");
         }
 
         @Test

@@ -46,16 +46,18 @@ After building the jar, run any of these examples from the repository root:
 
 ```powershell
 # Claim verification — supported, contradicted, unknown, out_of_scope
-node npm/bin/owl4agents.js import test/corpus/golden/v0.3-claim-verification.owl v0.3-claim-verification --workspace temp/examples/claim-verification
-node npm/bin/owl4agents.js verify-claim v0.3-claim-verification --claim test/fixtures/v0.3/claim-supported.json --workspace temp/examples/claim-verification --json
+node npm/bin/owl4agents.js import test/corpus/golden/v0.3-claim-verification.owl v0.3-claim-verification --workspace claim-demo
+node npm/bin/owl4agents.js reason v0.3-claim-verification --workspace claim-demo
+node npm/bin/owl4agents.js verify-claim v0.3-claim-verification --claim test/fixtures/v0.3/claim-supported.json --workspace claim-demo --json
 
 # Pizza reasoning — import, summary, classify
-node npm/bin/owl4agents.js import test/corpus/smoke/pizza.owl pizza --workspace temp/examples/pizza-reasoning
-node npm/bin/owl4agents.js summary pizza --workspace temp/examples/pizza-reasoning
+node npm/bin/owl4agents.js import test/corpus/smoke/pizza.owl pizza --workspace pizza-demo
+node npm/bin/owl4agents.js summary pizza --workspace pizza-demo
 
 # Biomedical grounding — disease hierarchy and claim verification
-node npm/bin/owl4agents.js import test/corpus/golden/v0.4-biomedical-grounding.owl v0.4-biomedical-grounding --workspace temp/examples/biomedical-grounding
-node npm/bin/owl4agents.js verify-claim v0.4-biomedical-grounding --claim test/fixtures/v0.4/claim-bio-supported.json --workspace temp/examples/biomedical-grounding --json
+node npm/bin/owl4agents.js import test/corpus/golden/v0.4-biomedical-grounding.owl v0.4-biomedical-grounding --workspace bio-demo
+node npm/bin/owl4agents.js reason v0.4-biomedical-grounding --workspace bio-demo
+node npm/bin/owl4agents.js verify-claim v0.4-biomedical-grounding --claim test/fixtures/v0.4/claim-bio-supported.json --workspace bio-demo --json
 ```
 
 See [examples/README.md](examples/README.md) for full step-by-step commands, expected output snippets, and troubleshooting.

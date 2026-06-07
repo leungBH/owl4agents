@@ -174,8 +174,17 @@ class McpExampleValidationTest {
             if (!terminated) process.destroyForcibly();
 
             String response = output.toString();
-            assertTrue(response.contains("ontology_verify_claim") || response.contains("ontology_import") || response.contains("tools"),
-                "tools/list must return at least one tool name. Response: " + response);
+            // Assert explicit readonly tool names (ontology_import is a v0.8 write tool, not in READONLY_TOOLS)
+            assertTrue(response.contains("ontology_verify_claim"),
+                "tools/list must contain ontology_verify_claim tool. Response: " + response);
+            assertTrue(response.contains("ontology_summary"),
+                "tools/list must contain ontology_summary tool. Response: " + response);
+            assertTrue(response.contains("ontology_classify"),
+                "tools/list must contain ontology_classify tool. Response: " + response);
+            assertTrue(response.contains("ontology_get_evidence_path"),
+                "tools/list must contain ontology_get_evidence_path tool. Response: " + response);
+            assertFalse(response.contains("ACCESS_VIOLATION"),
+                "tools/list response must not contain crash text");
         }
     }
 
@@ -204,14 +213,19 @@ class McpExampleValidationTest {
         }
 
         @Test
-        @DisplayName("MCP transcript contains documented tool names")
+        @DisplayName("MCP transcript contains documented readonly tool names")
         void mcpTranscriptContainsToolNames() {
             Path transcript = PROJECT_ROOT.resolve("examples/agent-mcp/transcripts/verify-claim-transcript.md");
             String content = readFileSafe(transcript);
+            // v0.4 readonly tools — ontology_import is a v0.8 write tool, not expected in transcript tools/list
             assertTrue(content.contains("ontology_verify_claim"),
                 "Transcript must mention ontology_verify_claim tool");
-            assertTrue(content.contains("ontology_import"),
-                "Transcript must mention ontology_import tool or other documented tools");
+            assertTrue(content.contains("ontology_summary"),
+                "Transcript must mention ontology_summary tool");
+            assertTrue(content.contains("ontology_classify"),
+                "Transcript must mention ontology_classify tool");
+            assertFalse(content.contains("ontology_import"),
+                "Transcript must NOT contain ontology_import (v0.8 write tool, not in readonly tools/list)");
         }
 
         @Test

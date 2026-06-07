@@ -60,7 +60,7 @@ jobs:
         run: |
           export OWL4AGENTS_HOME="$RUNNER_TEMP/owl4agents-smoke-home"
           export OWL4AGENTS_RUNTIME="$GITHUB_WORKSPACE/modules/ontology-cli/build/libs/owl4agents.jar"
-          java -jar modules/ontology-cli/build/libs/owl4agents.jar smoke --workspace "$RUNNER_TEMP/owl4agents-smoke-ws" --mcp-readiness --timeout 30
+          java -jar modules/ontology-cli/build/libs/owl4agents.jar smoke --workspace smoke-demo --mcp-readiness --timeout 30
 
       - name: Verify mcp-config --client generic
         run: java -jar modules/ontology-cli/build/libs/owl4agents.jar mcp-config --client generic
@@ -87,47 +87,62 @@ jobs:
       - name: v0.4 Example validation — claim verification
         run: |
           export OWL4AGENTS_RUNTIME="$GITHUB_WORKSPACE/modules/ontology-cli/build/libs/owl4agents.jar"
-          WS_HOME="$RUNNER_TEMP/owl4agents-example-claim-verification"
-          # Import golden ontology
-          node npm/bin/owl4agents.js import test/corpus/golden/v0.3-claim-verification.owl v0.3-claim-verification --workspace "$WS_HOME"
+          export OWL4AGENTS_HOME="$RUNNER_TEMP/owl4agents-claim-demo"
+          # Import golden ontology into claim-demo workspace
+          node npm/bin/owl4agents.js import test/corpus/golden/v0.3-claim-verification.owl v0.3-claim-verification --workspace claim-demo
+          # Run reasoner (required for subclass entailment)
+          node npm/bin/owl4agents.js reason v0.3-claim-verification --workspace claim-demo
           # Verify supported claim
-          node npm/bin/owl4agents.js verify-claim v0.3-claim-verification --claim test/fixtures/v0.3/claim-supported.json --workspace "$WS_HOME" --json | grep -q "supported"
+          node npm/bin/owl4agents.js verify-claim v0.3-claim-verification --claim test/fixtures/v0.3/claim-supported.json --workspace claim-demo --json | grep -q "supported"
+          # Verify contradicted claim (Dog compatibleWith Cat — disjoint)
+          node npm/bin/owl4agents.js verify-claim v0.3-claim-verification --claim test/fixtures/v0.3/claim-contradicted.json --workspace claim-demo --json | grep -q "contradicted"
           # Verify unknown claim
-          node npm/bin/owl4agents.js verify-claim v0.3-claim-verification --claim test/fixtures/v0.3/claim-unknown.json --workspace "$WS_HOME" --json | grep -q "unknown"
+          node npm/bin/owl4agents.js verify-claim v0.3-claim-verification --claim test/fixtures/v0.3/claim-unknown.json --workspace claim-demo --json | grep -q "unknown"
           # Verify out_of_scope claim
-          node npm/bin/owl4agents.js verify-claim v0.3-claim-verification --claim test/fixtures/v0.3/claim-real-out-of-scope.json --workspace "$WS_HOME" --json | grep -q "out_of_scope"
-          echo "PASS: claim-verification example validation"
+          node npm/bin/owl4agents.js verify-claim v0.3-claim-verification --claim test/fixtures/v0.3/claim-real-out-of-scope.json --workspace claim-demo --json | grep -q "out_of_scope"
+          echo "PASS: claim-verification example validation (all 4 verdicts)"
 
       - name: v0.4 Example validation — pizza reasoning
         run: |
           export OWL4AGENTS_RUNTIME="$GITHUB_WORKSPACE/modules/ontology-cli/build/libs/owl4agents.jar"
-          WS_HOME="$RUNNER_TEMP/owl4agents-example-pizza"
-          # Import Pizza ontology
-          node npm/bin/owl4agents.js import test/corpus/smoke/pizza.owl pizza --workspace "$WS_HOME"
+          export OWL4AGENTS_HOME="$RUNNER_TEMP/owl4agents-pizza-demo"
+          # Import Pizza ontology into pizza-demo workspace
+          node npm/bin/owl4agents.js import test/corpus/smoke/pizza.owl pizza --workspace pizza-demo
           # Get summary
-          node npm/bin/owl4agents.js summary pizza --workspace "$WS_HOME" | grep -q "pizza"
+          node npm/bin/owl4agents.js summary pizza --workspace pizza-demo | grep -q "pizza"
+          # Get entity context for Pizza class
+          node npm/bin/owl4agents.js entity pizza "http://www.co-ode.org/ontologies/pizza/pizza.owl#Pizza" --workspace pizza-demo | grep -qi "pizza"
           # Classify
-          node npm/bin/owl4agents.js classify pizza --workspace "$WS_HOME" | grep -qi "hermit"
-          echo "PASS: pizza-reasoning example validation"
+          node npm/bin/owl4agents.js classify pizza --workspace pizza-demo | grep -qi "hermit"
+          # Get properties
+          node npm/bin/owl4agents.js properties pizza --property "http://www.co-ode.org/ontologies/pizza/pizza.owl#hasBase" --workspace pizza-demo | grep -qi "hasBase"
+          echo "PASS: pizza-reasoning example validation (5 steps)"
 
       - name: v0.4 Example validation — biomedical grounding
         run: |
           export OWL4AGENTS_RUNTIME="$GITHUB_WORKSPACE/modules/ontology-cli/build/libs/owl4agents.jar"
-          WS_HOME="$RUNNER_TEMP/owl4agents-example-biomedical"
-          # Import biomedical golden ontology
-          node npm/bin/owl4agents.js import test/corpus/golden/v0.4-biomedical-grounding.owl v0.4-biomedical-grounding --workspace "$WS_HOME"
+          export OWL4AGENTS_HOME="$RUNNER_TEMP/owl4agents-bio-demo"
+          # Import biomedical golden ontology into bio-demo workspace
+          node npm/bin/owl4agents.js import test/corpus/golden/v0.4-biomedical-grounding.owl v0.4-biomedical-grounding --workspace bio-demo
           # Search for Hypertension
-          node npm/bin/owl4agents.js search v0.4-biomedical-grounding Hypertension --workspace "$WS_HOME" | grep -q "Hypertension"
-          # Verify supported claim
-          node npm/bin/owl4agents.js verify-claim v0.4-biomedical-grounding --claim test/fixtures/v0.4/claim-bio-supported.json --workspace "$WS_HOME" --json | grep -q "supported"
+          node npm/bin/owl4agents.js search v0.4-biomedical-grounding Hypertension --workspace bio-demo | grep -q "Hypertension"
+          # Get entity context for Hypertension
+          node npm/bin/owl4agents.js entity v0.4-biomedical-grounding "http://example.org/v0.4-biomedical#Hypertension" --workspace bio-demo | grep -qi "Hypertension"
+          # Run reasoner (required for subclass entailment)
+          node npm/bin/owl4agents.js reason v0.4-biomedical-grounding --workspace bio-demo
+          # Verify supported claim (Hypertension subClassOf Disease)
+          node npm/bin/owl4agents.js verify-claim v0.4-biomedical-grounding --claim test/fixtures/v0.4/claim-bio-supported.json --workspace bio-demo --json | grep -q "supported"
+          # Verify unknown claim
+          node npm/bin/owl4agents.js verify-claim v0.4-biomedical-grounding --claim test/fixtures/v0.4/claim-bio-unknown.json --workspace bio-demo --json | grep -q "unknown"
           # Verify out_of_scope claim
-          node npm/bin/owl4agents.js verify-claim v0.4-biomedical-grounding --claim test/fixtures/v0.4/claim-bio-out-of-scope.json --workspace "$WS_HOME" --json | grep -q "out_of_scope"
-          echo "PASS: biomedical-grounding example validation"
+          node npm/bin/owl4agents.js verify-claim v0.4-biomedical-grounding --claim test/fixtures/v0.4/claim-bio-out-of-scope.json --workspace bio-demo --json | grep -q "out_of_scope"
+          echo "PASS: biomedical-grounding example validation (7 steps)"
 
       - name: v0.4 Example validation — MCP readiness (agent-mcp)
         run: |
           export OWL4AGENTS_RUNTIME="$GITHUB_WORKSPACE/modules/ontology-cli/build/libs/owl4agents.jar"
-          node npm/bin/owl4agents.js smoke --workspace "$RUNNER_TEMP/owl4agents-example-mcp" --mcp-readiness --timeout 30
+          export OWL4AGENTS_HOME="$RUNNER_TEMP/owl4agents-example-mcp"
+          node npm/bin/owl4agents.js smoke --workspace mcp-demo --mcp-readiness --timeout 30
           echo "PASS: agent-mcp MCP readiness validation"
 
   release-assets:
