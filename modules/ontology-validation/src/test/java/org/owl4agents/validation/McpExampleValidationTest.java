@@ -164,7 +164,7 @@ class McpExampleValidationTest {
                 String line = reader.readLine();
                 if (line != null && !line.trim().isEmpty()) {
                     output.append(line).append("\n");
-                    if (line.contains("ontology_verify_claim") || line.contains("ontology_import")) break;
+                    if (line.contains("ontology_verify_claim")) break;
                 }
             }
 
@@ -183,6 +183,8 @@ class McpExampleValidationTest {
                 "tools/list must contain ontology_classify tool. Response: " + response);
             assertTrue(response.contains("ontology_get_evidence_path"),
                 "tools/list must contain ontology_get_evidence_path tool. Response: " + response);
+            assertFalse(response.contains("ontology_import"),
+                "tools/list must not expose ontology_import in readonly mode");
             assertFalse(response.contains("ACCESS_VIOLATION"),
                 "tools/list response must not contain crash text");
         }

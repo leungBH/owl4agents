@@ -84,21 +84,23 @@ When the MCP server starts, it responds to the `initialize` request with:
 
 Send `tools/list` to discover available tools. The response includes readonly ontology and claim verification tools:
 
-- `ontology_import`
 - `ontology_summary`
 - `ontology_list`
-- `ontology_class_context`
-- `ontology_property_context`
-- `ontology_individual_context`
-- `ontology_reason`
+- `ontology_search_entities`
+- `ontology_get_entity_context`
 - `ontology_classify`
 - `ontology_verify_claim`
 - `ontology_get_evidence_path`
 - `ontology_find_counterexamples`
 - `ontology_explain_unknown`
 - `ontology_detect_missing_entities`
-- `ontology_sparql_query`
-- `ontology_search`
+- `ontology_sparql_select`
+- `ontology_sparql_ask`
+- `ontology_check_entailment`
+- `ontology_check_consistency`
+- `ontology_get_inferred_facts`
+
+> Note: `ontology_import` is a write tool planned for v0.8. It requires `--allow-write` and is not available in the default readonly MCP server.
 
 ## Tool-Call Transcript Sample
 
