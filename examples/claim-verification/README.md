@@ -107,6 +107,28 @@ Expected output snippet:
 
 - `test/corpus/golden/v0.3-claim-verification.owl` — Project-created golden ontology (Apache-2.0)
 - `test/fixtures/v0.3/claim-*.json` — Project-created claim fixtures (Apache-2.0)
+- `test/fixtures/v0.5/answer-claims-*.json` — v0.5 batch claim fixtures (Apache-2.0)
+
+## v0.5 Batch Workflow
+
+v0.5 adds batch claim verification for structured answer checking. Batch workflow commands require structured claim input (JSON with `answerId` and `claims[]` array) — they do not extract claims from free text.
+
+```bash
+# Import and reason over the Pizza ontology (used by v0.5 fixtures)
+node npm/bin/owl4agents.js import test/corpus/smoke/pizza.owl pizza-ontology --workspace claim-demo
+node npm/bin/owl4agents.js reason pizza-ontology --workspace claim-demo
+
+# Batch verify structured answer claims
+node npm/bin/owl4agents.js verify-answer pizza-ontology --claims test/fixtures/v0.5/answer-claims-supported.json --workspace claim-demo
+
+# Build evidence context for LLM agents
+node npm/bin/owl4agents.js evidence-context pizza-ontology --claims test/fixtures/v0.5/answer-claims-supported.json --max-context-tokens 500 --workspace claim-demo
+
+# Review answer claims with handling guidance
+node npm/bin/owl4agents.js review-answer pizza-ontology --claims test/fixtures/v0.5/answer-claims-mixed.json --policy strict --workspace claim-demo --json
+```
+
+See [agent-skills/](../agent-skills/) for cross-agent SOP packs for claim verification, evidence-grounded answering, and ontology scope checks.
 
 ## Troubleshooting
 

@@ -180,9 +180,9 @@ function main() {
     const pkgPath = path.resolve(__dirname, '..', 'package.json');
     try {
       const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf-8'));
-      console.log(pkg.version || '0.4.0');
+      console.log(pkg.version || '0.5.0');
     } catch {
-      console.log('0.4.0');
+      console.log('0.5.0');
     }
     process.exit(0);
   }
@@ -215,6 +215,10 @@ function main() {
     console.log('  counterexamples Find counterexamples for a claim');
     console.log('  explain-unknown Explain unknown verdict for a claim');
     console.log('  missing-entities Detect missing entities for a claim');
+    // v0.5 batch workflow commands
+    console.log('  verify-answer  Verify a batch of structured claims');
+    console.log('  evidence-context Build compact evidence context for LLM agents');
+    console.log('  review-answer  Review answer with policy-dependent guidance');
     process.exit(0);
   }
 

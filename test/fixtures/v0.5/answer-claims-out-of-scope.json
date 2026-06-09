@@ -1,0 +1,14 @@
+{
+  "answerId": "answer-out-of-scope-001",
+  "question": "What is the delivery price?",
+  "claims": [
+    {
+      "id": "c1",
+      "type": "subclass",
+      "required": true,
+      "subject": { "kind": "class", "iri": "http://example.org/v0.3#DeliveryPrice" },
+      "predicate": "subClassOf",
+      "object": { "kind": "class", "iri": "http://example.org/v0.3#Price" }
+    }
+  ]
+}

@@ -353,5 +353,52 @@ runTest('Help output does not contain placeholder text or empty success (V031-SM
   assert(!stdout.includes('placeholder'), 'Help should not contain "placeholder"');
 });
 
+// v0.5 command recognition tests
+
+runTest('Help output includes v0.5 batch workflow commands (V05-LAUNCH-001)', () => {
+  const { stdout, code } = runLauncher([]);
+  assert.strictEqual(code, 0);
+  assert(stdout.includes('verify-answer'), 'Help should list verify-answer command');
+  assert(stdout.includes('evidence-context'), 'Help should list evidence-context command');
+  assert(stdout.includes('review-answer'), 'Help should list review-answer command');
+});
+
+runTest('Launcher forwards verify-answer command to runtime (V05-LAUNCH-002)', () => {
+  const fakeRuntimePath = path.resolve(__dirname, 'fixtures', 'fake-runtime.js');
+  const { stdout, code, signal } = runLauncher(['verify-answer', 'pizza-ontology', '--claims', 'test.json'], {
+    runtime: fakeRuntimePath
+  });
+
+  assert(!signal, `Should not crash with signal: ${signal}`);
+  assert.strictEqual(code, 0, `Expected exit code 0, got ${code}`);
+  assert(stdout.includes('verify-answer'), 'Should forward "verify-answer"');
+  assert(stdout.includes('pizza-ontology'), 'Should forward ontology ID');
+  assert(stdout.includes('--claims'), 'Should forward "--claims"');
+});
+
+runTest('Launcher forwards evidence-context command to runtime (V05-LAUNCH-002)', () => {
+  const fakeRuntimePath = path.resolve(__dirname, 'fixtures', 'fake-runtime.js');
+  const { stdout, code, signal } = runLauncher(['evidence-context', 'pizza-ontology', '--claims', 'test.json'], {
+    runtime: fakeRuntimePath
+  });
+
+  assert(!signal, `Should not crash with signal: ${signal}`);
+  assert.strictEqual(code, 0, `Expected exit code 0, got ${code}`);
+  assert(stdout.includes('evidence-context'), 'Should forward "evidence-context"');
+});
+
+runTest('Launcher forwards review-answer command to runtime (V05-LAUNCH-002)', () => {
+  const fakeRuntimePath = path.resolve(__dirname, 'fixtures', 'fake-runtime.js');
+  const { stdout, code, signal } = runLauncher(['review-answer', 'pizza-ontology', '--claims', 'test.json', '--policy', 'strict'], {
+    runtime: fakeRuntimePath
+  });
+
+  assert(!signal, `Should not crash with signal: ${signal}`);
+  assert.strictEqual(code, 0, `Expected exit code 0, got ${code}`);
+  assert(stdout.includes('review-answer'), 'Should forward "review-answer"');
+  assert(stdout.includes('--policy'), 'Should forward "--policy"');
+  assert(stdout.includes('strict'), 'Should forward "strict"');
+});
+
 console.log(`\n  Results: ${passed} passed, ${failed} failed\n`);
 process.exit(failed > 0 ? 1 : 0);

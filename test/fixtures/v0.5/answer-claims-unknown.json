@@ -1,0 +1,18 @@
+{
+  "answerId": "answer-unknown-001",
+  "question": "Is Goldfish a kind of Fish?",
+  "claims": [
+    {
+      "id": "c1",
+      "type": "subclass",
+      "required": true,
+      "subject": { "kind": "class", "iri": "http://example.org/v0.3#Goldfish" },
+      "predicate": "subClassOf",
+      "object": { "kind": "class", "iri": "http://example.org/v0.3#Fish" }
+    }
+  ],
+  "options": {
+    "reasoner": "auto",
+    "requireReasoning": true
+  }
+}

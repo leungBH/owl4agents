@@ -14,7 +14,9 @@ import org.owl4agents.retrieval.*;
 import org.owl4agents.storage.*;
 import org.owl4agents.validation.ConsistencyAnalysisService;
 import org.owl4agents.validation.ClaimVerificationService;
+import org.owl4agents.validation.ClaimWorkflowService;
 import org.owl4agents.validation.EvidenceGroundingService;
+import org.owl4agents.validation.EvidenceContextBuilder;
 
 import org.semanticweb.owlapi.apibinding.OWLManager;
 import org.semanticweb.owlapi.model.OWLOntology;
@@ -47,6 +49,8 @@ public class CliServiceFactory {
     private ConsistencyAnalysisService consistencyAnalysisService;
     private ClaimVerificationService claimVerificationService;
     private EvidenceGroundingService evidenceGroundingService;
+    private ClaimWorkflowService claimWorkflowService;
+    private EvidenceContextBuilder evidenceContextBuilder;
 
     public CliServiceFactory(String workspaceName, String homeDirectory) {
         this.workspaceName = workspaceName;
@@ -241,6 +245,31 @@ public class CliServiceFactory {
             );
         }
         return evidenceGroundingService;
+    }
+
+    /**
+     * Get the claim workflow service instance for v0.5 batch verification.
+     */
+    public ClaimWorkflowService getClaimWorkflowService() {
+        if (claimWorkflowService == null) {
+            claimWorkflowService = new ClaimWorkflowService(
+                getClaimVerificationService(),
+                getEvidenceGroundingService(),
+                getCatalogStore(),
+                getWorkspaceId()
+            );
+        }
+        return claimWorkflowService;
+    }
+
+    /**
+     * Get the evidence context builder instance for v0.5 context generation.
+     */
+    public EvidenceContextBuilder getEvidenceContextBuilder() {
+        if (evidenceContextBuilder == null) {
+            evidenceContextBuilder = new EvidenceContextBuilder();
+        }
+        return evidenceContextBuilder;
     }
 
     /**

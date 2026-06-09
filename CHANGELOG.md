@@ -1,5 +1,43 @@
 # Changelog
 
+## 0.5.0 - 2026-06-07
+
+### Added
+
+- Added batch claim verification workflow: `ClaimBatchInput`, `ClaimWorkflowService`, `ClaimWorkflowResult`, `AnswerVerificationReport`, and `AggregateAnswerStatus` models.
+- Added `EvidenceContext` and `EvidenceContextBuilder` with deterministic `4 * maxContextTokens` character budget, source-order retention, `omittedEvidenceCount`, and `omittedClaimCount`.
+- Added CLI commands: `verify-answer`, `evidence-context`, and `review-answer` with `--policy` support (strict, conservative, report-only).
+- Added MCP tools: `ontology_verify_claims_batch`, `ontology_build_evidence_context`, `ontology_review_answer_claims` — all readonly, with CLI/MCP parity.
+- Added review policies: `strict` (default), `conservative`, and `report-only`; unsupported policy values rejected deterministically.
+- Added aggregate status rules: `invalid_input`, `contradicted`, `insufficient_evidence`, `out_of_scope`, `partially_verified`, and `verified` in priority order.
+- Added optional claim handling: `required` defaults to `true`, optional claims do not dominate aggregate status.
+- Added `ClaimBatchValidator` with deterministic field-level diagnostics for malformed input.
+- Added v0.5 fixtures: supported, contradicted, unknown, out_of_scope, partially_verified, mixed, optional-claim, malformed, and v0.3-wrapped batches.
+- Added `agent-skills/` directory with SOP packs: `owl4agents-claim-verification`, `owl4agents-evidence-grounded-answer`, `owl4agents-ontology-scope-check`.
+- Added shared policy references: `verdict-policy.md`, `claim-batch-schema.md`, `evidence-citation-policy.md`, `refusal-scope-policy.md`, `answer-review-sop.md`.
+- Added file-level MCP prompt templates: `verify-answer-with-ontology.md`, `ground-answer-with-evidence.md`, `explain-unknown-ontology-claim.md`.
+- Added test contracts: `agent-claim-workflow`, `evidence-context-format`, `agent-skill-packs`, `mcp-workflow-prompts`.
+- Added MCP schema tests for required ontology ID, structured claims, options, and error payloads.
+- Added CLI/MCP parity tests for all required fixture scenarios.
+- Added skill lint tests: placeholder text, missing references, stale commands, local paths, unsafe verdict policy, fabrication, portable paths, and fixture IDs.
+- Added fixture-to-gate mapping documenting each required validation gate's input fixture.
+
+### Changed
+
+- Updated README with v0.5 quick start, workflow CLI examples, MCP workflow tools, agent skill pack links, and repository contents.
+- Updated README roadmap to mark v0.5 delivered items and clarify that v0.5 requires structured claim input.
+- Updated MCP tool registry with v0.5 batch workflow tool names and schemas.
+- Updated `McpServerAdapter` with v0.5 workflow tool dispatch, serialization, and lazy service initialization.
+- Deferred protocol-level MCP prompt listing (absent in current adapter); file-level templates committed as release assets.
+
+### Notes
+
+- v0.5 does not extract claims from free text — agents must submit structured claim batches with `answerId`, `claims[]`, and per-claim `id`, `type`, `subject`, `predicate`, `object`.
+- The `4 * maxContextTokens` character budget controls evidence context truncation. All claim IDs and verdicts remain visible under truncation.
+- Evidence context never fabricates evidence — empty evidence lists are returned when no evidence is available.
+- The workflow service is readonly and does not mutate ontology state.
+- v0.3 single-claim fixtures can be wrapped into v0.5 batches without verdict changes.
+
 ## 0.4.0 - 2026-06-05
 
 ### Added
@@ -33,7 +71,7 @@
 - Example scripts use `node npm/bin/owl4agents.js` as the entry point — direct `java -jar` is not used due to the known Windows ACCESS_VIOLATION limitation.
 - Expected outputs use schema/field assertions, not byte-for-byte full-output snapshots.
 - Contradicted and unknown claim examples document reasoning prerequisites.
-- The `research-context` example is deferred to v0.5 pending fixture license and size review.
+- The `research-context` example is deferred to a future release pending fixture license and size review.
 
 All notable release changes for owl4agents are tracked here.
 

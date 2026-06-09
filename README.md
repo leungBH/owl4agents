@@ -4,9 +4,9 @@ Local OWL ontology runtime, reasoner integration, SPARQL query layer, and readon
 
 `owl4agents` is a local-first OWL/RDF ontology runtime for researchers and agent developers. It imports, manages, reasons over, queries, and retrieves structured semantic context from OWL ontologies, then exposes those capabilities through both CLI commands and an MCP server.
 
-> Status: v0.4 benchmark examples and demo packs. v0.4 adds runnable example packs under `examples/` for claim verification, pizza reasoning, MCP agent integration, and biomedical grounding, plus automated example validation as a release gate.
+> Status: v0.5 agent claim workflow and skill packs. v0.5 adds batch claim verification, evidence context for LLM agents, review-answer CLI/MCP commands, and public agent-skills/ SOP packs.
 
-## v0.4 Quick Start
+## v0.5 Quick Start
 
 ### Requirements
 
@@ -58,11 +58,17 @@ node npm/bin/owl4agents.js summary pizza --workspace pizza-demo
 node npm/bin/owl4agents.js import test/corpus/golden/v0.4-biomedical-grounding.owl v0.4-biomedical-grounding --workspace bio-demo
 node npm/bin/owl4agents.js reason v0.4-biomedical-grounding --workspace bio-demo
 node npm/bin/owl4agents.js verify-claim v0.4-biomedical-grounding --claim test/fixtures/v0.4/claim-bio-supported.json --workspace bio-demo --json
+
+# v0.5 Batch workflow — verify-answer, evidence-context, review-answer
+node npm/bin/owl4agents.js import test/corpus/smoke/pizza.owl pizza-ontology --workspace workflow-demo
+node npm/bin/owl4agents.js reason pizza-ontology --workspace workflow-demo
+node npm/bin/owl4agents.js verify-answer pizza-ontology --claims test/fixtures/v0.5/answer-claims-supported.json --workspace workflow-demo
+node npm/bin/owl4agents.js review-answer pizza-ontology --claims test/fixtures/v0.5/answer-claims-mixed.json --policy strict --workspace workflow-demo --json
 ```
 
 See [examples/README.md](examples/README.md) for full step-by-step commands, expected output snippets, and troubleshooting.
 
-### v0.4 Example Showcase
+### v0.4–v0.5 Example Showcase
 
 | Example | What it demonstrates | Interface | Fixture | Run time |
 | --- | --- | --- | --- | --- |
@@ -70,6 +76,8 @@ See [examples/README.md](examples/README.md) for full step-by-step commands, exp
 | [pizza-reasoning](examples/pizza-reasoning/) | Ontology import, summary, hierarchy, restrictions, classification | CLI | `test/corpus/smoke/pizza.owl` | ~10 seconds |
 | [agent-mcp](examples/agent-mcp/) | MCP client configuration, readonly startup, tool list, tool-call samples | MCP | None (starts MCP server) | ~5 seconds |
 | [biomedical-grounding](examples/biomedical-grounding/) | Biomedical-style grounding using a project-owned golden fixture | CLI | `test/corpus/golden/v0.4-biomedical-grounding.owl` | ~5 seconds |
+| Batch workflow | `verify-answer`, `evidence-context`, `review-answer` with policy | CLI/MCP | `test/fixtures/v0.5/` claim batch fixtures | ~5 seconds |
+| Agent skill packs | Cross-agent SOPs for claim verification, evidence-grounded answers, and scope checks | Reference | [agent-skills/](agent-skills/) | N/A (documentation) |
 
 All examples use `node npm/bin/owl4agents.js` as the CLI entry point. See each example's README for prerequisites, commands, and expected output.
 
@@ -139,6 +147,25 @@ node npm/bin/owl4agents.js missing-entities v0.3-claim-verification --claim test
 
 # Counterexamples are available only when a claim verdict is contradicted
 node npm/bin/owl4agents.js counterexamples v0.3-claim-verification --claim test/fixtures/v0.3/claim-supported.json
+```
+
+v0.5 batch claim workflow commands (structured claim input required — v0.5 does not extract claims from free text):
+
+```powershell
+# Import and reason over the Pizza ontology for v0.5 fixtures
+node npm/bin/owl4agents.js import test/corpus/smoke/pizza.owl pizza-ontology
+node npm/bin/owl4agents.js reason pizza-ontology --reasoner hermit
+
+# Batch verify structured answer claims
+node npm/bin/owl4agents.js verify-answer pizza-ontology --claims test/fixtures/v0.5/answer-claims-supported.json
+
+# Build compact evidence context for LLM agents
+node npm/bin/owl4agents.js evidence-context pizza-ontology --claims test/fixtures/v0.5/answer-claims-supported.json --max-context-tokens 500
+
+# Review answer claims with handling guidance (strict, conservative, or report-only policy)
+node npm/bin/owl4agents.js review-answer pizza-ontology --claims test/fixtures/v0.5/answer-claims-mixed.json --policy strict
+node npm/bin/owl4agents.js review-answer pizza-ontology --claims test/fixtures/v0.5/answer-claims-mixed.json --policy conservative
+node npm/bin/owl4agents.js review-answer pizza-ontology --claims test/fixtures/v0.5/answer-claims-mixed.json --policy report-only
 ```
 
 Or run the fat jar directly (Linux and macOS):
@@ -289,6 +316,16 @@ Useful v0.3 MCP tools include the inherited readonly query/reasoning surface plu
 | `ontology_find_counterexamples` | Find counterexamples for a contradicted claim |
 | `ontology_explain_unknown` | Explain why a claim received an unknown verdict with reason category and suggested action |
 | `ontology_detect_missing_entities` | Detect matched, ambiguous, missing, and out-of-scope entities in a claim |
+
+### v0.5 Batch Claim Workflow Tools
+
+| Tool | Purpose |
+| --- | --- |
+| `ontology_verify_claims_batch` | Verify a structured batch of answer claims and return per-claim verdicts plus aggregate status |
+| `ontology_build_evidence_context` | Build compact evidence context for LLM agents from workflow reports |
+| `ontology_review_answer_claims` | Review answer claims with strict, conservative, or report-only handling guidance |
+
+v0.5 workflow tools require structured claim input (batch JSON with `answerId`, `claims[]`, and per-claim `id`, `type`, `subject`, `predicate`, `object`). They do not extract claims from free text. See [agent-skills/](agent-skills/) for SOP packs.
 
 ## Why owl4agents
 
@@ -725,6 +762,9 @@ reasoning:
 
 agent:
   context
+  verify-answer
+  evidence-context
+  review-answer
   mcp
   inspect-tools
 
@@ -882,12 +922,12 @@ These are the tools that turn ontology access into answer verification.
 | Tool | Stage | Description |
 | --- | --- | --- |
 | `ontology_verify_claim` | v0.3 released | Verify one structured claim as `supported`, `contradicted`, `unknown`, or `out_of_scope` |
-| `ontology_verify_answer` | v0.5 | Verify multiple claims extracted from an agent answer |
-| `ontology_ground_claims` | v0.5 | Attach evidence paths, axioms, triples, and query results to claims |
+| `ontology_verify_claims_batch` | v0.5 | Verify a structured batch of answer claims and return per-claim verdicts plus aggregate status |
+| `ontology_build_evidence_context` | v0.5 | Build compact evidence context for LLM agents from workflow reports |
 | `ontology_find_counterexamples` | v0.3 released | Find facts or axioms that contradict a claim |
 | `ontology_check_constraints` | v0.7 | Validate data with SHACL or ontology-derived constraints |
 | `ontology_explain_unknown` | v0.3 released | Explain why a claim cannot be verified |
-| `ontology_assess_answer_coverage` | v0.5 | Check whether an answer missed important classes, relations, restrictions, or known exceptions |
+| `ontology_review_answer_claims` | v0.5 | Review answer claims with strict/conservative/report-only handling guidance |
 
 ### Retrieval and QA context tools
 
@@ -1249,41 +1289,29 @@ Released support:
 
 ### v0.5 Agent Claim Workflow
 
-Goal: move from individual tools to repeatable agent workflows for claim extraction, verification, and evidence-grounded answers.
+Goal: move from individual tools to repeatable agent workflows for structured claim handoff, verification, and evidence-grounded answers. v0.5 does not extract claims from free text — agents must submit structured claims.
 
-Planned support:
+Released support:
 
-- [ ] Natural-language-to-structured-claim handoff schema for agents, with examples but no hidden LLM dependency
-- [ ] Batch claim verification for answer-level checking
-- [ ] Evidence compact context format optimized for LLM consumption
-- [ ] Agent self-check workflow: extract claims, verify claims, explain unknowns, cite evidence, and refuse out-of-scope claims
-- [ ] Coverage assessment for missed entities, relations, restrictions, and known exceptions
-- [ ] Answer verification reports with per-claim verdicts and evidence summaries
-- [ ] CLI and MCP workflow templates for common agent loops
-- [ ] Regression fixtures from real agent-generated claims
-- [ ] Clear failure modes for malformed claims, unsupported natural-language extraction, and missing ontology scope
-- [ ] Optional CLI `examples`/`demo` discovery command based on v0.4 example pack experience
-
-Goal: move from individual tools to repeatable agent workflows for claim extraction, verification, and evidence-grounded answers.
-
-Planned support:
-
-- [ ] Natural-language-to-structured-claim handoff schema for agents, with examples but no hidden LLM dependency
-- [ ] Batch claim verification for answer-level checking
-- [ ] Evidence compact context format optimized for LLM consumption
-- [ ] Agent self-check workflow: extract claims, verify claims, explain unknowns, cite evidence, and refuse out-of-scope claims
-- [ ] Coverage assessment for missed entities, relations, restrictions, and known exceptions
-- [ ] Answer verification reports with per-claim verdicts and evidence summaries
-- [ ] CLI and MCP workflow templates for common agent loops
-- [ ] Regression fixtures from real agent-generated claims
-- [ ] Clear failure modes for malformed claims, unsupported natural-language extraction, and missing ontology scope
+- [x] Batch claim verification for answer-level checking (structured claim input required — v0.5 does not extract claims from free text)
+- [x] Evidence compact context format optimized for LLM consumption with deterministic `4 * maxContextTokens` character budget
+- [x] Agent self-check workflow: verify claims, explain unknowns, cite evidence, and refuse out-of-scope claims (claim preparation is manual — agents must submit structured claims)
+- [x] Answer verification reports with per-claim verdicts, aggregate status, and evidence summaries
+- [x] Workflow CLI commands: `verify-answer`, `evidence-context`, and `review-answer` with `--policy` support
+- [x] Readonly MCP workflow tools: `ontology_verify_claims_batch`, `ontology_build_evidence_context`, and `ontology_review_answer_claims`
+- [x] Public `agent-skills/` SOP packs for claim verification, evidence-grounded answering, and ontology scope checks
+- [x] File-level workflow prompt templates; protocol-level MCP prompt listing deferred (absent in current adapter)
+- [x] Regression fixtures for supported, contradicted, unknown, out_of_scope, partially_verified, mixed, optional-claim, malformed, and v0.3-wrapped batches
+- [x] Clear failure modes for malformed claims, unsupported natural-language extraction, and missing ontology scope
+- [ ] Natural-language-to-structured-claim handoff schema (deferred — v0.5 requires structured claim input; extraction from free text is future work)
 
 ### v0.6 Research Evaluation and Benchmarks
 
-Goal: prove and compare the value of ontology grounding with reproducible experiments.
+Goal: prove and compare the value of ontology grounding with reproducible experiments. Lessons from v0.5: structured claim input works well for deterministic workflows; natural-language claim extraction should be added here as an optional LLM-assisted step, not as a required pipeline stage.
 
 Planned support:
 
+- [ ] Natural-language-to-structured-claim extraction (optional, agent-side) — completing the deferred v0.5 handoff item
 - [ ] `context-batch` for question sets
 - [ ] Context export JSONL format
 - [ ] Benchmark runner for golden, Pizza, OWL2Bench, LUBM, and selected real-world corpus subsets
@@ -1370,6 +1398,13 @@ modules/
   ontology-cli/
   ontology-mcp/
   ontology-distribution/
+  ontology-validation/
+agent-skills/
+  README.md
+  _shared/references/   (verdict-policy, claim-batch-schema, evidence-citation-policy, refusal-scope-policy, answer-review-sop)
+  owl4agents-claim-verification/SKILL.md
+  owl4agents-evidence-grounded-answer/SKILL.md
+  owl4agents-ontology-scope-check/SKILL.md
 npm/
   bin/owl4agents.js
   test/launcher.test.js
@@ -1380,6 +1415,7 @@ scripts/
 test/
   corpus/
   contracts/
+  fixtures/v0.5/   (batch claim fixtures for v0.5 workflow)
 ```
 
 Local OpenSpec, design notes, acceptance reports, and temporary retrospectives may exist in this workspace, but they are intentionally ignored by Git for public release workflows.

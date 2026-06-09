@@ -3,7 +3,7 @@ package org.owl4agents.mcp;
 import java.util.*;
 
 /**
- * Registry of v0.1, v0.2, and v0.3 readonly MCP tools.
+ * Registry of v0.1, v0.2, v0.3, and v0.5 readonly MCP tools.
  * Lists available tools and their schemas.
  * Write-style tools are not included.
  */
@@ -64,7 +64,11 @@ public class McpToolRegistry {
         "ontology_get_evidence_path",
         "ontology_find_counterexamples",
         "ontology_explain_unknown",
-        "ontology_detect_missing_entities"
+        "ontology_detect_missing_entities",
+        // v0.5 batch verification and evidence context tools
+        "ontology_verify_claims_batch",
+        "ontology_build_evidence_context",
+        "ontology_review_answer_claims"
     );
 
     /**
@@ -197,6 +201,30 @@ public class McpToolRegistry {
         missingEntitiesSchema.put("terms", objectParam("Alternative: list of entity IRIs as JSON array"));
         schemas.add(toolSchema("ontology_detect_missing_entities", "Detect matched, ambiguous, missing, and out-of-scope entities in a claim",
             missingEntitiesSchema));
+
+        // v0.5 batch verification and evidence context tools
+        Map<String, Object> claimsBatchSchema = new LinkedHashMap<>();
+        claimsBatchSchema.put("ontology_id", stringParam("Ontology ID"));
+        claimsBatchSchema.put("claims", objectParam("Claims batch JSON: answerId, claims array with id/type/required/subject/predicate/object"));
+        claimsBatchSchema.put("options", objectParam("Optional workflow options: reasoner, requireReasoning, maxEvidencePerClaim, maxContextTokens"));
+        schemas.add(toolSchema("ontology_verify_claims_batch", "Verify a batch of structured claims and return an answer verification report with aggregate status",
+            claimsBatchSchema));
+
+        Map<String, Object> evidenceContextSchema = new LinkedHashMap<>();
+        evidenceContextSchema.put("report", stringParam("Answer verification report JSON (from verify-answer or review-answer). Either 'report' or 'ontology_id+claims' is required."));
+        evidenceContextSchema.put("ontology_id", stringParam("Ontology ID (required when 'report' is not provided)"));
+        evidenceContextSchema.put("claims", objectParam("Claims batch JSON: answerId, claims array (required when 'report' is not provided)"));
+        evidenceContextSchema.put("max_context_tokens", intParam("Maximum context tokens budget (0 = no truncation)", 0));
+        schemas.add(toolSchema("ontology_build_evidence_context", "Build compact evidence context from a claims batch for LLM agent prompts",
+            evidenceContextSchema));
+
+        Map<String, Object> reviewClaimsSchema = new LinkedHashMap<>();
+        reviewClaimsSchema.put("ontology_id", stringParam("Ontology ID"));
+        reviewClaimsSchema.put("claims", objectParam("Claims batch JSON: answerId, claims array"));
+        reviewClaimsSchema.put("max_context_tokens", intParam("Maximum context tokens budget (0 = no truncation)", 0));
+        reviewClaimsSchema.put("policy", stringParam("Review policy: strict (default), conservative, or report-only"));
+        schemas.add(toolSchema("ontology_review_answer_claims", "Review an answer by verifying claims and building evidence context with policy-dependent handling guidance",
+            reviewClaimsSchema));
 
         return schemas;
     }

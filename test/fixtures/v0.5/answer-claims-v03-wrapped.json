@@ -1,0 +1,17 @@
+{
+  "answerId": "answer-v03-wrapped-001",
+  "question": "Is Dog a kind of Animal?",
+  "claims": [
+    {
+      "id": "wrapped-claim-001",
+      "type": "subclass",
+      "subject": { "kind": "class", "iri": "http://example.org/v0.3#Dog" },
+      "predicate": "subClassOf",
+      "object": { "kind": "class", "iri": "http://example.org/v0.3#Animal" }
+    }
+  ],
+  "options": {
+    "reasoner": "auto",
+    "requireReasoning": true
+  }
+}

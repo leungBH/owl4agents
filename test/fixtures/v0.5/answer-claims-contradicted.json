@@ -1,0 +1,18 @@
+{
+  "answerId": "answer-contradicted-001",
+  "question": "Are Dogs compatible with Cats?",
+  "claims": [
+    {
+      "id": "c1",
+      "type": "class_compatibility",
+      "required": true,
+      "subject": { "kind": "class", "iri": "http://example.org/v0.3#Dog" },
+      "predicate": "compatibleWith",
+      "object": { "kind": "class", "iri": "http://example.org/v0.3#Cat" }
+    }
+  ],
+  "options": {
+    "reasoner": "auto",
+    "requireReasoning": true
+  }
+}

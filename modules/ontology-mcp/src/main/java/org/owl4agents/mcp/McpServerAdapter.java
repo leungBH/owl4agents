@@ -2,11 +2,24 @@ package org.owl4agents.mcp;
 
 import org.owl4agents.core.*;
 import org.owl4agents.core.model.*;
+import org.owl4agents.core.model.AnswerVerificationReport.VerdictSummary;
 import org.owl4agents.core.ClaimValidator;
+import org.owl4agents.validation.ClaimBatchValidator;
+import org.owl4agents.validation.ClaimWorkflowService;
+import org.owl4agents.validation.EvidenceContextBuilder;
 import org.owl4agents.owlapi.OntologySummaryExtractor;
 import org.owl4agents.query.*;
 import org.owl4agents.retrieval.*;
 import org.owl4agents.storage.*;
+
+import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
+import com.google.gson.TypeAdapter;
+import com.google.gson.TypeAdapterFactory;
+import com.google.gson.reflect.TypeToken;
+import com.google.gson.stream.JsonReader;
+import com.google.gson.stream.JsonToken;
+import com.google.gson.stream.JsonWriter;
 
 import org.semanticweb.owlapi.apibinding.OWLManager;
 import org.semanticweb.owlapi.model.OWLOntology;
@@ -19,7 +32,7 @@ import java.util.stream.Collectors;
 /**
  * MCP server adapter over the shared ontology services.
  * Exposes readonly tools from v0.1 import/query/context, v0.2 reasoning,
- * and v0.3 claim verification / evidence grounding.
+ * v0.3 claim verification / evidence grounding, and v0.5 batch workflow.
  * Write-style tool calls are rejected with readonly-policy errors.
  */
 public class McpServerAdapter {
@@ -40,6 +53,9 @@ public class McpServerAdapter {
     private org.owl4agents.owlapi.SemanticDeepeningService semanticDeepeningService;
     private org.owl4agents.validation.ClaimVerificationService claimVerificationService;
     private org.owl4agents.validation.EvidenceGroundingService evidenceGroundingService;
+    // v0.5 batch workflow services
+    private ClaimWorkflowService claimWorkflowService;
+    private EvidenceContextBuilder evidenceContextBuilder;
 
     /**
      * Get the cached reasoner service instance.
@@ -102,6 +118,28 @@ public class McpServerAdapter {
                 getReasonerService(), getConsistencyAnalysisService());
         }
         return evidenceGroundingService;
+    }
+
+    /**
+     * Get the cached claim workflow service instance for v0.5 batch verification.
+     */
+    private ClaimWorkflowService getClaimWorkflowService() {
+        if (claimWorkflowService == null) {
+            claimWorkflowService = new ClaimWorkflowService(
+                getClaimVerificationService(), getEvidenceGroundingService(),
+                catalogStore, new WorkspaceId("default"));
+        }
+        return claimWorkflowService;
+    }
+
+    /**
+     * Get the cached evidence context builder instance for v0.5 context generation.
+     */
+    private EvidenceContextBuilder getEvidenceContextBuilder() {
+        if (evidenceContextBuilder == null) {
+            evidenceContextBuilder = new EvidenceContextBuilder();
+        }
+        return evidenceContextBuilder;
     }
 
     public McpServerAdapter(Map<String, Object> serviceContext, String logFilePath) {
@@ -225,6 +263,10 @@ public class McpServerAdapter {
             case "ontology_find_counterexamples" -> { return executeFindCounterexamples(arguments); }
             case "ontology_explain_unknown" -> { return executeExplainUnknown(arguments); }
             case "ontology_detect_missing_entities" -> { return executeDetectMissingEntities(arguments); }
+            // v0.5 batch verification and evidence context tools
+            case "ontology_verify_claims_batch" -> { return executeVerifyClaimsBatch(arguments); }
+            case "ontology_build_evidence_context" -> { return executeBuildEvidenceContext(arguments); }
+            case "ontology_review_answer_claims" -> { return executeReviewAnswerClaims(arguments); }
             default -> { return errorResponse(ServiceError.readonlyViolation(toolName)); }
         }
     }
@@ -1311,6 +1353,415 @@ public class McpServerAdapter {
             .collect(Collectors.toList());
     }
 
+    // ── v0.5 batch verification and evidence context tools ──
+
+    private static final Gson gson = new GsonBuilder()
+        .registerTypeAdapterFactory(new OptionalTypeAdapterFactory())
+        .create();
+
+    /**
+     * Gson TypeAdapterFactory that handles {@link java.util.Optional} fields.
+     * Required because JDK 17+ module system blocks reflective access to
+     * Optional.value, causing InaccessibleObjectException with default Gson.
+     * Serializes Optional.empty() as null, Optional.of(value) as the inner value.
+     * Deserializes null as Optional.empty(), non-null as Optional.ofNullable(value).
+     */
+    private static class OptionalTypeAdapterFactory implements TypeAdapterFactory {
+        @Override
+        public <T> TypeAdapter<T> create(Gson gson, TypeToken<T> type) {
+            if (!java.util.Optional.class.isAssignableFrom(type.getRawType())) {
+                return null;
+            }
+            java.lang.reflect.Type innerType = extractInnerType(type.getType());
+            TypeAdapter<?> innerAdapter = gson.getAdapter(TypeToken.get(innerType));
+            @SuppressWarnings("unchecked")
+            TypeAdapter<T> result = (TypeAdapter<T>) new OptionalTypeAdapter<>(innerAdapter);
+            return result;
+        }
+
+        private static java.lang.reflect.Type extractInnerType(java.lang.reflect.Type type) {
+            if (type instanceof java.lang.reflect.ParameterizedType) {
+                return ((java.lang.reflect.ParameterizedType) type).getActualTypeArguments()[0];
+            }
+            return Object.class;
+        }
+
+        private static class OptionalTypeAdapter<E> extends TypeAdapter<java.util.Optional<E>> {
+            private final TypeAdapter<E> innerAdapter;
+
+            OptionalTypeAdapter(TypeAdapter<E> innerAdapter) {
+                this.innerAdapter = innerAdapter;
+            }
+
+            @Override
+            public void write(JsonWriter out, java.util.Optional<E> value) throws java.io.IOException {
+                if (value == null || value.isEmpty()) {
+                    out.nullValue();
+                } else {
+                    innerAdapter.write(out, value.get());
+                }
+            }
+
+            @Override
+            public java.util.Optional<E> read(JsonReader in) throws java.io.IOException {
+                if (in.peek() == JsonToken.NULL) {
+                    in.nextNull();
+                    return java.util.Optional.empty();
+                } else {
+                    return java.util.Optional.ofNullable(innerAdapter.read(in));
+                }
+            }
+        }
+    }
+    private static final java.lang.reflect.Type MAP_TYPE = new TypeToken<Map<String, Object>>(){}.getType();
+
+    private static final java.util.Set<String> VALID_POLICIES = java.util.Set.of("strict", "conservative", "report-only");
+
+    private Map<String, Object> executeVerifyClaimsBatch(Map<String, Object> args) {
+        String ontologyIdStr = (String) args.get("ontology_id");
+        if (ontologyIdStr == null) {
+            return errorResponse(ServiceError.of(ErrorCode.INVALID_CLAIM_SCHEMA, "ontology_id is required"));
+        }
+
+        // Parse claims batch from arguments
+        Map<String, Object> batchMap = parseClaimsBatchFromArgs(args);
+        if (batchMap == null) {
+            return Map.of("status", "error", "data", Map.of(
+                "aggregateStatus", "invalid_input",
+                "diagnostics", List.of(Map.of("field", "claims", "reason", "Failed to parse claims batch"))));
+        }
+
+        // Validate the batch
+        ClaimBatchValidator validator = new ClaimBatchValidator();
+        ClaimBatchValidator.BatchValidationResult validationResult = validator.validateMap(batchMap);
+
+        if (!validationResult.isSuccess()) {
+            ClaimBatchValidator.BatchValidationResult.Error errorResult =
+                (ClaimBatchValidator.BatchValidationResult.Error) validationResult;
+            List<Map<String, Object>> diagnostics = errorResult.diagnostics().stream()
+                .map(d -> Map.<String, Object>of("field", d.field(), "reason", d.reason()))
+                .collect(Collectors.toList());
+            return Map.of("status", "error", "data", Map.of(
+                "aggregateStatus", errorResult.aggregateStatus().jsonName(), "diagnostics", diagnostics));
+        }
+
+        ClaimBatchInput batch = ((ClaimBatchValidator.BatchValidationResult.Success) validationResult).batch();
+
+        // Verify the batch
+        ServiceResult<AnswerVerificationReport> verifyResult =
+            getClaimWorkflowService().verifyBatch(batch, ontologyIdStr);
+
+        if (!verifyResult.isSuccess()) {
+            ServiceError error = ((ServiceResult.Error<AnswerVerificationReport>) verifyResult).error();
+            return errorResponse(error);
+        }
+
+        AnswerVerificationReport report = ((ServiceResult.Success<AnswerVerificationReport>) verifyResult).data();
+        return Map.of("status", "success", "data", serializeVerificationReport(report));
+    }
+
+    private Map<String, Object> executeBuildEvidenceContext(Map<String, Object> args) {
+        int maxContextTokens = args.containsKey("max_context_tokens")
+            ? ((Number) args.get("max_context_tokens")).intValue() : 0;
+
+        if (maxContextTokens < 0) {
+            return errorResponse(ServiceError.of(ErrorCode.INVALID_CLAIM_SCHEMA,
+                "max_context_tokens must be >= 0, got: " + maxContextTokens));
+        }
+
+        // Mode 1: Direct report input — build evidence context from a pre-generated report
+        String reportStr = (String) args.get("report");
+        if (reportStr != null) {
+            AnswerVerificationReport report;
+            try {
+                report = gson.fromJson(reportStr, AnswerVerificationReport.class);
+            } catch (Exception e) {
+                return errorResponse(ServiceError.of(ErrorCode.INVALID_CLAIM_SCHEMA,
+                    "Failed to parse report JSON: " + e.getMessage()));
+            }
+            if (report == null) {
+                return errorResponse(ServiceError.of(ErrorCode.INVALID_CLAIM_SCHEMA,
+                    "Report JSON parsing produced null."));
+            }
+            EvidenceContext context = getEvidenceContextBuilder().buildContext(report, maxContextTokens);
+            return Map.of("status", "success", "data", Map.of(
+                "aggregateStatus", report.aggregateStatus().jsonName(),
+                "evidenceContext", serializeEvidenceContext(context)));
+        }
+
+        // Mode 2: ontology_id + claims — verify batch first, then build evidence context
+        String ontologyIdStr = (String) args.get("ontology_id");
+        if (ontologyIdStr == null) {
+            return errorResponse(ServiceError.of(ErrorCode.INVALID_CLAIM_SCHEMA,
+                "Either 'report' or 'ontology_id' is required."));
+        }
+
+        Map<String, Object> batchMap = parseClaimsBatchFromArgs(args);
+        if (batchMap == null) {
+            return Map.of("status", "error", "data", Map.of(
+                "aggregateStatus", "invalid_input",
+                "diagnostics", List.of(Map.of("field", "claims", "reason", "Failed to parse claims batch"))));
+        }
+
+        ClaimBatchValidator validator = new ClaimBatchValidator();
+        ClaimBatchValidator.BatchValidationResult validationResult = validator.validateMap(batchMap);
+
+        if (!validationResult.isSuccess()) {
+            ClaimBatchValidator.BatchValidationResult.Error errorResult =
+                (ClaimBatchValidator.BatchValidationResult.Error) validationResult;
+            List<Map<String, Object>> diagnostics = errorResult.diagnostics().stream()
+                .map(d -> Map.<String, Object>of("field", d.field(), "reason", d.reason()))
+                .collect(Collectors.toList());
+            return Map.of("status", "error", "data", Map.of(
+                "aggregateStatus", errorResult.aggregateStatus().jsonName(), "diagnostics", diagnostics));
+        }
+
+        ClaimBatchInput batch = ((ClaimBatchValidator.BatchValidationResult.Success) validationResult).batch();
+
+        ServiceResult<AnswerVerificationReport> verifyResult =
+            getClaimWorkflowService().verifyBatch(batch, ontologyIdStr);
+
+        if (!verifyResult.isSuccess()) {
+            ServiceError error = ((ServiceResult.Error<AnswerVerificationReport>) verifyResult).error();
+            return errorResponse(error);
+        }
+
+        AnswerVerificationReport report = ((ServiceResult.Success<AnswerVerificationReport>) verifyResult).data();
+        EvidenceContext context = getEvidenceContextBuilder().buildContext(report, maxContextTokens);
+
+        return Map.of("status", "success", "data", Map.of(
+            "aggregateStatus", report.aggregateStatus().jsonName(),
+            "evidenceContext", serializeEvidenceContext(context)));
+    }
+
+    private Map<String, Object> executeReviewAnswerClaims(Map<String, Object> args) {
+        String ontologyIdStr = (String) args.get("ontology_id");
+        if (ontologyIdStr == null) {
+            return errorResponse(ServiceError.of(ErrorCode.INVALID_CLAIM_SCHEMA, "ontology_id is required"));
+        }
+
+        String policy = (String) args.getOrDefault("policy", "strict");
+        if (!VALID_POLICIES.contains(policy)) {
+            return errorResponse(ServiceError.of(ErrorCode.INVALID_CLAIM_SCHEMA,
+                "Unsupported policy: '" + policy + "'. Supported policies: strict, conservative, report-only"));
+        }
+
+        int maxContextTokens = args.containsKey("max_context_tokens")
+            ? ((Number) args.get("max_context_tokens")).intValue() : 0;
+
+        if (maxContextTokens < 0) {
+            return errorResponse(ServiceError.of(ErrorCode.INVALID_CLAIM_SCHEMA,
+                "max_context_tokens must be >= 0, got: " + maxContextTokens));
+        }
+
+        // Parse claims batch from arguments
+        Map<String, Object> batchMap = parseClaimsBatchFromArgs(args);
+        if (batchMap == null) {
+            return Map.of("status", "error", "data", Map.of(
+                "aggregateStatus", "invalid_input",
+                "diagnostics", List.of(Map.of("field", "claims", "reason", "Failed to parse claims batch"))));
+        }
+
+        // Validate the batch
+        ClaimBatchValidator validator = new ClaimBatchValidator();
+        ClaimBatchValidator.BatchValidationResult validationResult = validator.validateMap(batchMap);
+
+        if (!validationResult.isSuccess()) {
+            ClaimBatchValidator.BatchValidationResult.Error errorResult =
+                (ClaimBatchValidator.BatchValidationResult.Error) validationResult;
+            List<Map<String, Object>> diagnostics = errorResult.diagnostics().stream()
+                .map(d -> Map.<String, Object>of("field", d.field(), "reason", d.reason()))
+                .collect(Collectors.toList());
+            return Map.of("status", "error", "data", Map.of(
+                "aggregateStatus", errorResult.aggregateStatus().jsonName(), "diagnostics", diagnostics));
+        }
+
+        ClaimBatchInput batch = ((ClaimBatchValidator.BatchValidationResult.Success) validationResult).batch();
+
+        // Verify the batch
+        ServiceResult<AnswerVerificationReport> verifyResult =
+            getClaimWorkflowService().verifyBatch(batch, ontologyIdStr);
+
+        if (!verifyResult.isSuccess()) {
+            ServiceError error = ((ServiceResult.Error<AnswerVerificationReport>) verifyResult).error();
+            return errorResponse(error);
+        }
+
+        AnswerVerificationReport report = ((ServiceResult.Success<AnswerVerificationReport>) verifyResult).data();
+
+        // Build evidence context
+        EvidenceContext context = getEvidenceContextBuilder().buildContext(report, maxContextTokens);
+
+        // Build policy-dependent handling guidance
+        List<String> handlingGuidance = buildHandlingGuidance(report.aggregateStatus(), policy);
+
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("status", "success");
+        result.put("data", Map.of(
+            "report", serializeVerificationReport(report),
+            "evidenceContext", serializeEvidenceContext(context),
+            "policy", policy,
+            "handlingGuidance", handlingGuidance
+        ));
+        return result;
+    }
+
+    /**
+     * Parse claims batch from MCP arguments.
+     * The claims can be a Map (from JSON-RPC) or a JSON string.
+     */
+    private Map<String, Object> parseClaimsBatchFromArgs(Map<String, Object> args) {
+        Object claimsObj = args.get("claims");
+        if (claimsObj == null) return null;
+
+        try {
+            if (claimsObj instanceof Map) {
+                @SuppressWarnings("unchecked")
+                Map<String, Object> claimsMap = (Map<String, Object>) claimsObj;
+                return claimsMap;
+            } else if (claimsObj instanceof String) {
+                return gson.fromJson((String) claimsObj, MAP_TYPE);
+            }
+            return null;
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    /**
+     * Serialize an AnswerVerificationReport to a Map for MCP response.
+     */
+    private Map<String, Object> serializeVerificationReport(AnswerVerificationReport report) {
+        Map<String, Object> m = new LinkedHashMap<>();
+        m.put("answerId", report.answerId());
+        m.put("aggregateStatus", report.aggregateStatus().jsonName());
+        m.put("claimResults", report.claimResults().stream()
+            .map(this::serializeClaimWorkflowResult)
+            .collect(Collectors.toList()));
+        if (report.summary().isPresent()) {
+            VerdictSummary vs = report.summary().get();
+            m.put("verdictSummary", Map.of(
+                "supportedCount", vs.supportedCount(),
+                "contradictedCount", vs.contradictedCount(),
+                "unknownCount", vs.unknownCount(),
+                "outOfScopeCount", vs.outOfScopeCount(),
+                "requiredCount", vs.requiredCount(),
+                "optionalCount", vs.optionalCount()));
+        }
+        return m;
+    }
+
+    private Map<String, Object> serializeClaimWorkflowResult(ClaimWorkflowResult result) {
+        Map<String, Object> m = new LinkedHashMap<>();
+        m.put("claimId", result.claimId());
+        m.put("claimType", result.claimType().jsonName());
+        m.put("required", result.required());
+        m.put("verdict", result.verdict().jsonName());
+        if (result.unknownReason().isPresent()) {
+            m.put("unknownReason", result.unknownReason().get());
+        }
+        if (result.evidence() != null && !result.evidence().isEmpty()) {
+            m.put("evidence", result.evidence().stream()
+                .map(this::serializeWorkflowEvidenceEntry)
+                .collect(Collectors.toList()));
+        }
+        if (result.counterexamples().isPresent() && !result.counterexamples().get().isEmpty()) {
+            m.put("counterexamples", result.counterexamples().get().stream()
+                .map(this::serializeWorkflowEvidenceEntry)
+                .collect(Collectors.toList()));
+        }
+        if (result.missingEntities().isPresent() && !result.missingEntities().get().isEmpty()) {
+            m.put("missingEntities", result.missingEntities().get());
+        }
+        if (result.diagnostics().isPresent()) {
+            m.put("diagnostics", result.diagnostics().get());
+        }
+        return m;
+    }
+
+    private Map<String, Object> serializeWorkflowEvidenceEntry(WorkflowEvidenceEntry entry) {
+        Map<String, Object> m = new LinkedHashMap<>();
+        m.put("kind", entry.kind());
+        m.put("summary", entry.summary());
+        m.put("source", entry.source());
+        if (entry.reasoner() != null) {
+            m.put("reasoner", entry.reasoner());
+        }
+        if (entry.provenance() != null) {
+            m.put("provenance", entry.provenance());
+        }
+        return m;
+    }
+
+    /**
+     * Serialize an EvidenceContext to a Map for MCP response.
+     */
+    private Map<String, Object> serializeEvidenceContext(EvidenceContext context) {
+        Map<String, Object> m = new LinkedHashMap<>();
+        m.put("answerId", context.answerId());
+        m.put("aggregateStatus", context.status().jsonName());
+        m.put("claims", context.claims().stream()
+            .map(this::serializeClaimContextEntry)
+            .collect(Collectors.toList()));
+        m.put("omittedClaimCount", context.omittedClaimCount());
+        m.put("agentInstructions", context.agentInstructions());
+        return m;
+    }
+
+    private Map<String, Object> serializeClaimContextEntry(EvidenceContext.ClaimContextEntry entry) {
+        Map<String, Object> m = new LinkedHashMap<>();
+        m.put("id", entry.id());
+        m.put("verdict", entry.verdict().jsonName());
+        if (entry.claimText() != null) {
+            m.put("claimText", entry.claimText());
+        }
+        if (entry.evidence() != null && !entry.evidence().isEmpty()) {
+            m.put("evidence", entry.evidence().stream()
+                .map(this::serializeWorkflowEvidenceEntry)
+                .collect(Collectors.toList()));
+        }
+        m.put("omittedEvidenceCount", entry.omittedEvidenceCount());
+        if (entry.unknownReason().isPresent()) {
+            m.put("unknownReason", entry.unknownReason().get());
+        }
+        if (entry.scopeDiagnostic().isPresent()) {
+            m.put("scopeDiagnostic", entry.scopeDiagnostic().get());
+        }
+        return m;
+    }
+
+    /**
+     * Build policy-dependent handling guidance based on aggregate status.
+     * Mirrors ReviewAnswerCommand.buildHandlingGuidance().
+     */
+    private List<String> buildHandlingGuidance(AggregateAnswerStatus status, String policy) {
+        List<String> guidance = new ArrayList<>();
+
+        if ("strict".equals(policy)) {
+            guidance.add("Policy: strict — do not present any claim as fact unless it is supported by ontology evidence.");
+            if (status == AggregateAnswerStatus.CONTRADICTED) {
+                guidance.add("The answer must be rejected — at least one required claim is contradicted.");
+            } else if (status == AggregateAnswerStatus.INSUFFICIENT_EVIDENCE) {
+                guidance.add("The answer cannot be confirmed — at least one required claim lacks evidence. State limitations clearly.");
+            } else if (status == AggregateAnswerStatus.PARTIALLY_VERIFIED) {
+                guidance.add("Only present supported claims as verified. Explicitly mark out-of-scope claims as unverified.");
+            } else if (status == AggregateAnswerStatus.OUT_OF_SCOPE) {
+                guidance.add("No claims can be verified — all required claims reference entities outside the ontology.");
+            }
+        } else if ("conservative".equals(policy)) {
+            guidance.add("Policy: conservative — prefer caution. Only cite explicitly verified claims.");
+            if (status == AggregateAnswerStatus.VERIFIED) {
+                guidance.add("All required claims are supported, but verify each optional claim independently before citing.");
+            } else if (status != AggregateAnswerStatus.INVALID_INPUT) {
+                guidance.add("Not all claims are fully verified. Present only supported claims and clearly state limitations.");
+            }
+        } else if ("report-only".equals(policy)) {
+            guidance.add("Policy: report-only — provide the factual report without judgment. The agent decides how to use the evidence.");
+        }
+
+        return guidance;
+    }
+
     /**
      * Parse a Claim object from MCP arguments.
      * The claim can be a Map (from JSON-RPC) or a JSON string.
@@ -1351,7 +1802,6 @@ public class McpServerAdapter {
                 return new Claim(claimId, type, ontologyId, subject, predicate, object,
                     reasoner, graphScope, options);
             } else if (claimObj instanceof String) {
-                com.google.gson.Gson gson = new com.google.gson.Gson();
                 Claim parsed = gson.fromJson((String) claimObj, Claim.class);
                 if (parsed != null && reasonerOverride != null && !"auto".equals(reasonerOverride)) {
                     return new Claim(parsed.claimId(), parsed.type(), parsed.ontologyId(),
@@ -1385,7 +1835,6 @@ public class McpServerAdapter {
                 java.util.List<Object> list = (java.util.List<Object>) termsObj;
                 return list.stream().map(Object::toString).toArray(String[]::new);
             } else if (termsObj instanceof String) {
-                com.google.gson.Gson gson = new com.google.gson.Gson();
                 return gson.fromJson((String) termsObj, String[].class);
             }
             return null;

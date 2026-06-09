@@ -15,6 +15,11 @@ local/
 # Generated example outputs (runtime logs, transcripts, screenshots)
 temp/examples/
 
+# Generated workflow reports and local agent traces
+reports/workflow/
+reports/acceptance/
+local-traces/
+
 # Private or sensitive ontology inputs
 test/owl_files/
 test/corpus/realworld-local/
@@ -54,3 +59,11 @@ Thumbs.db
 
 # owl4agents local workspace (created at runtime)
 .owl4agents/
+
+# Root-level Node.js tooling (docx/pptx generation, not part of v0.5)
+/node_modules/
+/package.json
+/package-lock.json
+/gen_docx.js
+# Smoke test temporary workspaces
+*-smoke/

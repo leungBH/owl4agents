@@ -1,0 +1,42 @@
+{
+  "answerId": "answer-mixed-001",
+  "question": "Are all these claims true?",
+  "claims": [
+    {
+      "id": "c1",
+      "type": "subclass",
+      "required": true,
+      "subject": { "kind": "class", "iri": "http://example.org/v0.3#Dog" },
+      "predicate": "subClassOf",
+      "object": { "kind": "class", "iri": "http://example.org/v0.3#Animal" }
+    },
+    {
+      "id": "c2",
+      "type": "class_compatibility",
+      "required": true,
+      "subject": { "kind": "class", "iri": "http://example.org/v0.3#Dog" },
+      "predicate": "compatibleWith",
+      "object": { "kind": "class", "iri": "http://example.org/v0.3#Cat" }
+    },
+    {
+      "id": "c3",
+      "type": "subclass",
+      "required": true,
+      "subject": { "kind": "class", "iri": "http://example.org/v0.3#Goldfish" },
+      "predicate": "subClassOf",
+      "object": { "kind": "class", "iri": "http://example.org/v0.3#Fish" }
+    },
+    {
+      "id": "c4",
+      "type": "subclass",
+      "required": false,
+      "subject": { "kind": "class", "iri": "http://example.org/v0.3#Cat" },
+      "predicate": "subClassOf",
+      "object": { "kind": "class", "iri": "http://example.org/v0.3#Mammal" }
+    }
+  ],
+  "options": {
+    "reasoner": "auto",
+    "requireReasoning": true
+  }
+}

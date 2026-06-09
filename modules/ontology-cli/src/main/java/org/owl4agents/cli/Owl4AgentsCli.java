@@ -13,7 +13,7 @@ import java.util.concurrent.Callable;
 @Command(
     name = "owl4agents",
     mixinStandardHelpOptions = true,
-    version = "0.4.0",
+    version = "0.5.0",
     description = "Local OWL ontology reasoning and MCP server for LLM agents.",
     subcommands = {
         InitCommand.class,
@@ -60,7 +60,11 @@ import java.util.concurrent.Callable;
         // v0.3.1 usability commands
         SetupCommand.class,
         SmokeCommand.class,
-        McpConfigCommand.class
+        McpConfigCommand.class,
+        // v0.5 batch verification commands
+        VerifyAnswerCommand.class,
+        EvidenceContextCommand.class,
+        ReviewAnswerCommand.class
     }
 )
 public class Owl4AgentsCli implements Callable<Integer> {

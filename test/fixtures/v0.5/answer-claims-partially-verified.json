@@ -1,0 +1,26 @@
+{
+  "answerId": "answer-partially-verified-001",
+  "question": "Is Dog a kind of Animal and is DeliveryPrice a kind of Price?",
+  "claims": [
+    {
+      "id": "c1",
+      "type": "subclass",
+      "required": true,
+      "subject": { "kind": "class", "iri": "http://example.org/v0.3#Dog" },
+      "predicate": "subClassOf",
+      "object": { "kind": "class", "iri": "http://example.org/v0.3#Animal" }
+    },
+    {
+      "id": "c2",
+      "type": "subclass",
+      "required": true,
+      "subject": { "kind": "class", "iri": "http://example.org/v0.3#DeliveryPrice" },
+      "predicate": "subClassOf",
+      "object": { "kind": "class", "iri": "http://example.org/v0.3#Price" }
+    }
+  ],
+  "options": {
+    "reasoner": "auto",
+    "requireReasoning": true
+  }
+}
