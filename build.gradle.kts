@@ -15,6 +15,10 @@ allprojects {
 subprojects {
     apply(plugin = "java")
 
+    // Centralize all module build output under root build/modules/
+    // instead of each module having its own build/ directory
+    layout.buildDirectory = rootProject.layout.buildDirectory.dir("modules/${project.name}")
+
     java {
         toolchain {
             languageVersion.set(JavaLanguageVersion.of(22))

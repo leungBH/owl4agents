@@ -12,7 +12,7 @@ set "PROJECT_ROOT=%~dp0..\.."
 
 REM Primary: use java -cp with the shadow jar (avoids ACCESS_VIOLATION)
 REM java -cp works with the shadow jar because it contains all merged classes without relocation.
-set "JAR_PATH=%PROJECT_ROOT%\modules\ontology-cli\build\libs\owl4agents.jar"
+set "JAR_PATH=%PROJECT_ROOT%\build\modules\ontology-cli\libs\owl4agents.jar"
 if exist "%JAR_PATH%" (
     if defined JAVA_HOME (
         "%JAVA_HOME%\bin\java.exe" -cp "%JAR_PATH%" org.owl4agents.cli.Owl4AgentsCli mcp %*

@@ -3,7 +3,7 @@
 .codex/
 .trae/
 openspec/
-doc/
+docs/
 backup/
 version.md
 
@@ -16,8 +16,6 @@ local/
 temp/examples/
 
 # Generated workflow reports and local agent traces
-reports/workflow/
-reports/acceptance/
 local-traces/
 
 # Private or sensitive ontology inputs
@@ -31,10 +29,6 @@ test/corpus/benchmarks/ore/
 .gradle/
 .gradle-local/
 build/
-modules/**/build/
-modules/**/bin/
-**/build/test-results/
-**/build/reports/tests/
 *.zip
 # Do NOT ignore gradlew / gradlew.bat — they are required for reproducible builds
 # Do NOT ignore gradle-wrapper.jar — it must be committed for wrapper to work
@@ -46,9 +40,6 @@ modules/**/bin/
 
 # Java
 *.class
-# Ignore built jars but NOT the Gradle wrapper jar
-modules/**/build/libs/*.jar
-modules/**/build/libs/*.sha256
 *.war
 # Maven metadata extracted by OWL API / Jena dependency resolution
 META-INF/
@@ -61,11 +52,6 @@ Thumbs.db
 # owl4agents local workspace (created at runtime)
 .owl4agents/
 
-# Root-level Node.js tooling (docx/pptx generation, not part of v0.5)
-/node_modules/
-/package.json
-/package-lock.json
-/gen_docx.js
 # Smoke test temporary workspaces
 *-smoke/
 v*-smoke-*/

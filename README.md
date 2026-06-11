@@ -100,7 +100,7 @@ Build the runnable CLI jar:
 The runnable jar is generated at:
 
 ```text
-modules/ontology-cli/build/libs/owl4agents.jar
+build/modules/ontology-cli/libs/owl4agents.jar
 ```
 
 ### CLI from Source
@@ -191,10 +191,10 @@ node tools/npm/bin/owl4agents.js evidence-context pizza-benchmark --claims test/
 Or run the fat jar directly (Linux and macOS):
 
 ```bash
-java -jar modules/ontology-cli/build/libs/owl4agents.jar init
-java -jar modules/ontology-cli/build/libs/owl4agents.jar import test/corpus/smoke/pizza.owl pizza
-java -jar modules/ontology-cli/build/libs/owl4agents.jar summary pizza
-java -jar modules/ontology-cli/build/libs/owl4agents.jar consistency pizza --reasoner hermit
+java -jar build/modules/ontology-cli/libs/owl4agents.jar init
+java -jar build/modules/ontology-cli/libs/owl4agents.jar import test/corpus/smoke/pizza.owl pizza
+java -jar build/modules/ontology-cli/libs/owl4agents.jar summary pizza
+java -jar build/modules/ontology-cli/libs/owl4agents.jar consistency pizza --reasoner hermit
 ```
 
 > **Windows limitation:** `java -jar owl4agents.jar` may crash with `ACCESS_VIOLATION` on some Windows environments. This is a known JVM/OWL API interaction issue. On Windows, prefer `node tools/npm/bin/owl4agents.js <command>` or `.\gradlew.bat run --args="<command>"` instead. CI runs `java -jar` on Ubuntu without issues.
@@ -469,7 +469,7 @@ If `node tools/npm/bin/owl4agents.js` exits with a "runtime not found" error, th
 .\gradlew.bat :modules:ontology-cli:shadowJar
 ```
 
-The jar is generated at `modules/ontology-cli/build/libs/owl4agents.jar` (approximately 46 MB). The launcher looks for this jar relative to the npm script directory, so it must exist under the project root.
+The jar is generated at `build/modules/ontology-cli/libs/owl4agents.jar` (approximately 46 MB). The launcher looks for this jar relative to the npm script directory, so it must exist under the project root.
 
 ### Java not found or wrong version
 
@@ -497,9 +497,9 @@ The MCP protocol uses stdin/stdout for JSON-RPC. On Windows, Node's `execSync` w
 The npm launcher follows a deterministic runtime discovery order:
 
 1. `OWL4AGENTS_RUNTIME` env var (explicit override, supports `.js` scripts for testing)
-2. `modules/ontology-cli/build/libs/owl4agents.jar` (shadow jar from Gradle build)
-3. `modules/ontology-cli/build/libs/ontology-cli-all.jar` (fat jar)
-4. `modules/ontology-distribution/build/libs/ontology-distribution.jar`
+2. `build/modules/ontology-cli/libs/owl4agents.jar` (shadow jar from Gradle build)
+3. `build/modules/ontology-cli/libs/ontology-cli-all.jar` (fat jar)
+4. `build/modules/ontology-distribution/libs/ontology-distribution.jar`
 5. `JAVA_HOME\bin\java` with classpath mode
 6. `java` on PATH
 7. Gradle wrapper (last resort; MCP stdin not supported)
@@ -664,7 +664,7 @@ The Gradle wrapper is part of the delivery contract. The repository must include
 Before releasing any version, verify each step:
 
 1. **Build**: `.\gradlew.bat clean buildVerification` exits 0
-2. **Shadow jar**: `.\gradlew.bat :modules:ontology-cli:shadowJar` produces `modules/ontology-cli/build/libs/owl4agents.jar`
+2. **Shadow jar**: `.\gradlew.bat :modules:ontology-cli:shadowJar` produces `build/modules/ontology-cli/libs/owl4agents.jar`
 3. **Unit and contract tests**: `.\gradlew.bat test` exits 0
 4. **Launcher tests**: `node tools/npm/test/launcher.test.js` exits 0 when launcher changes are included
 5. **Smoke commands**: `node tools/npm/bin/owl4agents.js --help`, `--version`, and `list-reasoners` all work
@@ -675,7 +675,7 @@ Before releasing any version, verify each step:
 10. **Fixture attribution checks**: `test/corpus/README.md` documents source, attribution, and license for every required fixture
 11. **CLI/MCP parity**: overlapping v0.3 tools return equivalent verdicts, evidence shapes, and error codes
 12. **Version alignment**: Gradle version, npm package.json version, Picocli `version` attribute, and MCP `serverInfo.version` all match
-13. **Acceptance report**: Timestamped report under `reports/acceptance/` with environment, commands, gate results, defects, retest notes, skipped scenarios, and verdict
+13. **Acceptance report**: Timestamped report under `test/reports/acceptance/` with environment, commands, gate results, defects, retest notes, skipped scenarios, and verdict
 14. **Git hygiene**: required source, tests, contracts, fixtures, and examples are tracked; local reports, OpenSpec files, private ontologies, generated classes, build outputs, and `temp/examples/` are ignored
 15. **Git tag**: Tag the release commit, for example `v0.4.0`
 16. **Push**: Push the commit and tag to the remote
@@ -683,7 +683,7 @@ Before releasing any version, verify each step:
 Acceptance reports are stored locally under:
 
 ```text
-reports/acceptance/
+test/reports/acceptance/
 ```
 
 This directory is intentionally ignored by Git so local test evidence and environment details are preserved without being published to GitHub.
@@ -1461,8 +1461,8 @@ tools/
     test/launcher.test.js
   bin/
     owl4agents-mcp.cmd
-scripts/
-  download-test-corpus.ps1
+  scripts/
+    download-test-corpus.ps1
 test/
   corpus/
   contracts/

@@ -65,17 +65,17 @@ function findJavaRuntime() {
     process.exit(2);
   }
 
-  const shadowJarPath = path.resolve(__dirname, '..', '..', '..', 'modules', 'ontology-cli', 'build', 'libs', 'owl4agents.jar');
+  const shadowJarPath = path.resolve(__dirname, '..', '..', '..', 'build', 'modules', 'ontology-cli', 'libs', 'owl4agents.jar');
   if (fs.existsSync(shadowJarPath)) {
     return { type: 'jar', path: shadowJarPath };
   }
 
-  const fatJarPath = path.resolve(__dirname, '..', '..', '..', 'modules', 'ontology-cli', 'build', 'libs', 'ontology-cli-all.jar');
+  const fatJarPath = path.resolve(__dirname, '..', '..', '..', 'build', 'modules', 'ontology-cli', 'libs', 'ontology-cli-all.jar');
   if (fs.existsSync(fatJarPath)) {
     return { type: 'jar', path: fatJarPath };
   }
 
-  const distJarPath = path.resolve(__dirname, '..', '..', '..', 'modules', 'ontology-distribution', 'build', 'libs', 'ontology-distribution.jar');
+  const distJarPath = path.resolve(__dirname, '..', '..', '..', 'build', 'modules', 'ontology-distribution', 'libs', 'ontology-distribution.jar');
   if (fs.existsSync(distJarPath)) {
     return { type: 'jar', path: distJarPath };
   }
@@ -150,15 +150,15 @@ function buildJavaCommand(runtime, args) {
     return [runtime.path, ...args];
   }
   if (runtime.type === 'classpath') {
-    const modulesDir = path.resolve(__dirname, '..', '..', '..', 'modules');
+    const buildDir = path.resolve(__dirname, '..', '..', '..', 'build', 'modules');
     const classpath = [
-      path.join(modulesDir, 'ontology-cli', 'build', 'libs', '*'),
-      path.join(modulesDir, 'ontology-core', 'build', 'libs', '*'),
-      path.join(modulesDir, 'ontology-storage', 'build', 'libs', '*'),
-      path.join(modulesDir, 'ontology-owlapi', 'build', 'libs', '*'),
-      path.join(modulesDir, 'ontology-query', 'build', 'libs', '*'),
-      path.join(modulesDir, 'ontology-retrieval', 'build', 'libs', '*'),
-      path.join(modulesDir, 'ontology-mcp', 'build', 'libs', '*'),
+      path.join(buildDir, 'ontology-cli', 'libs', '*'),
+      path.join(buildDir, 'ontology-core', 'libs', '*'),
+      path.join(buildDir, 'ontology-storage', 'libs', '*'),
+      path.join(buildDir, 'ontology-owlapi', 'libs', '*'),
+      path.join(buildDir, 'ontology-query', 'libs', '*'),
+      path.join(buildDir, 'ontology-retrieval', 'libs', '*'),
+      path.join(buildDir, 'ontology-mcp', 'libs', '*'),
     ].join(os.platform() === 'win32' ? ';' : ':');
     return [javaExecutable(), '-cp', classpath, 'org.owl4agents.cli.Owl4AgentsCli', ...args];
   }
