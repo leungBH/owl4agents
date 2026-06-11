@@ -37,7 +37,7 @@ Each template MUST:
 
 1. Prompt templates MUST preserve `supported`, `contradicted`, `unknown`, and `out_of_scope` verdicts without conversion.
 2. Prompts MUST NOT instruct agents to convert `unknown` or `out_of_scope` claims into support.
-3. The prompt policy MUST match the shared skill verdict policy at `agent-skills/_shared/references/verdict-policy.md`.
+3. The prompt policy MUST match the shared skill verdict policy at `skills/_shared/references/verdict-policy.md`.
 
 ### Valid Tool References
 

@@ -21,7 +21,7 @@ owl4agents/
 │   └── ontology-distribution/ jlink / jpackage packaging
 │
 ├── tools/                # All external interfaces, launchers, and utility scripts
-│   ├── agent-skills/       Cross-agent SOP packs (claim verification, evidence, scope)
+│   ├── skills/             Cross-agent SOP packs (claim verification, evidence, scope)
 │   ├── npm/                npm launcher package (Node.js → Java bridge)
 │   │   ├── bin/               owl4agents.js (main entry point)
 │   │   └── test/              launcher tests
@@ -128,7 +128,7 @@ All CLI invocations use `node tools/npm/bin/owl4agents.js <command>` as the entr
 | New CLI/MCP tool          | `modules/ontology-{name}/`       |
 | New npm launcher feature  | `tools/npm/`                     |
 | New platform script       | `tools/bin/` or `tools/scripts/` |
-| New agent skill pack      | `tools/agent-skills/`            |
+| New agent skill pack      | `tools/skills/`                |
 | New test fixture          | `test/fixtures/v{X}/`            |
 | New test ontology         | `test/corpus/{category}/`        |
 | New test contract         | `test/contracts/{name}/`         |

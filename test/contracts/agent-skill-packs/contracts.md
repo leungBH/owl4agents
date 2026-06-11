@@ -4,13 +4,13 @@ This contract defines the v0.5 public agent skill packs, including directory lay
 
 ## Required Skill Packs
 
-v0.5 MUST provide the following skill packs under `agent-skills/`:
+v0.5 MUST provide the following skill packs under `skills/`:
 
 | Skill Pack ID | Directory | Required |
 | --- | --- | --- |
-| owl4agents-claim-verification | `agent-skills/owl4agents-claim-verification/` | yes |
-| owl4agents-evidence-grounded-answer | `agent-skills/owl4agents-evidence-grounded-answer/` | yes |
-| owl4agents-ontology-scope-check | `agent-skills/owl4agents-ontology-scope-check/` | yes |
+| owl4agents-claim-verification | `skills/owl4agents-claim-verification/` | yes |
+| owl4agents-evidence-grounded-answer | `skills/owl4agents-evidence-grounded-answer/` | yes |
+| owl4agents-ontology-scope-check | `skills/owl4agents-ontology-scope-check/` | yes |
 
 Each skill pack MUST contain `SKILL.md` as the entry point.
 
@@ -32,14 +32,14 @@ Placeholder text (`TODO`, `FIXME`, `stub`, `not implemented`) MUST fail validati
 
 ## Shared Verdict Policy Reference
 
-1. All skill packs MUST link to the shared verdict policy at `agent-skills/_shared/references/verdict-policy.md`.
+1. All skill packs MUST link to the shared verdict policy at `skills/_shared/references/verdict-policy.md`.
 2. Individual skill packs MUST NOT duplicate divergent verdict policy text.
 3. Verdict terms MUST be: `supported`, `contradicted`, `unknown`, and `out_of_scope`.
 4. The shared policy MUST state that `unknown` and `out_of_scope` do not count as support.
 
 ## Shared Reference Files
 
-The `agent-skills/_shared/references/` directory MUST contain:
+The `skills/_shared/references/` directory MUST contain:
 
 | File | Required | Description |
 | --- | --- | --- |
@@ -104,7 +104,7 @@ When skill validation scans MCP tool names in skill text, references, or example
 
 1. Skill examples MUST reference public checked-in fixtures or clearly mark them as optional/manual.
 2. Required skill examples MUST NOT depend on private corpus directories.
-3. Runnable examples MUST live under `agent-skills/<skill-id>/examples/`.
+3. Runnable examples MUST live under `skills/<skill-id>/examples/`.
 4. Ontology IDs MUST use real documented fixture IDs, not placeholders.
 
 ## Safety Policy Enforcement

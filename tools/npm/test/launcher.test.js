@@ -7,7 +7,7 @@
  *
  * Uses real child-process execution with strict exit-code, stdout, stderr assertions.
  *
- * Run with: node npm/test/launcher.test.js
+ * Run with: node tools/npm/test/launcher.test.js
  */
 
 const { spawnSync } = require('child_process');
@@ -17,7 +17,7 @@ const os = require('os');
 const assert = require('assert');
 
 const LAUNCHER = path.resolve(__dirname, '..', 'bin', 'owl4agents.js');
-const PROJECT_ROOT = path.resolve(__dirname, '..', '..');
+const PROJECT_ROOT = path.resolve(__dirname, '..', '..', '..');
 const PACKAGE_JSON = path.resolve(__dirname, '..', 'package.json');
 const MCP_SMOKE_TIMEOUT_MS = 15000;
 
@@ -361,6 +361,14 @@ runTest('Help output includes v0.5 batch workflow commands (V05-LAUNCH-001)', ()
   assert(stdout.includes('verify-answer'), 'Help should list verify-answer command');
   assert(stdout.includes('evidence-context'), 'Help should list evidence-context command');
   assert(stdout.includes('review-answer'), 'Help should list review-answer command');
+});
+
+runTest('Help output includes v0.6 benchmark commands (V06-LAUNCH-001)', () => {
+  const { stdout, code } = runLauncher([]);
+  assert.strictEqual(code, 0);
+  assert(stdout.includes('benchmark-run'), 'Help should list benchmark-run command');
+  assert(stdout.includes('eval-qa'), 'Help should list eval-qa command');
+  assert(stdout.includes('context-batch'), 'Help should list context-batch command');
 });
 
 runTest('Launcher forwards verify-answer command to runtime (V05-LAUNCH-002)', () => {

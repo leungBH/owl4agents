@@ -6,7 +6,7 @@ Local OWL ontology runtime, reasoner integration, SPARQL query layer, and readon
 
 > Status: v0.6 research evaluation benchmarks and reasoner comparison. v0.6 adds experiment configuration, benchmark runner, QA evaluation, context-batch mode, evidence context JSONL export, and report generation with 4×4 confusion matrix and static reasoner version mapping.
 
-## v0.5 Quick Start
+## v0.6 Quick Start
 
 ### Requirements
 
@@ -68,7 +68,7 @@ node tools/npm/bin/owl4agents.js review-answer pizza-ontology --claims test/fixt
 
 See [examples/README.md](examples/README.md) for full step-by-step commands, expected output snippets, and troubleshooting.
 
-### v0.4–v0.5 Example Showcase
+### v0.4-v0.6 Example Showcase
 
 | Example | What it demonstrates | Interface | Fixture | Run time |
 | --- | --- | --- | --- | --- |
@@ -77,7 +77,7 @@ See [examples/README.md](examples/README.md) for full step-by-step commands, exp
 | [agent-mcp](examples/agent-mcp/) | MCP client configuration, readonly startup, tool list, tool-call samples | MCP | None (starts MCP server) | ~5 seconds |
 | [biomedical-grounding](examples/biomedical-grounding/) | Biomedical-style grounding using a project-owned golden fixture | CLI | `test/corpus/golden/v0.4-biomedical-grounding.owl` | ~5 seconds |
 | Batch workflow | `verify-answer`, `evidence-context`, `review-answer` with policy | CLI/MCP | `test/fixtures/v0.5/` claim batch fixtures | ~5 seconds |
-| Agent skill packs | Cross-agent SOPs for claim verification, evidence-grounded answers, and scope checks | Reference | [tools/agent-skills/](tools/agent-skills/) | N/A (documentation) |
+| Agent skill packs | Cross-agent SOPs for claim verification, evidence-grounded answers, and scope checks | Reference | [tools/skills/](tools/skills/) | N/A (documentation) |
 
 All examples use `node tools/npm/bin/owl4agents.js` as the CLI entry point. See each example's README for prerequisites, commands, and expected output.
 
@@ -345,7 +345,7 @@ Useful v0.3 MCP tools include the inherited readonly query/reasoning surface plu
 | `ontology_build_evidence_context` | Build compact evidence context for LLM agents from workflow reports |
 | `ontology_review_answer_claims` | Review answer claims with strict, conservative, or report-only handling guidance |
 
-v0.5 workflow tools require structured claim input (batch JSON with `answerId`, `claims[]`, and per-claim `id`, `type`, `subject`, `predicate`, `object`). They do not extract claims from free text. See [tools/agent-skills/](tools/agent-skills/) for SOP packs.
+v0.5 workflow tools require structured claim input (batch JSON with `answerId`, `claims[]`, and per-claim `id`, `type`, `subject`, `predicate`, `object`). They do not extract claims from free text. See [tools/skills/](tools/skills/) for SOP packs.
 
 ### v0.6 Research Evaluation and Benchmark Tools
 
@@ -718,7 +718,7 @@ modules/
   ontology-distribution/
 
 tools/
-  agent-skills/
+  skills/
   npm/
     package.json
     bin/owl4agents.js
@@ -1339,7 +1339,7 @@ Released support:
 - [x] Answer verification reports with per-claim verdicts, aggregate status, and evidence summaries
 - [x] Workflow CLI commands: `verify-answer`, `evidence-context`, and `review-answer` with `--policy` support
 - [x] Readonly MCP workflow tools: `ontology_verify_claims_batch`, `ontology_build_evidence_context`, and `ontology_review_answer_claims`
-- [x] Public `agent-skills/` SOP packs for claim verification, evidence-grounded answering, and ontology scope checks
+- [x] Public `skills/` SOP packs for claim verification, evidence-grounded answering, and ontology scope checks
 - [x] File-level workflow prompt templates; protocol-level MCP prompt listing deferred (absent in current adapter)
 - [x] Regression fixtures for supported, contradicted, unknown, out_of_scope, partially_verified, mixed, optional-claim, malformed, and v0.3-wrapped batches
 - [x] Clear failure modes for malformed claims, unsupported natural-language extraction, and missing ontology scope
@@ -1450,7 +1450,7 @@ modules/
   ontology-validation/
   ontology-benchmark/
 tools/
-  agent-skills/
+  skills/
     README.md
     _shared/references/   (verdict-policy, claim-batch-schema, evidence-citation-policy, refusal-scope-policy, answer-review-sop)
     owl4agents-claim-verification/SKILL.md

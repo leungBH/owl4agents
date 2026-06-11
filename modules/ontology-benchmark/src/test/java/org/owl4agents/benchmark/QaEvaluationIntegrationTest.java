@@ -269,8 +269,9 @@ class QaEvaluationIntegrationTest {
         @DisplayName("JSONL read from nonexistent file throws IOException")
         void nonexistentFileThrows() {
             BenchmarkResultReader reader = new BenchmarkResultReader();
+            Path nonexistent = tempDir.resolve("nonexistent").resolve("results.jsonl");
             assertThrows(java.io.IOException.class, () ->
-                reader.readResults(Path.of("/nonexistent/results.jsonl")));
+                reader.readResults(nonexistent));
         }
 
         @Test

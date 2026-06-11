@@ -77,7 +77,7 @@ class McpExampleValidationTest {
         @Test
         @DisplayName("MCP readonly starts and returns initialize within timeout")
         void mcpInitializeWithinTimeout() throws Exception {
-            ProcessBuilder pb = new ProcessBuilder("node", "npm/bin/owl4agents.js", "mcp");
+            ProcessBuilder pb = new ProcessBuilder("node", "tools/npm/bin/owl4agents.js", "mcp");
             pb.directory(PROJECT_ROOT.toFile());
             pb.redirectErrorStream(true);
 
@@ -123,7 +123,7 @@ class McpExampleValidationTest {
         @Test
         @DisplayName("MCP tools/list returns non-empty tool list")
         void mcpToolsListNonEmpty() throws Exception {
-            ProcessBuilder pb = new ProcessBuilder("node", "npm/bin/owl4agents.js", "mcp");
+            ProcessBuilder pb = new ProcessBuilder("node", "tools/npm/bin/owl4agents.js", "mcp");
             pb.directory(PROJECT_ROOT.toFile());
             pb.redirectErrorStream(true);
 

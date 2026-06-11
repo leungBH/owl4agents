@@ -21,7 +21,7 @@ import static org.junit.jupiter.api.Assertions.*;
 class SkillLintTest {
 
     private static final Path PROJECT_ROOT = findProjectRoot();
-    private static final Path SKILLS_BASE = PROJECT_ROOT.resolve("agent-skills");
+    private static final Path SKILLS_BASE = PROJECT_ROOT.resolve("tools").resolve("skills");
 
     private static Path findProjectRoot() {
         String userDir = System.getProperty("user.dir");
@@ -293,55 +293,55 @@ class SkillLintTest {
     // ── Skill directory structure (task 7.1) ──
 
     @Nested
-    @DisplayName("agent-skills directory structure is correct")
+    @DisplayName("skills directory structure is correct")
     class DirectoryStructureTests {
 
         @Test
-        @DisplayName("agent-skills/ directory exists")
+        @DisplayName("skills/ directory exists")
         void skillsDirectoryExists() {
-            assertTrue(Files.exists(SKILLS_BASE), "agent-skills/ directory must exist");
+            assertTrue(Files.exists(SKILLS_BASE), "skills/ directory must exist");
         }
 
         @Test
-        @DisplayName("agent-skills/README.md exists")
+        @DisplayName("skills/README.md exists")
         void readmeExists() {
             assertTrue(Files.exists(SKILLS_BASE.resolve("README.md")),
-                "agent-skills/README.md must exist");
+                "skills/README.md must exist");
         }
 
         @Test
         @DisplayName("Shared references directory exists")
         void sharedReferencesExist() {
             assertTrue(Files.exists(SKILLS_BASE.resolve("_shared/references")),
-                "agent-skills/_shared/references/ must exist");
+                "skills/_shared/references/ must exist");
         }
 
         @Test
         @DisplayName("Verdict policy reference exists")
         void verdictPolicyExists() {
             assertTrue(Files.exists(SKILLS_BASE.resolve("_shared/references/verdict-policy.md")),
-                "agent-skills/_shared/references/verdict-policy.md must exist");
+                "skills/_shared/references/verdict-policy.md must exist");
         }
 
         @Test
         @DisplayName("Claim verification SKILL.md exists")
         void claimVerificationSkillExists() {
             assertTrue(Files.exists(SKILLS_BASE.resolve("owl4agents-claim-verification/SKILL.md")),
-                "agent-skills/owl4agents-claim-verification/SKILL.md must exist");
+                "skills/owl4agents-claim-verification/SKILL.md must exist");
         }
 
         @Test
         @DisplayName("Evidence-grounded answer SKILL.md exists")
         void evidenceGroundedAnswerSkillExists() {
             assertTrue(Files.exists(SKILLS_BASE.resolve("owl4agents-evidence-grounded-answer/SKILL.md")),
-                "agent-skills/owl4agents-evidence-grounded-answer/SKILL.md must exist");
+                "skills/owl4agents-evidence-grounded-answer/SKILL.md must exist");
         }
 
         @Test
         @DisplayName("Ontology scope check SKILL.md exists")
         void ontologyScopeCheckSkillExists() {
             assertTrue(Files.exists(SKILLS_BASE.resolve("owl4agents-ontology-scope-check/SKILL.md")),
-                "agent-skills/owl4agents-ontology-scope-check/SKILL.md must exist");
+                "skills/owl4agents-ontology-scope-check/SKILL.md must exist");
         }
     }
 

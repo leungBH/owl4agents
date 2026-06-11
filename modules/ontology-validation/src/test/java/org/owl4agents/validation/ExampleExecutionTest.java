@@ -18,7 +18,7 @@ import static org.junit.jupiter.api.Assertions.*;
 /**
  * CLI example execution tests through real child processes (task 4.3).
  *
- * Uses `node npm/bin/owl4agents.js` as the entry point per design Decision 6.
+ * Uses `node tools/npm/bin/owl4agents.js` as the entry point per design Decision 6.
  * Tests are conditionally enabled when the shadow jar and Node.js are available.
  * These tests MUST NOT use direct `java -jar` invocation.
  *
@@ -32,7 +32,7 @@ class ExampleExecutionTest {
 
     private static final Path PROJECT_ROOT = findProjectRoot();
     private static final String NODE_LAUNCHER = "node";
-    private static final String LAUNCHER_SCRIPT = "npm/bin/owl4agents.js";
+    private static final String LAUNCHER_SCRIPT = "tools/npm/bin/owl4agents.js";
     private static final long PROCESS_TIMEOUT_SECONDS = 60;
     private static Path tempHome;
     private static boolean jarAvailable;
@@ -392,7 +392,7 @@ class ExampleExecutionTest {
             // Structural test: verify example.yaml commands reference npm launcher
             Path manifest = PROJECT_ROOT.resolve("examples/claim-verification/example.yaml");
             String content = readFileSafe(manifest);
-            assertTrue(content.contains("node npm/bin/owl4agents.js"),
+            assertTrue(content.contains("node tools/npm/bin/owl4agents.js"),
                 "Example scripts must reference npm launcher entry point");
             assertFalse(content.contains("java -jar"),
                 "Example scripts must NOT reference java -jar");

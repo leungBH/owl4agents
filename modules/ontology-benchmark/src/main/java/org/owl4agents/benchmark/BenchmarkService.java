@@ -252,15 +252,14 @@ public class BenchmarkService {
     }
 
     private Verdict aggregateVerdict(AnswerVerificationReport report) {
-        // Use the aggregate status to derive a single verdict
         AggregateAnswerStatus status = report.aggregateStatus();
         if (status == null) return Verdict.UNKNOWN;
-
-        String statusName = status.name().toLowerCase();
-        if (statusName.contains("supported") || statusName.contains("verified")) return Verdict.SUPPORTED;
-        if (statusName.contains("contradicted") || statusName.contains("refuted")) return Verdict.CONTRADICTED;
-        if (statusName.contains("out_of_scope") || statusName.contains("outofscope")) return Verdict.OUT_OF_SCOPE;
-        return Verdict.UNKNOWN;
+        return switch (status) {
+            case VERIFIED -> Verdict.SUPPORTED;
+            case CONTRADICTED -> Verdict.CONTRADICTED;
+            case OUT_OF_SCOPE -> Verdict.OUT_OF_SCOPE;
+            case INSUFFICIENT_EVIDENCE, PARTIALLY_VERIFIED, INVALID_INPUT -> Verdict.UNKNOWN;
+        };
     }
 
     private ClaimBatchInput.BatchClaim claimToBatchClaim(Claim claim) {

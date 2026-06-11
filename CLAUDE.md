@@ -91,5 +91,5 @@ Read and follow `CONVENTIONS.md` for:
 | Test corpus                | `test/corpus/`                             |
 | Acceptance reports         | `test/reports/acceptance/`                 |
 | Example demos              | `examples/`                                |
-| Agent skill packs          | `tools/agent-skills/`                      |
+| Agent skill packs          | `tools/skills/`                            |
 | Project conventions        | `CONVENTIONS.md`                           |

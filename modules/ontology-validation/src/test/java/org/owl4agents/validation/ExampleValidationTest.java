@@ -169,8 +169,8 @@ class ExampleValidationTest {
                 Path manifest = EXAMPLES_DIR.resolve(id).resolve("example.yaml");
                 String content = readFile(manifest);
                 if (content.contains("cli")) {
-                    assertTrue(content.contains("node npm/bin/owl4agents.js"),
-                        "Manifest for '" + id + "' CLI commands must use 'node npm/bin/owl4agents.js' entry point, not java -jar");
+                    assertTrue(content.contains("node tools/npm/bin/owl4agents.js"),
+                        "Manifest for '" + id + "' CLI commands must use 'node tools/npm/bin/owl4agents.js' entry point, not java -jar");
                     assertFalse(content.contains("java -jar"),
                         "Manifest for '" + id + "' CLI commands must NOT use 'java -jar' directly");
                 }

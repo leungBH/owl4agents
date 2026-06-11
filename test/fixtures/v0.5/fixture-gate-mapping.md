@@ -14,8 +14,8 @@ This document maps each acceptance gate to its required input fixture.
 | V05-CTX-001 | test/fixtures/v0.5/answer-claims-mixed.json | v0.3-claim-verification | CLI |
 | V05-MCP-001 | test/fixtures/v0.5/answer-claims-supported.json | v0.3-claim-verification | MCP |
 | V05-MCP-002 | test/fixtures/v0.5/answer-claims-mixed.json | v0.3-claim-verification | MCP |
-| V05-SKILL-001 | agent-skills/**/SKILL.md | (file validation) | File |
-| V05-SKILL-002 | agent-skills/*/examples/ | (file validation) | File |
+| V05-SKILL-001 | skills/**/SKILL.md | (file validation) | File |
+| V05-SKILL-002 | skills/*/examples/ | (file validation) | File |
 | V05-PROMPT-001 | prompts/*.md | (file/MCP validation) | File/MCP |
 | V05-REL-001 | (full build) | (build/test) | Build |
 

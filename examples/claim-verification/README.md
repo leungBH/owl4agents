@@ -128,7 +128,7 @@ node tools/npm/bin/owl4agents.js evidence-context pizza-ontology --claims test/f
 node tools/npm/bin/owl4agents.js review-answer pizza-ontology --claims test/fixtures/v0.5/answer-claims-mixed.json --policy strict --workspace claim-demo --json
 ```
 
-See [tools/agent-skills/](../tools/agent-skills/) for cross-agent SOP packs for claim verification, evidence-grounded answering, and ontology scope checks.
+See [tools/skills/](../tools/skills/) for cross-agent SOP packs for claim verification, evidence-grounded answering, and ontology scope checks.
 
 ## Troubleshooting
 

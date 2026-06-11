@@ -1,5 +1,27 @@
 # Changelog
 
+## 0.6.0 - 2026-06-11
+
+### Added
+
+- Research evaluation benchmark framework: `ExperimentConfig`, `ExperimentConfigParser`, `BenchmarkService`, `BenchmarkRunner`.
+- QA evaluation service: `QaEvaluationService` with accuracy, false-support-rate, unresolved-rate, verification-coverage, and 4×4 confusion matrix.
+- Context batch service: `ContextBatchService` with per-question evidence context and deterministic character budget truncation.
+- Report generator: `BenchmarkReportGenerator` with Markdown/JSON output, multi-reasoner comparison, and static reasoner version map.
+- Benchmark question set validator: `BenchmarkQuestionSetValidator` with Tier-1/Tier-2 two-tier validation, NL-only rejection, and missing-field diagnostics.
+- NL claim validation helper: `NlClaimValidationHelper` for structural claim decomposition checks.
+- CLI commands: `benchmark-run`, `eval-qa`, `context-batch`.
+- v0.6 test fixtures: `pizza-50.jsonl`, `owl2bench-30.jsonl`, `out-of-scope-cross.jsonl` question sets.
+- v0.6 benchmark configs: `pizza-small.yaml`, `owl2bench-medium.yaml`, `pizza-hallucination.yaml`.
+- v0.6 acceptance contract: `test/contracts/v06-acceptance/contracts.md`.
+
+### Changed
+
+- Directory restructure: `agent-skills/` → `tools/skills/`, `scripts/` → `tools/scripts/`, `npm/` → `tools/npm/`, `bin/` → `tools/bin/`.
+- `reports/` → `test/reports/`, `doc/` → `docs/`.
+- Build output centralized to `build/modules/` (no more per-module `build/` dirs).
+- `BenchmarkService.aggregateVerdict()` replaced fragile string matching with explicit switch on `AggregateAnswerStatus`.
+
 ## 0.5.0 - 2026-06-07
 
 ### Added
@@ -13,7 +35,7 @@
 - Added optional claim handling: `required` defaults to `true`, optional claims do not dominate aggregate status.
 - Added `ClaimBatchValidator` with deterministic field-level diagnostics for malformed input.
 - Added v0.5 fixtures: supported, contradicted, unknown, out_of_scope, partially_verified, mixed, optional-claim, malformed, and v0.3-wrapped batches.
-- Added `agent-skills/` directory with SOP packs: `owl4agents-claim-verification`, `owl4agents-evidence-grounded-answer`, `owl4agents-ontology-scope-check`.
+- Added `tools/skills/` directory with SOP packs: `owl4agents-claim-verification`, `owl4agents-evidence-grounded-answer`, `owl4agents-ontology-scope-check`.
 - Added shared policy references: `verdict-policy.md`, `claim-batch-schema.md`, `evidence-citation-policy.md`, `refusal-scope-policy.md`, `answer-review-sop.md`.
 - Added file-level MCP prompt templates: `verify-answer-with-ontology.md`, `ground-answer-with-evidence.md`, `explain-unknown-ontology-claim.md`.
 - Added test contracts: `agent-claim-workflow`, `evidence-context-format`, `agent-skill-packs`, `mcp-workflow-prompts`.

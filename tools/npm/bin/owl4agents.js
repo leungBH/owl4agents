@@ -159,6 +159,7 @@ function buildJavaCommand(runtime, args) {
       path.join(buildDir, 'ontology-query', 'libs', '*'),
       path.join(buildDir, 'ontology-retrieval', 'libs', '*'),
       path.join(buildDir, 'ontology-mcp', 'libs', '*'),
+      path.join(buildDir, 'ontology-benchmark', 'libs', '*'),
     ].join(os.platform() === 'win32' ? ';' : ':');
     return [javaExecutable(), '-cp', classpath, 'org.owl4agents.cli.Owl4AgentsCli', ...args];
   }
@@ -180,9 +181,9 @@ function main() {
     const pkgPath = path.resolve(__dirname, '..', 'package.json');
     try {
       const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf-8'));
-      console.log(pkg.version || '0.5.0');
+      console.log(pkg.version || '0.6.0');
     } catch {
-      console.log('0.5.0');
+      console.log('0.6.0');
     }
     process.exit(0);
   }
@@ -219,6 +220,10 @@ function main() {
     console.log('  verify-answer  Verify a batch of structured claims');
     console.log('  evidence-context Build compact evidence context for LLM agents');
     console.log('  review-answer  Review answer with policy-dependent guidance');
+    // v0.6 benchmark and evaluation commands
+    console.log('  benchmark-run  Run a benchmark experiment from YAML config');
+    console.log('  eval-qa     Evaluate benchmark QA result JSONL');
+    console.log('  context-batch Build evidence context for a question set');
     process.exit(0);
   }
 

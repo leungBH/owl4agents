@@ -7,7 +7,7 @@ These skill packs are committed release assets. They provide standard operating 
 ## Directory Layout
 
 ```
-tools/agent-skills/
+tools/skills/
 ├── README.md                              — This index
 ├── _shared/
 │   └── references/
