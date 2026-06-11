@@ -1,0 +1,10 @@
+name: pizza-hallucination
+description: Pizza ontology benchmark with hallucination detection enabled — computes false support rate and unresolved rate
+ontologyIds:
+  - pizza
+questionSetPath: test/fixtures/v0.6/question-sets/pizza-50.jsonl
+reasoners:
+  - hermit
+outputPath: results/pizza-hallucination-output.jsonl
+timeoutPerQuestion: 30
+hallucinationDetection: true

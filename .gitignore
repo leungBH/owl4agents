@@ -24,6 +24,7 @@ local-traces/
 test/owl_files/
 test/corpus/realworld-local/
 test/corpus/downloads/
+test/corpus/large/
 test/corpus/benchmarks/ore/
 
 # Gradle
@@ -67,3 +68,10 @@ Thumbs.db
 /gen_docx.js
 # Smoke test temporary workspaces
 *-smoke/
+v*-smoke-*/
+
+# Timestamped final workspace directories
+v*-final-*/
+
+# Numeric scratch files at root
+/[0-9]*/

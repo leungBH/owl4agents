@@ -99,7 +99,19 @@ public enum ErrorCode {
     UNSUPPORTED_CLAIM_TYPE("UNSUPPORTED_CLAIM_TYPE",
         "The claim type is not one of the supported v0.3 verification types."),
     EVIDENCE_NOT_AVAILABLE("EVIDENCE_NOT_AVAILABLE",
-        "No evidence could be assembled for the given claim verdict.");
+        "No evidence could be assembled for the given claim verdict."),
+
+    // v0.6 benchmark and QA evaluation error codes
+    INVALID_EXPERIMENT_CONFIG("INVALID_EXPERIMENT_CONFIG",
+        "The experiment configuration YAML is missing required fields or contains invalid values."),
+    QUESTION_SET_NOT_FOUND("QUESTION_SET_NOT_FOUND",
+        "The specified question set file path does not exist."),
+    RESULTS_NOT_FOUND("RESULTS_NOT_FOUND",
+        "No benchmark result JSONL file was found at the specified path."),
+    EMPTY_RESULTS("EMPTY_RESULTS",
+        "The benchmark result JSONL file contains no result lines."),
+    INVALID_QUESTION_SET("INVALID_QUESTION_SET",
+        "The question set line has missing required fields or invalid structure.");
 
     private final String code;
     private final String defaultMessage;

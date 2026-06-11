@@ -26,7 +26,7 @@ Add to your Claude Desktop MCP config (typically `claude_desktop_config.json`):
   "mcpServers": {
     "owl4agents": {
       "command": "node",
-      "args": ["npm/bin/owl4agents.js", "mcp"],
+      "args": ["tools/npm/bin/owl4agents.js", "mcp"],
       "cwd": "<your-owl4agents-repo-path>"
     }
   }
@@ -51,7 +51,7 @@ Or use the Windows wrapper on Windows:
 Use `owl4agents mcp-config --client cursor` to generate the config:
 
 ```bash
-node npm/bin/owl4agents.js mcp-config --client cursor
+node tools/npm/bin/owl4agents.js mcp-config --client cursor
 ```
 
 ### Generic MCP client
@@ -59,13 +59,13 @@ node npm/bin/owl4agents.js mcp-config --client cursor
 Use `owl4agents mcp-config --client generic` for a generic configuration:
 
 ```bash
-node npm/bin/owl4agents.js mcp-config --client generic
+node tools/npm/bin/owl4agents.js mcp-config --client generic
 ```
 
 Or manually start the server in stdio mode:
 
 ```bash
-node npm/bin/owl4agents.js mcp
+node tools/npm/bin/owl4agents.js mcp
 ```
 
 ## MCP Startup and Tool List
@@ -108,7 +108,7 @@ See `transcripts/verify-claim-transcript.md` for a sanitized example of calling 
 
 ## Windows Note
 
-On Windows, use the npm launcher (`node npm/bin/owl4agents.js mcp`) or the Windows wrapper (`bin\owl4agents-mcp.cmd`). Both use `java -cp` mode. Do not use `java -jar` for MCP on Windows — it produces an `ACCESS_VIOLATION` crash on some setups.
+On Windows, use the npm launcher (`node tools/npm/bin/owl4agents.js mcp`) or the Windows wrapper (`tools/bin\owl4agents-mcp.cmd`). Both use `java -cp` mode. Do not use `java -jar` for MCP on Windows — it produces an `ACCESS_VIOLATION` crash on some setups.
 
 ## Fixture attribution
 
@@ -117,5 +117,5 @@ No fixtures required — the MCP server starts from workspace state.
 ## Troubleshooting
 
 - **MCP startup failure:** Verify the shadow jar is built. Run `.\gradlew.bat :modules:ontology-cli:shadowJar`.
-- **ACCESS_VIOLATION on Windows:** Use `node npm/bin/owl4agents.js mcp` or `bin\owl4agents-mcp.cmd`. Both avoid the `java -jar` path that crashes on Windows.
+- **ACCESS_VIOLATION on Windows:** Use `node tools/npm/bin/owl4agents.js mcp` or `tools/bin\owl4agents-mcp.cmd`. Both avoid the `java -jar` path that crashes on Windows.
 - **Timeout:** The default MCP startup timeout is 30 seconds. If the reasoner takes longer on large ontologies, increase the timeout in the manifest.

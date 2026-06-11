@@ -693,18 +693,32 @@ public class ClaimVerificationService {
         ServiceError error = ((ServiceResult.Error<T>) errorResult).error();
         // Map v0.2 errors to v0.3 equivalents where needed
         if (error.code() == ErrorCode.ONTOLOGY_NOT_FOUND) {
-            return ServiceResult.error(ServiceError.ontologyNotFound(new OntologyId(
-                error.details() != null && error.details().get("ontologyId") != null
-                    ? (String) error.details().get("ontologyId") : "")));
+            String ontIdStr = error.details() != null && error.details().get("ontologyId") != null
+                ? (String) error.details().get("ontologyId") : null;
+            // Guard: OntologyId must not be blank (DEFECT-024 fix)
+            if (ontIdStr == null || ontIdStr.isBlank()) {
+                return ServiceResult.error(ServiceError.of(ErrorCode.ONTOLOGY_NOT_FOUND,
+                    "Ontology not found (ID unavailable from error details)"));
+            }
+            return ServiceResult.error(ServiceError.ontologyNotFound(new OntologyId(ontIdStr)));
         }
         if (error.code() == ErrorCode.CLASS_NOT_FOUND
             || error.code() == ErrorCode.PROPERTY_NOT_FOUND
             || error.code() == ErrorCode.INDIVIDUAL_NOT_FOUND
             || error.code() == ErrorCode.DATATYPE_NOT_FOUND) {
             String entityIRI = error.details() != null && error.details().get("entityIRI") != null
-                ? (String) error.details().get("entityIRI") : "";
-            return ServiceResult.error(ServiceError.entityNotFound(
-                new EntityId(entityIRI), new OntologyId("")));
+                ? (String) error.details().get("entityIRI") : null;
+            // Guard: avoid EntityId/OntologyId with blank values (DEFECT-024 fix)
+            // Use ServiceError.of() with a descriptive message instead of entityNotFound()
+            // which requires non-blank EntityId/OntologyId objects.
+            if (entityIRI == null || entityIRI.isBlank()) {
+                return ServiceResult.error(ServiceError.of(error.code(),
+                    "Entity not found (IRI unavailable from error details)"));
+            }
+            // entityNotFound requires valid EntityId + OntologyId; use error code directly
+            // to avoid potential OntologyId("") crash
+            return ServiceResult.error(ServiceError.of(error.code(),
+                "Entity not found: " + entityIRI));
         }
         return ServiceResult.error(error);
     }

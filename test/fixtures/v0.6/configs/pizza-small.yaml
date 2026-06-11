@@ -1,0 +1,9 @@
+name: pizza-small
+description: Pizza ontology benchmark with hermit reasoner — CI smoke test
+ontologyIds:
+  - pizza
+questionSetPath: test/fixtures/v0.6/question-sets/pizza-50.jsonl
+reasoners:
+  - hermit
+outputPath: results/pizza-small-output.jsonl
+timeoutPerQuestion: 30

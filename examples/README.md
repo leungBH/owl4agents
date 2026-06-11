@@ -15,13 +15,13 @@ Run any example from the repository root using the npm launcher:
 
 ```bash
 # Windows PowerShell
-node npm/bin/owl4agents.js <command>
+node tools/npm/bin/owl4agents.js <command>
 
 # Linux / macOS
-node npm/bin/owl4agents.js <command>
+node tools/npm/bin/owl4agents.js <command>
 ```
 
-**Important:** Example scripts use `node npm/bin/owl4agents.js` as the CLI entry point. Do not use `java -jar` directly in examples — it produces an `ACCESS_VIOLATION` crash on some Windows setups.
+**Important:** Example scripts use `node tools/npm/bin/owl4agents.js` as the CLI entry point. Do not use `java -jar` directly in examples — it produces an `ACCESS_VIOLATION` crash on some Windows setups.
 
 ## Example Packs
 
@@ -37,7 +37,7 @@ node npm/bin/owl4agents.js <command>
 Examples create temporary workspaces under your OS temp directory by default. To use a specific workspace:
 
 ```bash
-node npm/bin/owl4agents.js smoke --workspace <home-directory>
+node tools/npm/bin/owl4agents.js smoke --workspace <home-directory>
 ```
 
 The `--workspace` parameter accepts a home directory path. If the path already ends with `workspaces/<name>`, the parent directory is used automatically.
@@ -64,5 +64,5 @@ Example validation is wired into `buildVerification` and runs as part of CI.
 ## Troubleshooting
 
 - **Missing fixture:** Check that `test/corpus/` contains the required fixture file. Run `.\gradlew.bat :modules:ontology-cli:shadowJar` first if the jar is missing.
-- **ACCESS_VIOLATION on Windows:** Use the npm launcher (`node npm/bin/owl4agents.js`) instead of `java -jar`. See root README for details.
-- **MCP startup failure on Windows:** Use the Windows wrapper `bin\owl4agents-mcp.cmd` or `node npm/bin/owl4agents.js mcp`. Both use `java -cp` mode.
+- **ACCESS_VIOLATION on Windows:** Use the npm launcher (`node tools/npm/bin/owl4agents.js`) instead of `java -jar`. See root README for details.
+- **MCP startup failure on Windows:** Use the Windows wrapper `tools/bin\owl4agents-mcp.cmd` or `node tools/npm/bin/owl4agents.js mcp`. Both use `java -cp` mode.

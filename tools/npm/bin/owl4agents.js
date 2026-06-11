@@ -65,22 +65,22 @@ function findJavaRuntime() {
     process.exit(2);
   }
 
-  const shadowJarPath = path.resolve(__dirname, '..', '..', 'modules', 'ontology-cli', 'build', 'libs', 'owl4agents.jar');
+  const shadowJarPath = path.resolve(__dirname, '..', '..', '..', 'modules', 'ontology-cli', 'build', 'libs', 'owl4agents.jar');
   if (fs.existsSync(shadowJarPath)) {
     return { type: 'jar', path: shadowJarPath };
   }
 
-  const fatJarPath = path.resolve(__dirname, '..', '..', 'modules', 'ontology-cli', 'build', 'libs', 'ontology-cli-all.jar');
+  const fatJarPath = path.resolve(__dirname, '..', '..', '..', 'modules', 'ontology-cli', 'build', 'libs', 'ontology-cli-all.jar');
   if (fs.existsSync(fatJarPath)) {
     return { type: 'jar', path: fatJarPath };
   }
 
-  const distJarPath = path.resolve(__dirname, '..', '..', 'modules', 'ontology-distribution', 'build', 'libs', 'ontology-distribution.jar');
+  const distJarPath = path.resolve(__dirname, '..', '..', '..', 'modules', 'ontology-distribution', 'build', 'libs', 'ontology-distribution.jar');
   if (fs.existsSync(distJarPath)) {
     return { type: 'jar', path: distJarPath };
   }
 
-  const platformRuntimePath = path.resolve(__dirname, '..', '..', 'build', 'runtime', `owl4agents-${detectPlatform().platform}-${detectPlatform().arch}`);
+  const platformRuntimePath = path.resolve(__dirname, '..', '..', '..', 'build', 'runtime', `owl4agents-${detectPlatform().platform}-${detectPlatform().arch}`);
   if (fs.existsSync(platformRuntimePath)) {
     return { type: 'native', path: platformRuntimePath };
   }
@@ -99,7 +99,7 @@ function findJavaRuntime() {
     execSync('java -version', { stdio: 'pipe' });
     return { type: 'classpath' };
   } catch {
-    const gradlewPath = path.resolve(__dirname, '..', '..', os.platform() === 'win32' ? 'gradlew.bat' : 'gradlew');
+    const gradlewPath = path.resolve(__dirname, '..', '..', '..', os.platform() === 'win32' ? 'gradlew.bat' : 'gradlew');
     if (fs.existsSync(gradlewPath)) {
       return { type: 'gradle', path: gradlewPath };
     }
@@ -150,7 +150,7 @@ function buildJavaCommand(runtime, args) {
     return [runtime.path, ...args];
   }
   if (runtime.type === 'classpath') {
-    const modulesDir = path.resolve(__dirname, '..', '..', 'modules');
+    const modulesDir = path.resolve(__dirname, '..', '..', '..', 'modules');
     const classpath = [
       path.join(modulesDir, 'ontology-cli', 'build', 'libs', '*'),
       path.join(modulesDir, 'ontology-core', 'build', 'libs', '*'),
@@ -163,7 +163,7 @@ function buildJavaCommand(runtime, args) {
     return [javaExecutable(), '-cp', classpath, 'org.owl4agents.cli.Owl4AgentsCli', ...args];
   }
 
-  const gradlewPath = path.resolve(__dirname, '..', '..', detectedPlatform === 'windows' ? 'gradlew.bat' : 'gradlew');
+  const gradlewPath = path.resolve(__dirname, '..', '..', '..', detectedPlatform === 'windows' ? 'gradlew.bat' : 'gradlew');
   if (fs.existsSync(gradlewPath)) {
     return [gradlewPath, '--console=plain', ':modules:ontology-cli:run', `--args=${args.join(' ')}`];
   }

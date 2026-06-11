@@ -9,23 +9,23 @@ fixtures:
     attribution: "Protégé Pizza Ontology, Stanford University. CC BY 4.0."
 commands:
   - step: Import Pizza ontology into workspace
-    exec: node npm/bin/owl4agents.js import test/corpus/smoke/pizza.owl pizza --workspace pizza-demo
+    exec: node tools/npm/bin/owl4agents.js import test/corpus/smoke/pizza.owl pizza --workspace pizza-demo
     exitCode: 0
     prerequisite: null
   - step: Get ontology summary
-    exec: node npm/bin/owl4agents.js summary pizza --workspace pizza-demo
+    exec: node tools/npm/bin/owl4agents.js summary pizza --workspace pizza-demo
     exitCode: 0
     prerequisite: import must succeed first
   - step: Get entity context for Margherita
-    exec: node npm/bin/owl4agents.js entity pizza http://www.co-ode.org/ontologies/pizza/pizza.owl#Margherita --workspace pizza-demo
+    exec: node tools/npm/bin/owl4agents.js entity pizza http://www.co-ode.org/ontologies/pizza/pizza.owl#Margherita --workspace pizza-demo
     exitCode: 0
     prerequisite: import must succeed first
   - step: Run reasoner classification
-    exec: node npm/bin/owl4agents.js classify pizza --workspace pizza-demo
+    exec: node tools/npm/bin/owl4agents.js classify pizza --workspace pizza-demo
     exitCode: 0
     prerequisite: import must succeed first
   - step: Get property characteristics for hasTopping
-    exec: node npm/bin/owl4agents.js properties pizza --property http://www.co-ode.org/ontologies/pizza/pizza.owl#hasTopping --workspace pizza-demo
+    exec: node tools/npm/bin/owl4agents.js properties pizza --property http://www.co-ode.org/ontologies/pizza/pizza.owl#hasTopping --workspace pizza-demo
     exitCode: 0
     prerequisite: import must succeed first
 expectedOutputs:
@@ -48,7 +48,7 @@ expectedOutputs:
 ciRequired: true
 platformLimitations:
   - platform: windows
-    note: Use node npm/bin/owl4agents.js entry point; direct jar execution may crash on some Windows setups
+    note: Use node tools/npm/bin/owl4agents.js entry point; direct jar execution may crash on some Windows setups
 attribution:
   source: "Protégé Pizza Ontology, https://protege.stanford.edu/ontologies/pizza/pizza.owl"
   license: "CC BY 4.0"

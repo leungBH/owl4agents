@@ -1,7 +1,6 @@
-package org.owl4agents.cli;
+package org.owl4agents.core.util;
 
 import com.google.gson.Gson;
-import com.google.gson.GsonBuilder;
 import com.google.gson.TypeAdapter;
 import com.google.gson.TypeAdapterFactory;
 import com.google.gson.reflect.TypeToken;
@@ -21,6 +20,9 @@ import java.util.Optional;
  *
  * Required because JDK 17+ module system blocks reflective access to
  * Optional.value, causing InaccessibleObjectException with default Gson.
+ *
+ * Originally fixed as DEFECT-006 in v0.5 (ontology-cli). Moved to
+ * ontology-core/util so all modules (CLI, MCP, benchmark) can share it.
  */
 public class OptionalTypeAdapterFactory implements TypeAdapterFactory {
 

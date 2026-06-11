@@ -3,6 +3,7 @@ package org.owl4agents.cli;
 import org.owl4agents.validation.*;
 import org.owl4agents.core.*;
 import org.owl4agents.core.model.*;
+import org.owl4agents.benchmark.EvidenceContextJsonlSerializer;
 
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Parameters;
@@ -43,6 +44,9 @@ public class EvidenceContextCommand implements Callable<Integer> {
     @Option(names = {"--json"}, description = "Output as JSON")
     private boolean jsonOutput = false;
 
+    @Option(names = {"--format"}, description = "Output format: compact (default), jsonl (streamable JSONL with truncation metadata)")
+    private String format = "compact";
+
     private static final Gson gson = GsonFactory.createGson();
     private static final java.lang.reflect.Type MAP_TYPE = new TypeToken<Map<String, Object>>(){}.getType();
 
@@ -80,7 +84,13 @@ public class EvidenceContextCommand implements Callable<Integer> {
         EvidenceContextBuilder builder = new EvidenceContextBuilder();
         EvidenceContext context = builder.buildContext(report, maxContextTokens);
 
-        if (jsonOutput) {
+        if ("jsonl".equalsIgnoreCase(format)) {
+            // JSONL format: streamable, independently parseable, truncation metadata present
+            EvidenceContextJsonlSerializer jsonlSerializer = new EvidenceContextJsonlSerializer();
+            int budgetCharsUsed = maxContextTokens > 0 ? 4 * maxContextTokens : 0;
+            int totalAvailableChars = estimateTotalChars(report);
+            System.out.println(jsonlSerializer.serializeToJsonl(context, budgetCharsUsed, totalAvailableChars));
+        } else if (jsonOutput) {
             System.out.println(gson.toJson(context));
         } else {
             System.out.println("Evidence context for answer '" + context.answerId() + "':");
@@ -217,5 +227,19 @@ public class EvidenceContextCommand implements Callable<Integer> {
             System.err.println("Error: " + message);
         }
         return 1;
+    }
+
+    /**
+     * Estimate total available evidence characters from a report.
+     */
+    private int estimateTotalChars(AnswerVerificationReport report) {
+        int total = 0;
+        for (var claimResult : report.claimResults()) {
+            total += claimResult.claimId().length() + 30;
+            for (var ev : claimResult.evidence()) {
+                total += ev.summary().length() + ev.kind().length() + ev.source().length() + 40;
+            }
+        }
+        return total;
     }
 }

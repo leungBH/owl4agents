@@ -10,5 +10,6 @@ include(
     "modules:ontology-validation",
     "modules:ontology-cli",
     "modules:ontology-mcp",
-    "modules:ontology-distribution"
+    "modules:ontology-distribution",
+    "modules:ontology-benchmark"
 )

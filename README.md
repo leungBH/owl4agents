@@ -4,7 +4,7 @@ Local OWL ontology runtime, reasoner integration, SPARQL query layer, and readon
 
 `owl4agents` is a local-first OWL/RDF ontology runtime for researchers and agent developers. It imports, manages, reasons over, queries, and retrieves structured semantic context from OWL ontologies, then exposes those capabilities through both CLI commands and an MCP server.
 
-> Status: v0.5 agent claim workflow and skill packs. v0.5 adds batch claim verification, evidence context for LLM agents, review-answer CLI/MCP commands, and public agent-skills/ SOP packs.
+> Status: v0.6 research evaluation benchmarks and reasoner comparison. v0.6 adds experiment configuration, benchmark runner, QA evaluation, context-batch mode, evidence context JSONL export, and report generation with 4×4 confusion matrix and static reasoner version mapping.
 
 ## v0.5 Quick Start
 
@@ -14,7 +14,7 @@ Local OWL ontology runtime, reasoner integration, SPARQL query layer, and readon
 - Java 22, with `JAVA_HOME` pointing to the JDK
 - Node.js 18+ for the npm launcher and MCP client entry point
 
-On Windows, prefer `JAVA_HOME` over the Oracle `javapath` shim. The npm launcher uses `JAVA_HOME\bin\java.exe` when it is available. Note: `java -jar owl4agents.jar` may crash with `ACCESS_VIOLATION` on some Windows environments — use `node npm/bin/owl4agents.js` or `.\gradlew.bat run --args="..."` instead.
+On Windows, prefer `JAVA_HOME` over the Oracle `javapath` shim. The npm launcher uses `JAVA_HOME\bin\java.exe` when it is available. Note: `java -jar owl4agents.jar` may crash with `ACCESS_VIOLATION` on some Windows environments — use `node tools/npm/bin/owl4agents.js` or `.\gradlew.bat run --args="..."` instead.
 
 ### From Clone to Smoke Test
 
@@ -24,16 +24,16 @@ On Windows, prefer `JAVA_HOME` over the Oracle `javapath` shim. The npm launcher
 .\gradlew.bat :modules:ontology-cli:shadowJar
 
 # 2. Check that your environment is ready
-node npm/bin/owl4agents.js setup --check
+node tools/npm/bin/owl4agents.js setup --check
 
 # 3. Initialize workspace and import onboarding fixtures
-node npm/bin/owl4agents.js setup --init
+node tools/npm/bin/owl4agents.js setup --init
 
 # 4. Run onboarding smoke test
-node npm/bin/owl4agents.js smoke
+node tools/npm/bin/owl4agents.js smoke
 
 # 5. Generate MCP client configuration
-node npm/bin/owl4agents.js mcp-config --client claude
+node tools/npm/bin/owl4agents.js mcp-config --client claude
 ```
 
 `setup --check` verifies Java, Gradle, source layout, workspace, npm launcher, and runtime jar. `setup --init` creates the workspace and imports the Pizza ontology and v0.3 claim-verification golden ontology. `smoke` runs a complete onboarding cycle: fixture import, ontology list, summary, reasoner list, classification, and claim verification. `mcp-config --client claude` prints a ready-to-paste JSON configuration for Claude Desktop.
@@ -46,24 +46,24 @@ After building the jar, run any of these examples from the repository root:
 
 ```powershell
 # Claim verification — supported, contradicted, unknown, out_of_scope
-node npm/bin/owl4agents.js import test/corpus/golden/v0.3-claim-verification.owl v0.3-claim-verification --workspace claim-demo
-node npm/bin/owl4agents.js reason v0.3-claim-verification --workspace claim-demo
-node npm/bin/owl4agents.js verify-claim v0.3-claim-verification --claim test/fixtures/v0.3/claim-supported.json --workspace claim-demo --json
+node tools/npm/bin/owl4agents.js import test/corpus/golden/v0.3-claim-verification.owl v0.3-claim-verification --workspace claim-demo
+node tools/npm/bin/owl4agents.js reason v0.3-claim-verification --workspace claim-demo
+node tools/npm/bin/owl4agents.js verify-claim v0.3-claim-verification --claim test/fixtures/v0.3/claim-supported.json --workspace claim-demo --json
 
 # Pizza reasoning — import, summary, classify
-node npm/bin/owl4agents.js import test/corpus/smoke/pizza.owl pizza --workspace pizza-demo
-node npm/bin/owl4agents.js summary pizza --workspace pizza-demo
+node tools/npm/bin/owl4agents.js import test/corpus/smoke/pizza.owl pizza --workspace pizza-demo
+node tools/npm/bin/owl4agents.js summary pizza --workspace pizza-demo
 
 # Biomedical grounding — disease hierarchy and claim verification
-node npm/bin/owl4agents.js import test/corpus/golden/v0.4-biomedical-grounding.owl v0.4-biomedical-grounding --workspace bio-demo
-node npm/bin/owl4agents.js reason v0.4-biomedical-grounding --workspace bio-demo
-node npm/bin/owl4agents.js verify-claim v0.4-biomedical-grounding --claim test/fixtures/v0.4/claim-bio-supported.json --workspace bio-demo --json
+node tools/npm/bin/owl4agents.js import test/corpus/golden/v0.4-biomedical-grounding.owl v0.4-biomedical-grounding --workspace bio-demo
+node tools/npm/bin/owl4agents.js reason v0.4-biomedical-grounding --workspace bio-demo
+node tools/npm/bin/owl4agents.js verify-claim v0.4-biomedical-grounding --claim test/fixtures/v0.4/claim-bio-supported.json --workspace bio-demo --json
 
 # v0.5 Batch workflow — verify-answer, evidence-context, review-answer
-node npm/bin/owl4agents.js import test/corpus/smoke/pizza.owl pizza-ontology --workspace workflow-demo
-node npm/bin/owl4agents.js reason pizza-ontology --workspace workflow-demo
-node npm/bin/owl4agents.js verify-answer pizza-ontology --claims test/fixtures/v0.5/answer-claims-supported.json --workspace workflow-demo
-node npm/bin/owl4agents.js review-answer pizza-ontology --claims test/fixtures/v0.5/answer-claims-mixed.json --policy strict --workspace workflow-demo --json
+node tools/npm/bin/owl4agents.js import test/corpus/smoke/pizza.owl pizza-ontology --workspace workflow-demo
+node tools/npm/bin/owl4agents.js reason pizza-ontology --workspace workflow-demo
+node tools/npm/bin/owl4agents.js verify-answer pizza-ontology --claims test/fixtures/v0.5/answer-claims-supported.json --workspace workflow-demo
+node tools/npm/bin/owl4agents.js review-answer pizza-ontology --claims test/fixtures/v0.5/answer-claims-mixed.json --policy strict --workspace workflow-demo --json
 ```
 
 See [examples/README.md](examples/README.md) for full step-by-step commands, expected output snippets, and troubleshooting.
@@ -77,18 +77,18 @@ See [examples/README.md](examples/README.md) for full step-by-step commands, exp
 | [agent-mcp](examples/agent-mcp/) | MCP client configuration, readonly startup, tool list, tool-call samples | MCP | None (starts MCP server) | ~5 seconds |
 | [biomedical-grounding](examples/biomedical-grounding/) | Biomedical-style grounding using a project-owned golden fixture | CLI | `test/corpus/golden/v0.4-biomedical-grounding.owl` | ~5 seconds |
 | Batch workflow | `verify-answer`, `evidence-context`, `review-answer` with policy | CLI/MCP | `test/fixtures/v0.5/` claim batch fixtures | ~5 seconds |
-| Agent skill packs | Cross-agent SOPs for claim verification, evidence-grounded answers, and scope checks | Reference | [agent-skills/](agent-skills/) | N/A (documentation) |
+| Agent skill packs | Cross-agent SOPs for claim verification, evidence-grounded answers, and scope checks | Reference | [tools/agent-skills/](tools/agent-skills/) | N/A (documentation) |
 
-All examples use `node npm/bin/owl4agents.js` as the CLI entry point. See each example's README for prerequisites, commands, and expected output.
+All examples use `node tools/npm/bin/owl4agents.js` as the CLI entry point. See each example's README for prerequisites, commands, and expected output.
 
 ### Verify Release from Fresh Checkout
 
 ```powershell
 .\gradlew.bat clean buildVerification
 .\gradlew.bat :modules:ontology-cli:shadowJar
-node npm/test/launcher.test.js
-node npm/bin/owl4agents.js --version
-node npm/bin/owl4agents.js --help
+node tools/npm/test/launcher.test.js
+node tools/npm/bin/owl4agents.js --version
+node tools/npm/bin/owl4agents.js --help
 ```
 
 Build the runnable CLI jar:
@@ -108,18 +108,18 @@ modules/ontology-cli/build/libs/owl4agents.jar
 Use the local npm launcher during v0.3.1 development:
 
 ```powershell
-node npm/bin/owl4agents.js init
-node npm/bin/owl4agents.js import test/corpus/smoke/pizza.owl pizza
-node npm/bin/owl4agents.js list
-node npm/bin/owl4agents.js summary pizza
-node npm/bin/owl4agents.js search pizza Pizza
-node npm/bin/owl4agents.js entity pizza "http://www.co-ode.org/ontologies/pizza/pizza.owl#Pizza"
-node npm/bin/owl4agents.js query pizza --ask "ASK { ?s ?p ?o }"
-node npm/bin/owl4agents.js context pizza "Which toppings are related to pizza?"
-node npm/bin/owl4agents.js list-reasoners
-node npm/bin/owl4agents.js consistency pizza --reasoner hermit
-node npm/bin/owl4agents.js classify pizza --reasoner auto
-node npm/bin/owl4agents.js realize pizza --reasoner hermit
+node tools/npm/bin/owl4agents.js init
+node tools/npm/bin/owl4agents.js import test/corpus/smoke/pizza.owl pizza
+node tools/npm/bin/owl4agents.js list
+node tools/npm/bin/owl4agents.js summary pizza
+node tools/npm/bin/owl4agents.js search pizza Pizza
+node tools/npm/bin/owl4agents.js entity pizza "http://www.co-ode.org/ontologies/pizza/pizza.owl#Pizza"
+node tools/npm/bin/owl4agents.js query pizza --ask "ASK { ?s ?p ?o }"
+node tools/npm/bin/owl4agents.js context pizza "Which toppings are related to pizza?"
+node tools/npm/bin/owl4agents.js list-reasoners
+node tools/npm/bin/owl4agents.js consistency pizza --reasoner hermit
+node tools/npm/bin/owl4agents.js classify pizza --reasoner auto
+node tools/npm/bin/owl4agents.js realize pizza --reasoner hermit
 ```
 
 > **Note:** `reason`, `classify`, `realize`, and `consistency` may recompute reasoner state for the current command. The `reason` command persists `reasoning-report.json` and inferred artifacts under the ontology workspace, so `report` can read the latest report in a later CLI or MCP process. Commands that need inferred facts still require reasoning artifacts to exist for the ontology.
@@ -128,44 +128,64 @@ v0.3 claim verification commands:
 
 ```powershell
 # Import and reason over the deterministic v0.3 claim-verification fixture
-node npm/bin/owl4agents.js import test/corpus/golden/v0.3-claim-verification.owl v0.3-claim-verification
-node npm/bin/owl4agents.js reason v0.3-claim-verification --reasoner hermit
+node tools/npm/bin/owl4agents.js import test/corpus/golden/v0.3-claim-verification.owl v0.3-claim-verification
+node tools/npm/bin/owl4agents.js reason v0.3-claim-verification --reasoner hermit
 
 # Verify supported, unknown, and out-of-scope claims
-node npm/bin/owl4agents.js verify-claim v0.3-claim-verification --claim test/fixtures/v0.3/claim-supported.json
-node npm/bin/owl4agents.js verify-claim v0.3-claim-verification --claim test/fixtures/v0.3/claim-unknown.json
-node npm/bin/owl4agents.js verify-claim v0.3-claim-verification --claim test/fixtures/v0.3/claim-real-out-of-scope.json
+node tools/npm/bin/owl4agents.js verify-claim v0.3-claim-verification --claim test/fixtures/v0.3/claim-supported.json
+node tools/npm/bin/owl4agents.js verify-claim v0.3-claim-verification --claim test/fixtures/v0.3/claim-unknown.json
+node tools/npm/bin/owl4agents.js verify-claim v0.3-claim-verification --claim test/fixtures/v0.3/claim-real-out-of-scope.json
 
 # Get evidence path for a verified claim
-node npm/bin/owl4agents.js evidence v0.3-claim-verification --claim test/fixtures/v0.3/claim-supported.json
+node tools/npm/bin/owl4agents.js evidence v0.3-claim-verification --claim test/fixtures/v0.3/claim-supported.json
 
 # Explain why a claim is unknown
-node npm/bin/owl4agents.js explain-unknown v0.3-claim-verification --claim test/fixtures/v0.3/claim-unknown.json
+node tools/npm/bin/owl4agents.js explain-unknown v0.3-claim-verification --claim test/fixtures/v0.3/claim-unknown.json
 
 # Detect missing or ambiguous entities in a claim
-node npm/bin/owl4agents.js missing-entities v0.3-claim-verification --claim test/fixtures/v0.3/claim-real-out-of-scope.json
+node tools/npm/bin/owl4agents.js missing-entities v0.3-claim-verification --claim test/fixtures/v0.3/claim-real-out-of-scope.json
 
 # Counterexamples are available only when a claim verdict is contradicted
-node npm/bin/owl4agents.js counterexamples v0.3-claim-verification --claim test/fixtures/v0.3/claim-supported.json
+node tools/npm/bin/owl4agents.js counterexamples v0.3-claim-verification --claim test/fixtures/v0.3/claim-supported.json
 ```
 
 v0.5 batch claim workflow commands (structured claim input required — v0.5 does not extract claims from free text):
 
 ```powershell
 # Import and reason over the Pizza ontology for v0.5 fixtures
-node npm/bin/owl4agents.js import test/corpus/smoke/pizza.owl pizza-ontology
-node npm/bin/owl4agents.js reason pizza-ontology --reasoner hermit
+node tools/npm/bin/owl4agents.js import test/corpus/smoke/pizza.owl pizza-ontology
+node tools/npm/bin/owl4agents.js reason pizza-ontology --reasoner hermit
 
 # Batch verify structured answer claims
-node npm/bin/owl4agents.js verify-answer pizza-ontology --claims test/fixtures/v0.5/answer-claims-supported.json
+node tools/npm/bin/owl4agents.js verify-answer pizza-ontology --claims test/fixtures/v0.5/answer-claims-supported.json
 
 # Build compact evidence context for LLM agents
-node npm/bin/owl4agents.js evidence-context pizza-ontology --claims test/fixtures/v0.5/answer-claims-supported.json --max-context-tokens 500
+node tools/npm/bin/owl4agents.js evidence-context pizza-ontology --claims test/fixtures/v0.5/answer-claims-supported.json --max-context-tokens 500
 
 # Review answer claims with handling guidance (strict, conservative, or report-only policy)
-node npm/bin/owl4agents.js review-answer pizza-ontology --claims test/fixtures/v0.5/answer-claims-mixed.json --policy strict
-node npm/bin/owl4agents.js review-answer pizza-ontology --claims test/fixtures/v0.5/answer-claims-mixed.json --policy conservative
-node npm/bin/owl4agents.js review-answer pizza-ontology --claims test/fixtures/v0.5/answer-claims-mixed.json --policy report-only
+node tools/npm/bin/owl4agents.js review-answer pizza-ontology --claims test/fixtures/v0.5/answer-claims-mixed.json --policy strict
+node tools/npm/bin/owl4agents.js review-answer pizza-ontology --claims test/fixtures/v0.5/answer-claims-mixed.json --policy conservative
+node tools/npm/bin/owl4agents.js review-answer pizza-ontology --claims test/fixtures/v0.5/answer-claims-mixed.json --policy report-only
+```
+
+v0.6 benchmark and evaluation commands:
+
+```powershell
+# Import and reason over the Pizza ontology for benchmark experiments
+node tools/npm/bin/owl4agents.js import test/corpus/smoke/pizza.owl pizza-benchmark
+node tools/npm/bin/owl4agents.js reason pizza-benchmark --reasoner hermit
+
+# Run a benchmark experiment from config YAML
+node tools/npm/bin/owl4agents.js benchmark-run test/fixtures/v0.6/configs/pizza-small.yaml
+
+# Evaluate QA results with accuracy, false support rate, and confusion matrix
+node tools/npm/bin/owl4agents.js eval-qa results/pizza-small-output.jsonl --json
+
+# Build evidence context for a question set (context-batch mode)
+node tools/npm/bin/owl4agents.js context-batch test/fixtures/v0.6/question-sets/pizza-50.jsonl --ontology pizza-benchmark --max-context-tokens 500
+
+# Export evidence context as JSONL with truncation metadata
+node tools/npm/bin/owl4agents.js evidence-context pizza-benchmark --claims test/fixtures/v0.5/answer-claims-supported.json --format jsonl --max-context-tokens 500
 ```
 
 Or run the fat jar directly (Linux and macOS):
@@ -177,13 +197,13 @@ java -jar modules/ontology-cli/build/libs/owl4agents.jar summary pizza
 java -jar modules/ontology-cli/build/libs/owl4agents.jar consistency pizza --reasoner hermit
 ```
 
-> **Windows limitation:** `java -jar owl4agents.jar` may crash with `ACCESS_VIOLATION` on some Windows environments. This is a known JVM/OWL API interaction issue. On Windows, prefer `node npm/bin/owl4agents.js <command>` or `.\gradlew.bat run --args="<command>"` instead. CI runs `java -jar` on Ubuntu without issues.
+> **Windows limitation:** `java -jar owl4agents.jar` may crash with `ACCESS_VIOLATION` on some Windows environments. This is a known JVM/OWL API interaction issue. On Windows, prefer `node tools/npm/bin/owl4agents.js <command>` or `.\gradlew.bat run --args="<command>"` instead. CI runs `java -jar` on Ubuntu without issues.
 
 To keep a workspace outside the default user home location:
 
 ```powershell
 $env:OWL4AGENTS_HOME="D:\owl4agents-workspace"
-node npm/bin/owl4agents.js init
+node tools/npm/bin/owl4agents.js init
 ```
 
 The default workspace is:
@@ -201,15 +221,15 @@ For v0.3, the supported deployment mode is source checkout plus local launcher. 
 3. Run `.\gradlew.bat clean buildVerification`.
 4. Run `.\gradlew.bat :modules:ontology-cli:shadowJar`.
 5. Import at least one ontology into the workspace.
-6. Point your MCP client to `node npm/bin/owl4agents.js mcp --readonly`.
+6. Point your MCP client to `node tools/npm/bin/owl4agents.js mcp --readonly`.
 
 Example:
 
 ```powershell
 $env:OWL4AGENTS_HOME="D:\owl4agents-workspace"
-node npm/bin/owl4agents.js init
-node npm/bin/owl4agents.js import D:\ontologies\pizza.owl pizza
-node npm/bin/owl4agents.js mcp --readonly
+node tools/npm/bin/owl4agents.js init
+node tools/npm/bin/owl4agents.js import D:\ontologies\pizza.owl pizza
+node tools/npm/bin/owl4agents.js mcp --readonly
 ```
 
 ### MCP Client Configuration
@@ -218,19 +238,19 @@ The recommended way to configure MCP clients is the `mcp-config` command, which 
 
 ```powershell
 # Generate Claude Desktop config
-node npm/bin/owl4agents.js mcp-config --client claude
+node tools/npm/bin/owl4agents.js mcp-config --client claude
 
 # Generate generic config (any stdio-based MCP client)
-node npm/bin/owl4agents.js mcp-config --client generic
+node tools/npm/bin/owl4agents.js mcp-config --client generic
 
 # Generate Cursor config
-node npm/bin/owl4agents.js mcp-config --client cursor
+node tools/npm/bin/owl4agents.js mcp-config --client cursor
 
 # Override workspace location
-node npm/bin/owl4agents.js mcp-config --client claude --workspace-home D:/owl4agents-workspace
+node tools/npm/bin/owl4agents.js mcp-config --client claude --workspace-home D:/owl4agents-workspace
 
 # Write config to file
-node npm/bin/owl4agents.js mcp-config --client claude --out claude-mcp-config.json
+node tools/npm/bin/owl4agents.js mcp-config --client claude --out claude-mcp-config.json
 ```
 
 > **Note:** `codex` and `codex-cli` config templates are deferred until their public client naming and configuration format stabilize. They are not advertised as supported clients in v0.3.1.
@@ -245,7 +265,7 @@ Alternatively, you can write the config manually. Use this form for MCP clients 
     "owl4agents": {
       "command": "node",
       "args": [
-        "D:/path/to/owl4agents/npm/bin/owl4agents.js",
+        "D:/path/to/owl4agents/tools/npm/bin/owl4agents.js",
         "mcp",
         "--readonly"
       ],
@@ -263,7 +283,7 @@ On Windows, if your client has trouble with stdin/stdout through Node, use the b
 {
   "mcpServers": {
     "owl4agents": {
-      "command": "D:/path/to/owl4agents/bin/owl4agents-mcp.cmd",
+      "command": "D:/path/to/owl4agents/tools/bin/owl4agents-mcp.cmd",
       "args": ["--readonly"],
       "env": {
         "OWL4AGENTS_HOME": "D:/owl4agents-workspace"
@@ -325,7 +345,18 @@ Useful v0.3 MCP tools include the inherited readonly query/reasoning surface plu
 | `ontology_build_evidence_context` | Build compact evidence context for LLM agents from workflow reports |
 | `ontology_review_answer_claims` | Review answer claims with strict, conservative, or report-only handling guidance |
 
-v0.5 workflow tools require structured claim input (batch JSON with `answerId`, `claims[]`, and per-claim `id`, `type`, `subject`, `predicate`, `object`). They do not extract claims from free text. See [agent-skills/](agent-skills/) for SOP packs.
+v0.5 workflow tools require structured claim input (batch JSON with `answerId`, `claims[]`, and per-claim `id`, `type`, `subject`, `predicate`, `object`). They do not extract claims from free text. See [tools/agent-skills/](tools/agent-skills/) for SOP packs.
+
+### v0.6 Research Evaluation and Benchmark Tools
+
+| Tool | Purpose |
+| --- | --- |
+| `ontology_benchmark_run` | Run a benchmark experiment from a YAML configuration, producing JSONL results with per-question verdicts, accuracy, and timing |
+| `ontology_eval_qa` | Evaluate benchmark results: compute accuracy, false support rate, unresolved rate, verification coverage, and 4×4 confusion matrix |
+| `ontology_context_batch` | Build evidence context for a question set, with character-based truncation metadata for LLM agent prompts |
+| `ontology_build_evidence_context` (format=jsonl) | Export evidence context as streamable JSONL with truncation metadata (budgetCharsUsed, totalAvailableEvidenceChars) |
+
+v0.6 tools are readonly. They require pre-imported ontologies and structured claim inputs. Experiment configs use YAML with required fields (name, ontologyIds, questionSetPath, reasoners, outputPath). `repeatCount` is rejected. False support rate and unresolved rate are separate metrics, not combined as hallucination rate.
 
 ## Why owl4agents
 
@@ -410,7 +441,7 @@ In v0.3, use the local launcher from a source checkout after building the runnab
 
 ```bash
 ./gradlew :modules:ontology-cli:shadowJar
-node npm/bin/owl4agents.js mcp --readonly
+node tools/npm/bin/owl4agents.js mcp --readonly
 ```
 
 Node.js only acts as the launcher and distribution entry point. The actual ontology management, indexing, SPARQL, and MCP tool behavior runs inside the Java runtime.
@@ -432,7 +463,7 @@ This keeps behavior, tests, errors, permissions, and reasoning results consisten
 
 ### Missing fat jar
 
-If `node npm/bin/owl4agents.js` exits with a "runtime not found" error, the runnable jar has not been built:
+If `node tools/npm/bin/owl4agents.js` exits with a "runtime not found" error, the runnable jar has not been built:
 
 ```powershell
 .\gradlew.bat :modules:ontology-cli:shadowJar
@@ -459,7 +490,7 @@ If `JAVA_HOME` is not set, the launcher falls back to `java` on PATH, then to th
 
 ### MCP stdio issues on Windows
 
-The MCP protocol uses stdin/stdout for JSON-RPC. On Windows, Node's `execSync` with `stdio: 'inherit'` may not forward stdin correctly for MCP sessions. The bundled `bin/owl4agents-mcp.cmd` wrapper runs MCP directly through Java in classpath mode (`java -cp`), bypassing Node's forwarding issues and the `java -jar` ACCESS_VIOLATION crash. Use this wrapper when MCP clients have trouble connecting through the npm launcher.
+The MCP protocol uses stdin/stdout for JSON-RPC. On Windows, Node's `execSync` with `stdio: 'inherit'` may not forward stdin correctly for MCP sessions. The bundled `tools/bin/owl4agents-mcp.cmd` wrapper runs MCP directly through Java in classpath mode (`java -cp`), bypassing Node's forwarding issues and the `java -jar` ACCESS_VIOLATION crash. Use this wrapper when MCP clients have trouble connecting through the npm launcher.
 
 ### Launcher startup failures
 
@@ -481,9 +512,9 @@ If none of these paths are available, the launcher exits with code 2 and prints 
 
 - **Java not found**: Install Java 22 and set `JAVA_HOME`. See the "Java not found" section above.
 - **Gradle wrapper missing**: Ensure `gradlew` or `gradlew.bat` exists in the project root. Clone the full repository rather than a partial copy.
-- **Source layout missing**: The project expects `modules/` and `npm/` directories under the project root. Run from within the cloned repository.
+- **Source layout missing**: The project expects `modules/` and `tools/npm/` directories under the project root. Run from within the cloned repository.
 - **Workspace not writable**: The default workspace is `~/.owl4agents/workspaces/default/`. Ensure the parent directory exists and is writable, or set `OWL4AGENTS_HOME` to a writable location.
-- **npm launcher files missing**: Ensure `npm/bin/owl4agents.js` and `npm/package.json` exist under the project root.
+- **npm launcher files missing**: Ensure `tools/npm/bin/owl4agents.js` and `tools/npm/package.json` exist under the project root.
 - **Runtime jar missing**: Run `.\gradlew.bat :modules:ontology-cli:shadowJar` to build the fat jar. See the "Missing fat jar" section above.
 
 `setup --check --dry-run` reports planned remediation actions without modifying any files.
@@ -506,7 +537,7 @@ If none of these paths are available, the launcher exits with code 2 and prints 
 
 Download the jar, checksum, and release notes from the GitHub Actions artifact or release page:
 
-> **Windows note:** The release jar is a runnable fat jar on Linux and macOS. On Windows, it may crash with `ACCESS_VIOLATION` when invoked as `java -jar owl4agents.jar`. Use the npm launcher (`node npm/bin/owl4agents.js`) instead.
+> **Windows note:** The release jar is a runnable fat jar on Linux and macOS. On Windows, it may crash with `ACCESS_VIOLATION` when invoked as `java -jar owl4agents.jar`. Use the npm launcher (`node tools/npm/bin/owl4agents.js`) instead.
 
 ```powershell
 # Verify checksum
@@ -635,8 +666,8 @@ Before releasing any version, verify each step:
 1. **Build**: `.\gradlew.bat clean buildVerification` exits 0
 2. **Shadow jar**: `.\gradlew.bat :modules:ontology-cli:shadowJar` produces `modules/ontology-cli/build/libs/owl4agents.jar`
 3. **Unit and contract tests**: `.\gradlew.bat test` exits 0
-4. **Launcher tests**: `node npm/test/launcher.test.js` exits 0 when launcher changes are included
-5. **Smoke commands**: `node npm/bin/owl4agents.js --help`, `--version`, and `list-reasoners` all work
+4. **Launcher tests**: `node tools/npm/test/launcher.test.js` exits 0 when launcher changes are included
+5. **Smoke commands**: `node tools/npm/bin/owl4agents.js --help`, `--version`, and `list-reasoners` all work
 6. **v0.3 claim fixtures**: supported, contradicted, unknown, out-of-scope, malformed, unsupported-type, and unknown-ontology fixtures pass their expected gates
 7. **v0.4 example validation**: each required example pack (claim-verification, pizza-reasoning, agent-mcp, biomedical-grounding) passes manifest, fixture, execution, sanitization, and drift checks
 8. **Example manifest checks**: every `examples/*/example.yaml` contains required fields (id, title, description, interfaces, fixtures, commands, expectedOutputs, ciRequired, attribution) and fixture paths reference existing files
@@ -679,16 +710,21 @@ modules/
   ontology-query/
   ontology-retrieval/
   ontology-validation/
+  ontology-benchmark/
   ontology-provenance/
   ontology-storage/
   ontology-cli/
   ontology-mcp/
   ontology-distribution/
 
-npm/
-  package.json
-  bin/owl4agents.js
-  platform-packages/
+tools/
+  agent-skills/
+  npm/
+    package.json
+    bin/owl4agents.js
+    platform-packages/
+  bin/
+    owl4agents-mcp.cmd
 ```
 
 | Module | Responsibility |
@@ -699,6 +735,7 @@ npm/
 | `ontology-query` | Apache Jena ARQ query execution, SPARQL validation, graph scope selection |
 | `ontology-retrieval` | Entity search, graph neighborhood, hierarchy context, relation context, QA context construction |
 | `ontology-validation` | Entailment checks, class compatibility, literal validation, claim verification, and evidence grounding |
+| `ontology-benchmark` | Experiment configuration, benchmark runner, QA evaluation, context-batch, evidence context JSONL, report generation |
 | `ontology-provenance` | Source tracking, reasoning reports, support/contradiction traces (future: extended provenance) |
 | `ontology-storage` | Local workspace, catalog, metadata, snapshots, indexes, audit logs |
 | `ontology-cli` | Picocli-based command adapter |
@@ -928,6 +965,9 @@ These are the tools that turn ontology access into answer verification.
 | `ontology_check_constraints` | v0.7 | Validate data with SHACL or ontology-derived constraints |
 | `ontology_explain_unknown` | v0.3 released | Explain why a claim cannot be verified |
 | `ontology_review_answer_claims` | v0.5 | Review answer claims with strict/conservative/report-only handling guidance |
+| `ontology_benchmark_run` | v0.6 | Run benchmark experiment from YAML config, produce JSONL results |
+| `ontology_eval_qa` | v0.6 | Evaluate benchmark results with accuracy, false support rate, unresolved rate, and 4×4 confusion matrix |
+| `ontology_context_batch` | v0.6 | Build per-question evidence context for question sets with truncation metadata |
 
 ### Retrieval and QA context tools
 
@@ -1309,31 +1349,40 @@ Released support:
 
 Goal: prove and compare the value of ontology grounding with reproducible experiments. Lessons from v0.5: structured claim input works well for deterministic workflows; natural-language claim extraction should be added here as an optional LLM-assisted step, not as a required pipeline stage.
 
+Released support:
+
+- [x] Experiment configuration parser with YAML input, defaults, and validation (rejects repeatCount, non-boolean hallucinationDetection, invalid edgeCasePolicy)
+- [x] Hand-built benchmark question sets: pizza-50.jsonl, owl2bench-30.jsonl, out-of-scope-cross.jsonl (source: owl4agents, license: Apache-2.0)
+- [x] Benchmark runner with two-tier validation (Tier 1: INVALID_CLAIM_SCHEMA blocks execution; Tier 2: reviewStatus: pending allows execution but excludes metrics), NL-only rejection, per-question timeout
+- [x] QA evaluation with accuracy, false support rate (separate), unresolved rate (separate, NOT combined), verification coverage, and 4×4 expected-vs-actual confusion matrix
+- [x] Context-batch mode: per-question EvidenceContext with character-based truncation metadata (budgetCharsUsed, totalAvailableEvidenceChars, omittedEvidenceCount, omittedClaimCount)
+- [x] Evidence context JSONL export: streamable, independently parseable, truncation metadata present even with zero values
+- [x] Benchmark report generator with Markdown and JSON formats, reasoner comparison (timing delta, agreement/disagreement classification), reproducibility metadata (static REASONER_VERSIONS: hermit 1.4.5.519, elk 0.6.0, openllet 2.6.5)
+- [x] CLI commands: benchmark-run, eval-qa, context-batch, evidence-context --format jsonl
+- [x] Readonly MCP tools: ontology_benchmark_run, ontology_eval_qa, ontology_context_batch, ontology_build_evidence_context format=jsonl
+- [x] NL-to-claim extraction schema document (decomposition rules from NL question types to 14 claim types)
+- [x] Error handling: INVALID_EXPERIMENT_CONFIG, QUESTION_SET_NOT_FOUND, RESULTS_NOT_FOUND, EMPTY_RESULTS, INVALID_QUESTION_SET
+
+Deferred:
+
+- [ ] Natural-language-to-structured-claim extraction (optional, agent-side) — completing the deferred v0.5 handoff item (v0.7 scope)
+- [ ] External dataset integration (v0.7 scope)
+- [ ] Large-ontology context-batch (v0.7 scope)
+
+### v0.7 External Datasets, NL-Claim Extraction, and Ontology Workflow Integrations
+
+Goal: add external dataset support, complete the NL-to-claim extraction pipeline, and evaluate optional ontology workflow integrations.
+
 Planned support:
 
-- [ ] Natural-language-to-structured-claim extraction (optional, agent-side) — completing the deferred v0.5 handoff item
-- [ ] `context-batch` for question sets
-- [ ] Context export JSONL format
-- [ ] Benchmark runner for golden, Pizza, OWL2Bench, LUBM, and selected real-world corpus subsets
-- [ ] Reasoner comparison reports
-- [ ] Grounded vs ungrounded QA evaluation helper
-- [ ] Hallucination reduction benchmark using structured claims
-- [ ] Reproducible experiment configuration files
-- [ ] Example benchmark packs for small, medium, inconsistent, OWL 2 EL, and OWL 2 DL ontologies
-- [ ] Generated reports that can be attached to papers, issues, or release notes
-
-### v0.7 Ontology Workflow Integrations
-
-Goal: integrate optional ontology workflow tooling after installation, examples, and agent workflows are stable.
-
-Planned support:
-
+- [ ] Natural-language-to-structured-claim extraction (optional, agent-side) — completing the deferred v0.5/v0.6 handoff item
+- [ ] External dataset integration for large-scale benchmark experiments (GO, HPO, Mondo, Uberon, ChEBI)
+- [ ] Large-ontology context-batch with streaming and incremental processing
 - [ ] Evaluate optional ROBOT integration for reusable ontology workflow operations and benchmark preprocessing
 - [ ] Evaluate SHACL support for explicit constraint validation workflows
 - [ ] Property chain inspection and advanced OWL axiom browsing
 - [ ] Ontology preprocessing pipeline for imports, subsets, profile checks, and benchmark packs
 - [ ] Import closure management and ontology diff planning
-- [ ] Integration tests proving optional tools are detected, versioned, and fail gracefully when unavailable
 
 ### v0.8 Controlled Editing, Snapshots, and Audit
 
@@ -1399,23 +1448,26 @@ modules/
   ontology-mcp/
   ontology-distribution/
   ontology-validation/
-agent-skills/
-  README.md
-  _shared/references/   (verdict-policy, claim-batch-schema, evidence-citation-policy, refusal-scope-policy, answer-review-sop)
-  owl4agents-claim-verification/SKILL.md
-  owl4agents-evidence-grounded-answer/SKILL.md
-  owl4agents-ontology-scope-check/SKILL.md
-npm/
-  bin/owl4agents.js
-  test/launcher.test.js
-bin/
-  owl4agents-mcp.cmd
+  ontology-benchmark/
+tools/
+  agent-skills/
+    README.md
+    _shared/references/   (verdict-policy, claim-batch-schema, evidence-citation-policy, refusal-scope-policy, answer-review-sop)
+    owl4agents-claim-verification/SKILL.md
+    owl4agents-evidence-grounded-answer/SKILL.md
+    owl4agents-ontology-scope-check/SKILL.md
+  npm/
+    bin/owl4agents.js
+    test/launcher.test.js
+  bin/
+    owl4agents-mcp.cmd
 scripts/
   download-test-corpus.ps1
 test/
   corpus/
   contracts/
   fixtures/v0.5/   (batch claim fixtures for v0.5 workflow)
+  fixtures/v0.6/   (benchmark configs, question sets, and results fixtures)
 ```
 
 Local OpenSpec, design notes, acceptance reports, and temporary retrospectives may exist in this workspace, but they are intentionally ignored by Git for public release workflows.

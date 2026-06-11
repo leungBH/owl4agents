@@ -1,0 +1,9 @@
+name: with-repeatCount-test
+description: Config with repeatCount field that should be rejected
+ontologyIds:
+  - pizza
+questionSetPath: test/fixtures/v0.6/question-sets/pizza-50.jsonl
+reasoners:
+  - hermit
+outputPath: results/with-repeatCount-output.jsonl
+repeatCount: 5

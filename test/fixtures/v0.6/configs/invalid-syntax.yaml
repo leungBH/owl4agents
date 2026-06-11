@@ -1,0 +1,4 @@
+name: invalid-syntax-test
+description: [this is not valid yaml
+ontologyIds: pizza
+reasoners: hermit

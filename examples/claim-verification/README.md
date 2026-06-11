@@ -24,13 +24,13 @@ Run from the repository root:
 ### 1. Import the golden ontology
 
 ```bash
-node npm/bin/owl4agents.js import test/corpus/golden/v0.3-claim-verification.owl v0.3-claim-verification --workspace claim-demo
+node tools/npm/bin/owl4agents.js import test/corpus/golden/v0.3-claim-verification.owl v0.3-claim-verification --workspace claim-demo
 ```
 
 ### 2. Verify a supported claim
 
 ```bash
-node npm/bin/owl4agents.js verify-claim v0.3-claim-verification --claim test/fixtures/v0.3/claim-supported.json --workspace claim-demo --json
+node tools/npm/bin/owl4agents.js verify-claim v0.3-claim-verification --claim test/fixtures/v0.3/claim-supported.json --workspace claim-demo --json
 ```
 
 Expected output snippet:
@@ -49,7 +49,7 @@ Expected output snippet:
 ### 3. Run reasoner (required before contradicted verification)
 
 ```bash
-node npm/bin/owl4agents.js reason v0.3-claim-verification --workspace claim-demo
+node tools/npm/bin/owl4agents.js reason v0.3-claim-verification --workspace claim-demo
 ```
 
 **Note:** The contradicted claim relies on explicit disjointness axioms. Reasoning is recommended for full evidence but the basic disjointness check works with explicit scope.
@@ -57,7 +57,7 @@ node npm/bin/owl4agents.js reason v0.3-claim-verification --workspace claim-demo
 ### 4. Verify a contradicted claim
 
 ```bash
-node npm/bin/owl4agents.js verify-claim v0.3-claim-verification --claim test/fixtures/v0.3/claim-contradicted.json --workspace claim-demo --json
+node tools/npm/bin/owl4agents.js verify-claim v0.3-claim-verification --claim test/fixtures/v0.3/claim-contradicted.json --workspace claim-demo --json
 ```
 
 Expected output snippet:
@@ -75,7 +75,7 @@ Expected output snippet:
 ### 5. Verify an unknown claim
 
 ```bash
-node npm/bin/owl4agents.js verify-claim v0.3-claim-verification --claim test/fixtures/v0.3/claim-unknown.json --workspace claim-demo --json
+node tools/npm/bin/owl4agents.js verify-claim v0.3-claim-verification --claim test/fixtures/v0.3/claim-unknown.json --workspace claim-demo --json
 ```
 
 Expected output snippet:
@@ -91,7 +91,7 @@ Expected output snippet:
 ### 6. Verify an out_of_scope claim
 
 ```bash
-node npm/bin/owl4agents.js verify-claim v0.3-claim-verification --claim test/fixtures/v0.3/claim-real-out-of-scope.json --workspace claim-demo --json
+node tools/npm/bin/owl4agents.js verify-claim v0.3-claim-verification --claim test/fixtures/v0.3/claim-real-out-of-scope.json --workspace claim-demo --json
 ```
 
 Expected output snippet:
@@ -115,23 +115,23 @@ v0.5 adds batch claim verification for structured answer checking. Batch workflo
 
 ```bash
 # Import and reason over the Pizza ontology (used by v0.5 fixtures)
-node npm/bin/owl4agents.js import test/corpus/smoke/pizza.owl pizza-ontology --workspace claim-demo
-node npm/bin/owl4agents.js reason pizza-ontology --workspace claim-demo
+node tools/npm/bin/owl4agents.js import test/corpus/smoke/pizza.owl pizza-ontology --workspace claim-demo
+node tools/npm/bin/owl4agents.js reason pizza-ontology --workspace claim-demo
 
 # Batch verify structured answer claims
-node npm/bin/owl4agents.js verify-answer pizza-ontology --claims test/fixtures/v0.5/answer-claims-supported.json --workspace claim-demo
+node tools/npm/bin/owl4agents.js verify-answer pizza-ontology --claims test/fixtures/v0.5/answer-claims-supported.json --workspace claim-demo
 
 # Build evidence context for LLM agents
-node npm/bin/owl4agents.js evidence-context pizza-ontology --claims test/fixtures/v0.5/answer-claims-supported.json --max-context-tokens 500 --workspace claim-demo
+node tools/npm/bin/owl4agents.js evidence-context pizza-ontology --claims test/fixtures/v0.5/answer-claims-supported.json --max-context-tokens 500 --workspace claim-demo
 
 # Review answer claims with handling guidance
-node npm/bin/owl4agents.js review-answer pizza-ontology --claims test/fixtures/v0.5/answer-claims-mixed.json --policy strict --workspace claim-demo --json
+node tools/npm/bin/owl4agents.js review-answer pizza-ontology --claims test/fixtures/v0.5/answer-claims-mixed.json --policy strict --workspace claim-demo --json
 ```
 
-See [agent-skills/](../agent-skills/) for cross-agent SOP packs for claim verification, evidence-grounded answering, and ontology scope checks.
+See [tools/agent-skills/](../tools/agent-skills/) for cross-agent SOP packs for claim verification, evidence-grounded answering, and ontology scope checks.
 
 ## Troubleshooting
 
 - **Missing fixture:** Run `.\gradlew.bat :modules:ontology-cli:shadowJar` to build the runtime, then verify that `test/corpus/golden/v0.3-claim-verification.owl` exists.
-- **ACCESS_VIOLATION on Windows:** Use `node npm/bin/owl4agents.js` instead of `java -jar`. See root README.
+- **ACCESS_VIOLATION on Windows:** Use `node tools/npm/bin/owl4agents.js` instead of `java -jar`. See root README.
 - **Verdict not as expected:** Make sure you imported the ontology and ran the reasoner before checking contradicted claims.

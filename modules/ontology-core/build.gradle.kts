@@ -3,7 +3,8 @@ plugins {
 }
 
 dependencies {
-    // Core module has no external dependencies — it defines interfaces, models, and error codes
+    // Core module defines interfaces, models, error codes, and shared Gson utilities
+    api("com.google.code.gson:gson:2.13.1")
 }
 
 tasks.jar {

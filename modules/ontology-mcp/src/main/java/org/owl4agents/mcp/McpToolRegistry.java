@@ -68,7 +68,13 @@ public class McpToolRegistry {
         // v0.5 batch verification and evidence context tools
         "ontology_verify_claims_batch",
         "ontology_build_evidence_context",
-        "ontology_review_answer_claims"
+        "ontology_review_answer_claims",
+        // v0.6 benchmark tools
+        "ontology_benchmark_run",
+        // v0.6 QA evaluation tools
+        "ontology_eval_qa",
+        // v0.6 context-batch tools
+        "ontology_context_batch"
     );
 
     /**
@@ -215,6 +221,7 @@ public class McpToolRegistry {
         evidenceContextSchema.put("ontology_id", stringParam("Ontology ID (required when 'report' is not provided)"));
         evidenceContextSchema.put("claims", objectParam("Claims batch JSON: answerId, claims array (required when 'report' is not provided)"));
         evidenceContextSchema.put("max_context_tokens", intParam("Maximum context tokens budget (0 = no truncation)", 0));
+        evidenceContextSchema.put("format", stringParam("Output format: compact (default) or jsonl (streamable JSONL with truncation metadata)"));
         schemas.add(toolSchema("ontology_build_evidence_context", "Build compact evidence context from a claims batch for LLM agent prompts",
             evidenceContextSchema));
 
@@ -225,6 +232,26 @@ public class McpToolRegistry {
         reviewClaimsSchema.put("policy", stringParam("Review policy: strict (default), conservative, or report-only"));
         schemas.add(toolSchema("ontology_review_answer_claims", "Review an answer by verifying claims and building evidence context with policy-dependent handling guidance",
             reviewClaimsSchema));
+
+        // v0.6 benchmark tool
+        Map<String, Object> benchmarkRunSchema = new LinkedHashMap<>();
+        benchmarkRunSchema.put("config_yaml", stringParam("YAML config content (inline) or file path"));
+        schemas.add(toolSchema("ontology_benchmark_run", "Run a benchmark experiment from a YAML config, producing JSONL results (readonly)",
+            benchmarkRunSchema));
+
+        // v0.6 QA evaluation tool
+        Map<String, Object> evalQaSchema = new LinkedHashMap<>();
+        evalQaSchema.put("results_path", stringParam("Benchmark result JSONL file path"));
+        schemas.add(toolSchema("ontology_eval_qa", "Compute QA evaluation metrics from benchmark result JSONL (accuracy, false support rate, unresolved rate, coverage, 4x4 confusion matrix) (readonly)",
+            evalQaSchema));
+
+        // v0.6 context-batch tool
+        Map<String, Object> contextBatchSchema = new LinkedHashMap<>();
+        contextBatchSchema.put("question_set_path", stringParam("JSONL question set file path"));
+        contextBatchSchema.put("ontology_id", stringParam("Ontology ID"));
+        contextBatchSchema.put("max_context_tokens", intParam("Maximum context tokens budget (0 = no truncation)", 0));
+        schemas.add(toolSchema("ontology_context_batch", "Build per-question evidence context from a JSONL question set with truncation metadata (readonly)",
+            contextBatchSchema));
 
         return schemas;
     }

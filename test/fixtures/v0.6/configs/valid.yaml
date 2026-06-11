@@ -1,0 +1,8 @@
+name: valid-test
+description: Minimal valid config for unit testing
+ontologyIds:
+  - pizza
+questionSetPath: test/fixtures/v0.6/question-sets/minimal-test.jsonl
+reasoners:
+  - hermit
+outputPath: results/test-output.jsonl

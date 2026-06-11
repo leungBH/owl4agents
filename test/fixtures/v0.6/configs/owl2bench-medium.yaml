@@ -1,0 +1,10 @@
+name: owl2bench-medium
+description: OWL2Bench ontology benchmark with hermit+elk reasoners — all 14 claim types
+ontologyIds:
+  - owl2bench
+questionSetPath: test/fixtures/v0.6/question-sets/owl2bench-30.jsonl
+reasoners:
+  - hermit
+  - elk
+outputPath: results/owl2bench-medium-output.jsonl
+timeoutPerQuestion: 30

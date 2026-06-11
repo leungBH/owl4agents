@@ -1,0 +1,6 @@
+name: missing-field-test
+description: Config with missing required fields
+ontologyIds:
+  - pizza
+reasoners:
+  - hermit

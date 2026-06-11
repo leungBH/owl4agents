@@ -1,0 +1,8 @@
+name: missing-ontology-test
+description: Config referencing a nonexistent ontology
+ontologyIds:
+  - nonexistent-ontology
+questionSetPath: test/fixtures/v0.6/question-sets/pizza-50.jsonl
+reasoners:
+  - hermit
+outputPath: results/missing-ontology-output.jsonl

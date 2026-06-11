@@ -25,7 +25,7 @@ Run from the repository root:
 ### 1. Import the Pizza ontology
 
 ```bash
-node npm/bin/owl4agents.js import test/corpus/smoke/pizza.owl pizza --workspace pizza-demo
+node tools/npm/bin/owl4agents.js import test/corpus/smoke/pizza.owl pizza --workspace pizza-demo
 ```
 
 Expected: exit code 0, ontology ID `pizza` registered in workspace.
@@ -33,7 +33,7 @@ Expected: exit code 0, ontology ID `pizza` registered in workspace.
 ### 2. Get ontology summary
 
 ```bash
-node npm/bin/owl4agents.js summary pizza --workspace pizza-demo
+node tools/npm/bin/owl4agents.js summary pizza --workspace pizza-demo
 ```
 
 Expected output snippet:
@@ -49,7 +49,7 @@ Expected output snippet:
 ### 3. Explore entity context (Margherita pizza)
 
 ```bash
-node npm/bin/owl4agents.js entity pizza http://www.co-ode.org/ontologies/pizza/pizza.owl#Margherita --workspace pizza-demo
+node tools/npm/bin/owl4agents.js entity pizza http://www.co-ode.org/ontologies/pizza/pizza.owl#Margherita --workspace pizza-demo
 ```
 
 Expected: class hierarchy showing Margherita as a subclass of NamedPizza, with restrictions on toppings.
@@ -57,7 +57,7 @@ Expected: class hierarchy showing Margherita as a subclass of NamedPizza, with r
 ### 4. Run reasoner classification
 
 ```bash
-node npm/bin/owl4agents.js classify pizza --workspace pizza-demo
+node tools/npm/bin/owl4agents.js classify pizza --workspace pizza-demo
 ```
 
 Expected output snippet:
@@ -72,7 +72,7 @@ Expected output snippet:
 ### 5. Explore property characteristics (hasTopping)
 
 ```bash
-node npm/bin/owl4agents.js properties pizza --property http://www.co-ode.org/ontologies/pizza/pizza.owl#hasTopping --workspace pizza-demo
+node tools/npm/bin/owl4agents.js properties pizza --property http://www.co-ode.org/ontologies/pizza/pizza.owl#hasTopping --workspace pizza-demo
 ```
 
 Expected: property domain, range, and characteristics.
@@ -84,4 +84,4 @@ Expected: property domain, range, and characteristics.
 ## Troubleshooting
 
 - **Missing pizza.owl:** Run `.\gradlew.bat :modules:ontology-cli:shadowJar` and verify that `test/corpus/smoke/pizza.owl` exists.
-- **ACCESS_VIOLATION on Windows:** Use `node npm/bin/owl4agents.js` instead of `java -jar`.
+- **ACCESS_VIOLATION on Windows:** Use `node tools/npm/bin/owl4agents.js` instead of `java -jar`.

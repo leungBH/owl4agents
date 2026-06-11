@@ -10,6 +10,7 @@ dependencies {
     implementation(project(":modules:ontology-retrieval"))
     implementation(project(":modules:ontology-reasoner"))
     implementation(project(":modules:ontology-validation"))
+    implementation(project(":modules:ontology-benchmark"))
 
     // Apache Jena for SPARQL execution
     implementation("org.apache.jena:apache-jena-libs:5.3.0")

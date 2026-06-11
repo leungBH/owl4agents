@@ -64,7 +64,13 @@ import java.util.concurrent.Callable;
         // v0.5 batch verification commands
         VerifyAnswerCommand.class,
         EvidenceContextCommand.class,
-        ReviewAnswerCommand.class
+        ReviewAnswerCommand.class,
+        // v0.6 benchmark commands
+        BenchmarkRunCommand.class,
+        // v0.6 QA evaluation commands
+        EvalQaCommand.class,
+        // v0.6 context-batch commands
+        ContextBatchCommand.class
     }
 )
 public class Owl4AgentsCli implements Callable<Integer> {

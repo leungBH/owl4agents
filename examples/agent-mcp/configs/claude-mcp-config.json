@@ -2,7 +2,7 @@
   "mcpServers": {
     "owl4agents": {
       "command": "node",
-      "args": ["npm/bin/owl4agents.js", "mcp"],
+      "args": ["tools/npm/bin/owl4agents.js", "mcp"],
       "cwd": "/path/to/owl4agents"
     }
   }

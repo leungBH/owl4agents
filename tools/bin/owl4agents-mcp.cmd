@@ -8,7 +8,7 @@ REM produces on some Windows environments.
 setlocal
 
 REM Find the script's directory
-set "PROJECT_ROOT=%~dp0.."
+set "PROJECT_ROOT=%~dp0..\.."
 
 REM Primary: use java -cp with the shadow jar (avoids ACCESS_VIOLATION)
 REM java -cp works with the shadow jar because it contains all merged classes without relocation.

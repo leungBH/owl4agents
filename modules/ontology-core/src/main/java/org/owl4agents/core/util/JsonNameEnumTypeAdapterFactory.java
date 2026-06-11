@@ -1,4 +1,4 @@
-package org.owl4agents.cli;
+package org.owl4agents.core.util;
 
 import com.google.gson.Gson;
 import com.google.gson.TypeAdapter;
@@ -14,8 +14,11 @@ import java.lang.reflect.Method;
  * Gson TypeAdapterFactory that serializes enums using their {@code jsonName()} method
  * when available, instead of the default Java {@code name()}.
  *
- * This ensures CLI --json output matches the v0.3 contract format
+ * This ensures JSON output matches the contract format
  * (e.g. "supported" not "SUPPORTED", "insufficient_axioms" not "INSUFFICIENT_AXIOMS").
+ *
+ * Originally in ontology-cli. Moved to ontology-core/util so all modules
+ * (CLI, MCP, benchmark) can share it.
  */
 public class JsonNameEnumTypeAdapterFactory implements TypeAdapterFactory {
 

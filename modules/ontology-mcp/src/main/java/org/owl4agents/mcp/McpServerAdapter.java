@@ -7,19 +7,26 @@ import org.owl4agents.core.ClaimValidator;
 import org.owl4agents.validation.ClaimBatchValidator;
 import org.owl4agents.validation.ClaimWorkflowService;
 import org.owl4agents.validation.EvidenceContextBuilder;
+import org.owl4agents.benchmark.BenchmarkService;
+import org.owl4agents.benchmark.BenchmarkQuestionSetValidator;
+import org.owl4agents.benchmark.BenchmarkResultLine;
+import org.owl4agents.benchmark.BenchmarkResultReader;
+import org.owl4agents.benchmark.BenchmarkResultSummary;
+import org.owl4agents.benchmark.ConfusionMatrix;
+import org.owl4agents.benchmark.ExperimentConfig;
+import org.owl4agents.benchmark.ExperimentConfigParser;
+import org.owl4agents.benchmark.QaEvaluationService;
+import org.owl4agents.benchmark.ContextBatchService;
+import org.owl4agents.benchmark.EvidenceContextJsonlSerializer;
 import org.owl4agents.owlapi.OntologySummaryExtractor;
 import org.owl4agents.query.*;
 import org.owl4agents.retrieval.*;
 import org.owl4agents.storage.*;
 
+import org.owl4agents.core.util.GsonFactory;
+
 import com.google.gson.Gson;
-import com.google.gson.GsonBuilder;
-import com.google.gson.TypeAdapter;
-import com.google.gson.TypeAdapterFactory;
 import com.google.gson.reflect.TypeToken;
-import com.google.gson.stream.JsonReader;
-import com.google.gson.stream.JsonToken;
-import com.google.gson.stream.JsonWriter;
 
 import org.semanticweb.owlapi.apibinding.OWLManager;
 import org.semanticweb.owlapi.model.OWLOntology;
@@ -267,6 +274,12 @@ public class McpServerAdapter {
             case "ontology_verify_claims_batch" -> { return executeVerifyClaimsBatch(arguments); }
             case "ontology_build_evidence_context" -> { return executeBuildEvidenceContext(arguments); }
             case "ontology_review_answer_claims" -> { return executeReviewAnswerClaims(arguments); }
+            // v0.6 benchmark tools
+            case "ontology_benchmark_run" -> { return executeBenchmarkRun(arguments); }
+            // v0.6 QA evaluation tools
+            case "ontology_eval_qa" -> { return executeEvalQa(arguments); }
+            // v0.6 context-batch tools
+            case "ontology_context_batch" -> { return executeContextBatch(arguments); }
             default -> { return errorResponse(ServiceError.readonlyViolation(toolName)); }
         }
     }
@@ -1355,64 +1368,8 @@ public class McpServerAdapter {
 
     // ── v0.5 batch verification and evidence context tools ──
 
-    private static final Gson gson = new GsonBuilder()
-        .registerTypeAdapterFactory(new OptionalTypeAdapterFactory())
-        .create();
+    private static final Gson gson = GsonFactory.createGson();
 
-    /**
-     * Gson TypeAdapterFactory that handles {@link java.util.Optional} fields.
-     * Required because JDK 17+ module system blocks reflective access to
-     * Optional.value, causing InaccessibleObjectException with default Gson.
-     * Serializes Optional.empty() as null, Optional.of(value) as the inner value.
-     * Deserializes null as Optional.empty(), non-null as Optional.ofNullable(value).
-     */
-    private static class OptionalTypeAdapterFactory implements TypeAdapterFactory {
-        @Override
-        public <T> TypeAdapter<T> create(Gson gson, TypeToken<T> type) {
-            if (!java.util.Optional.class.isAssignableFrom(type.getRawType())) {
-                return null;
-            }
-            java.lang.reflect.Type innerType = extractInnerType(type.getType());
-            TypeAdapter<?> innerAdapter = gson.getAdapter(TypeToken.get(innerType));
-            @SuppressWarnings("unchecked")
-            TypeAdapter<T> result = (TypeAdapter<T>) new OptionalTypeAdapter<>(innerAdapter);
-            return result;
-        }
-
-        private static java.lang.reflect.Type extractInnerType(java.lang.reflect.Type type) {
-            if (type instanceof java.lang.reflect.ParameterizedType) {
-                return ((java.lang.reflect.ParameterizedType) type).getActualTypeArguments()[0];
-            }
-            return Object.class;
-        }
-
-        private static class OptionalTypeAdapter<E> extends TypeAdapter<java.util.Optional<E>> {
-            private final TypeAdapter<E> innerAdapter;
-
-            OptionalTypeAdapter(TypeAdapter<E> innerAdapter) {
-                this.innerAdapter = innerAdapter;
-            }
-
-            @Override
-            public void write(JsonWriter out, java.util.Optional<E> value) throws java.io.IOException {
-                if (value == null || value.isEmpty()) {
-                    out.nullValue();
-                } else {
-                    innerAdapter.write(out, value.get());
-                }
-            }
-
-            @Override
-            public java.util.Optional<E> read(JsonReader in) throws java.io.IOException {
-                if (in.peek() == JsonToken.NULL) {
-                    in.nextNull();
-                    return java.util.Optional.empty();
-                } else {
-                    return java.util.Optional.ofNullable(innerAdapter.read(in));
-                }
-            }
-        }
-    }
     private static final java.lang.reflect.Type MAP_TYPE = new TypeToken<Map<String, Object>>(){}.getType();
 
     private static final java.util.Set<String> VALID_POLICIES = java.util.Set.of("strict", "conservative", "report-only");
@@ -1469,6 +1426,8 @@ public class McpServerAdapter {
                 "max_context_tokens must be >= 0, got: " + maxContextTokens));
         }
 
+        String format = (String) args.getOrDefault("format", "compact");
+
         // Mode 1: Direct report input — build evidence context from a pre-generated report
         String reportStr = (String) args.get("report");
         if (reportStr != null) {
@@ -1484,6 +1443,10 @@ public class McpServerAdapter {
                     "Report JSON parsing produced null."));
             }
             EvidenceContext context = getEvidenceContextBuilder().buildContext(report, maxContextTokens);
+
+            if ("jsonl".equalsIgnoreCase(format)) {
+                return buildJsonlResponse(context, report, maxContextTokens);
+            }
             return Map.of("status", "success", "data", Map.of(
                 "aggregateStatus", report.aggregateStatus().jsonName(),
                 "evidenceContext", serializeEvidenceContext(context)));
@@ -1529,9 +1492,43 @@ public class McpServerAdapter {
         AnswerVerificationReport report = ((ServiceResult.Success<AnswerVerificationReport>) verifyResult).data();
         EvidenceContext context = getEvidenceContextBuilder().buildContext(report, maxContextTokens);
 
+        if ("jsonl".equalsIgnoreCase(format)) {
+            return buildJsonlResponse(context, report, maxContextTokens);
+        }
         return Map.of("status", "success", "data", Map.of(
             "aggregateStatus", report.aggregateStatus().jsonName(),
             "evidenceContext", serializeEvidenceContext(context)));
+    }
+
+    /**
+     * Build JSONL format response for evidence context with truncation metadata.
+     */
+    private Map<String, Object> buildJsonlResponse(EvidenceContext context,
+                                                     AnswerVerificationReport report,
+                                                     int maxContextTokens) {
+        int budgetCharsUsed = maxContextTokens > 0 ? 4 * maxContextTokens : 0;
+        int totalAvailableChars = estimateTotalAvailableChars(report);
+
+        EvidenceContextJsonlSerializer serializer = new EvidenceContextJsonlSerializer();
+        String jsonlLine = serializer.serializeToJsonl(context, budgetCharsUsed, totalAvailableChars);
+
+        Map<String, Object> response = new LinkedHashMap<>();
+        response.put("status", "success");
+        response.put("data", Map.of(
+            "aggregateStatus", report.aggregateStatus().jsonName(),
+            "jsonl", jsonlLine));
+        return response;
+    }
+
+    private int estimateTotalAvailableChars(AnswerVerificationReport report) {
+        int total = 0;
+        for (var claimResult : report.claimResults()) {
+            total += claimResult.claimId().length() + 30;
+            for (var ev : claimResult.evidence()) {
+                total += ev.summary().length() + ev.kind().length() + ev.source().length() + 40;
+            }
+        }
+        return total;
     }
 
     private Map<String, Object> executeReviewAnswerClaims(Map<String, Object> args) {
@@ -1604,6 +1601,211 @@ public class McpServerAdapter {
             "handlingGuidance", handlingGuidance
         ));
         return result;
+    }
+
+    // ── v0.6 benchmark tool ──
+
+    private Map<String, Object> executeBenchmarkRun(Map<String, Object> args) {
+        String configYaml = (String) args.get("config_yaml");
+        if (configYaml == null || configYaml.isBlank()) {
+            return errorResponse(ServiceError.of(ErrorCode.INVALID_EXPERIMENT_CONFIG,
+                "config_yaml is required"));
+        }
+
+        // Determine if config_yaml is a file path or inline YAML content.
+        // The parser expects a file path, so inline YAML needs a temp file.
+        String configPath;
+        java.nio.file.Path tempFile = null;
+        if (!configYaml.trim().startsWith("name:") && !configYaml.trim().startsWith("name :")) {
+            // Treat as file path — check it exists
+            java.nio.file.Path filePath = java.nio.file.Path.of(configYaml);
+            if (!java.nio.file.Files.exists(filePath)) {
+                return errorResponse(ServiceError.of(ErrorCode.ONTOLOGY_NOT_FOUND,
+                    "Config file not found: " + configYaml));
+            }
+            configPath = configYaml;
+        } else {
+            // Inline YAML content — write to temp file for the parser
+            try {
+                tempFile = java.nio.file.Files.createTempFile("owl4agents-bench-", ".yaml");
+                java.nio.file.Files.writeString(tempFile, configYaml);
+                configPath = tempFile.toString();
+            } catch (java.io.IOException e) {
+                return errorResponse(ServiceError.of(ErrorCode.INVALID_EXPERIMENT_CONFIG,
+                    "Cannot write temp config file: " + e.getMessage()));
+            }
+        }
+
+        // Parse config
+        ExperimentConfigParser parser = new ExperimentConfigParser();
+        ExperimentConfigParser.ParseResult parseResult = parser.parse(configPath);
+        // Clean up temp file if created
+        if (tempFile != null) {
+            try { java.nio.file.Files.deleteIfExists(tempFile); } catch (Exception ignored) {}
+        }
+        if (!parseResult.isSuccess()) {
+            ExperimentConfigParser.ConfigError error = parseResult.error();
+            return errorResponse(ServiceError.of(ErrorCode.INVALID_EXPERIMENT_CONFIG,
+                error.diagnostic()));
+        }
+
+        ExperimentConfig config = parseResult.config();
+
+        // Run benchmark
+        BenchmarkQuestionSetValidator validator = new BenchmarkQuestionSetValidator();
+        BenchmarkService benchmarkService = new BenchmarkService(getClaimWorkflowService(), validator);
+        BenchmarkService.BenchmarkRunResult runResult = benchmarkService.run(config);
+
+        // Serialize result lines
+        List<Map<String, Object>> lines = runResult.lines().stream()
+            .map(line -> {
+                Map<String, Object> m = new LinkedHashMap<>();
+                m.put("questionId", line.questionId());
+                m.put("ontologyId", line.ontologyId());
+                m.put("reasoner", line.reasoner());
+                m.put("claimsVerified", line.claimsVerified());
+                m.put("expectedVerdict", line.expectedVerdict().jsonName());
+                m.put("actualVerdict", line.actualVerdict().jsonName());
+                m.put("verdictMatch", line.verdictMatch());
+                m.put("elapsedMs", line.elapsedMs());
+                m.put("reviewStatus", line.reviewStatus());
+                line.error().ifPresent(e -> m.put("error", e));
+                return m;
+            }).collect(Collectors.toList());
+
+        // Serialize summary
+        BenchmarkResultSummary summary = runResult.summary();
+        Map<String, Object> summaryMap = new LinkedHashMap<>();
+        summaryMap.put("type", summary.type());
+        summaryMap.put("totalQuestions", summary.totalQuestions());
+        summaryMap.put("accuracy", summary.accuracy());
+        summaryMap.put("falseSupportRate", summary.falseSupportRate());
+        summaryMap.put("falseSupportedCount", summary.falseSupportedCount());
+        summaryMap.put("unresolvedRate", summary.unresolvedRate());
+        summaryMap.put("falseUnknownCount", summary.falseUnknownCount());
+        summaryMap.put("verificationCoverage", summary.verificationCoverage());
+        Map<String, Object> verdictCounts = new LinkedHashMap<>();
+        for (Map.Entry<Verdict, Integer> entry : summary.perVerdictCounts().entrySet()) {
+            verdictCounts.put(entry.getKey().jsonName(), entry.getValue());
+        }
+        summaryMap.put("perVerdictCounts", verdictCounts);
+        summaryMap.put("perReasonerTiming", summary.perReasonerTiming());
+
+        return Map.of("status", "success", "data", Map.of(
+            "lines", lines, "summary", summaryMap));
+    }
+
+    // ── v0.6 QA evaluation tool ──
+
+    private Map<String, Object> executeEvalQa(Map<String, Object> args) {
+        String resultsPath = (String) args.get("results_path");
+        if (resultsPath == null || resultsPath.isBlank()) {
+            return errorResponse(ServiceError.of(ErrorCode.RESULTS_NOT_FOUND,
+                "results_path is required"));
+        }
+
+        java.nio.file.Path path = java.nio.file.Path.of(resultsPath);
+        if (!java.nio.file.Files.exists(path)) {
+            return errorResponse(ServiceError.of(ErrorCode.RESULTS_NOT_FOUND,
+                "Results file not found: " + resultsPath));
+        }
+
+        // Read results from JSONL
+        BenchmarkResultReader reader = new BenchmarkResultReader();
+        java.util.List<BenchmarkResultLine> results;
+        try {
+            results = reader.readResults(path);
+        } catch (java.io.IOException e) {
+            return errorResponse(ServiceError.of(ErrorCode.RESULTS_NOT_FOUND,
+                "Cannot read results file: " + e.getMessage()));
+        }
+
+        if (results.isEmpty()) {
+            return errorResponse(ServiceError.of(ErrorCode.EMPTY_RESULTS,
+                "Results file contains no result lines"));
+        }
+
+        // Evaluate
+        QaEvaluationService service = new QaEvaluationService();
+        QaEvaluationService.QaEvaluation evaluation = service.evaluate(results);
+
+        // Serialize evaluation results
+        Map<String, Object> metrics = new LinkedHashMap<>();
+        metrics.put("accuracy", evaluation.accuracy());
+        metrics.put("falseSupportRate", evaluation.falseSupportRate());
+        metrics.put("falseSupportedCount", evaluation.falseSupportedCount());
+        metrics.put("unresolvedRate", evaluation.unresolvedRate());
+        metrics.put("falseUnknownCount", evaluation.falseUnknownCount());
+        metrics.put("verificationCoverage", evaluation.verificationCoverage());
+
+        // 4x4 confusion matrix
+        Map<String, Object> matrix = new LinkedHashMap<>();
+        for (Map.Entry<Verdict, Map<Verdict, Integer>> rowEntry : evaluation.confusionMatrix().matrix().entrySet()) {
+            Map<String, Integer> inner = new LinkedHashMap<>();
+            for (Map.Entry<Verdict, Integer> colEntry : rowEntry.getValue().entrySet()) {
+                inner.put(colEntry.getKey().jsonName(), colEntry.getValue());
+            }
+            matrix.put(rowEntry.getKey().jsonName(), inner);
+        }
+
+        return Map.of("status", "success", "data", Map.of(
+            "metrics", metrics, "confusionMatrix", matrix));
+    }
+
+    // ── v0.6 context-batch tool ──
+
+    private Map<String, Object> executeContextBatch(Map<String, Object> args) {
+        String questionSetPath = (String) args.get("question_set_path");
+        String ontologyId = (String) args.get("ontology_id");
+
+        if (questionSetPath == null || questionSetPath.isBlank()) {
+            return errorResponse(ServiceError.of(ErrorCode.QUESTION_SET_NOT_FOUND,
+                "question_set_path is required"));
+        }
+        if (ontologyId == null || ontologyId.isBlank()) {
+            return errorResponse(ServiceError.of(ErrorCode.ONTOLOGY_NOT_FOUND,
+                "ontology_id is required"));
+        }
+
+        java.nio.file.Path path = java.nio.file.Path.of(questionSetPath);
+        if (!java.nio.file.Files.exists(path)) {
+            return errorResponse(ServiceError.of(ErrorCode.QUESTION_SET_NOT_FOUND,
+                "Question set file not found: " + questionSetPath));
+        }
+
+        int maxContextTokens = args.containsKey("max_context_tokens")
+            ? ((Number) args.get("max_context_tokens")).intValue() : 0;
+
+        // Process batch
+        BenchmarkQuestionSetValidator validator = new BenchmarkQuestionSetValidator();
+        ContextBatchService batchService = new ContextBatchService(
+            getClaimWorkflowService(), getEvidenceContextBuilder(), validator);
+        ContextBatchService.ContextBatchResult result =
+            batchService.processBatch(questionSetPath, ontologyId, maxContextTokens);
+
+        // Serialize entries
+        List<Map<String, Object>> entries = result.entries().stream()
+            .map(entry -> {
+                Map<String, Object> m = new LinkedHashMap<>();
+                m.put("questionId", entry.questionId());
+                m.put("ontologyId", entry.ontologyId());
+                m.put("budgetCharsUsed", entry.budgetCharsUsed());
+                m.put("totalAvailableEvidenceChars", entry.totalAvailableEvidenceChars());
+                m.put("omittedEvidenceCount", entry.omittedEvidenceCount());
+                m.put("omittedClaimCount", entry.omittedClaimCount());
+                if (entry.evidenceContext() != null) {
+                    m.put("evidenceContext", serializeEvidenceContext(entry.evidenceContext()));
+                }
+                if (entry.error() != null) {
+                    m.put("error", entry.error());
+                }
+                return m;
+            }).collect(Collectors.toList());
+
+        List<String> errorMessages = result.errors();
+
+        return Map.of("status", "success", "data", Map.of(
+            "entries", entries, "errors", errorMessages));
     }
 
     /**

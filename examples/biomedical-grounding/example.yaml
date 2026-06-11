@@ -18,31 +18,31 @@ fixtures:
     attribution: project
 commands:
   - step: Import biomedical golden ontology
-    exec: node npm/bin/owl4agents.js import test/corpus/golden/v0.4-biomedical-grounding.owl v0.4-biomedical-grounding --workspace bio-demo
+    exec: node tools/npm/bin/owl4agents.js import test/corpus/golden/v0.4-biomedical-grounding.owl v0.4-biomedical-grounding --workspace bio-demo
     exitCode: 0
     prerequisite: null
   - step: Search for Hypertension
-    exec: node npm/bin/owl4agents.js search v0.4-biomedical-grounding Hypertension --workspace bio-demo
+    exec: node tools/npm/bin/owl4agents.js search v0.4-biomedical-grounding Hypertension --workspace bio-demo
     exitCode: 0
     prerequisite: import must succeed first
   - step: Get entity context for Hypertension
-    exec: node npm/bin/owl4agents.js entity v0.4-biomedical-grounding http://example.org/v0.4-biomedical#Hypertension --workspace bio-demo
+    exec: node tools/npm/bin/owl4agents.js entity v0.4-biomedical-grounding http://example.org/v0.4-biomedical#Hypertension --workspace bio-demo
     exitCode: 0
     prerequisite: import must succeed first
   - step: Run reasoner for inferred facts
-    exec: node npm/bin/owl4agents.js reason v0.4-biomedical-grounding --workspace bio-demo
+    exec: node tools/npm/bin/owl4agents.js reason v0.4-biomedical-grounding --workspace bio-demo
     exitCode: 0
     prerequisite: import must succeed first
   - step: Verify supported claim — Hypertension is a Disease
-    exec: node npm/bin/owl4agents.js verify-claim v0.4-biomedical-grounding --claim test/fixtures/v0.4/claim-bio-supported.json --workspace bio-demo --json
+    exec: node tools/npm/bin/owl4agents.js verify-claim v0.4-biomedical-grounding --claim test/fixtures/v0.4/claim-bio-supported.json --workspace bio-demo --json
     exitCode: 0
     prerequisite: reason must be run first
   - step: Verify unknown claim — Arthritis is an InfectiousDisease
-    exec: node npm/bin/owl4agents.js verify-claim v0.4-biomedical-grounding --claim test/fixtures/v0.4/claim-bio-unknown.json --workspace bio-demo --json
+    exec: node tools/npm/bin/owl4agents.js verify-claim v0.4-biomedical-grounding --claim test/fixtures/v0.4/claim-bio-unknown.json --workspace bio-demo --json
     exitCode: 0
     prerequisite: reason must be run first
   - step: Verify out_of_scope claim — CancerStage is not in ontology
-    exec: node npm/bin/owl4agents.js verify-claim v0.4-biomedical-grounding --claim test/fixtures/v0.4/claim-bio-out-of-scope.json --workspace bio-demo --json
+    exec: node tools/npm/bin/owl4agents.js verify-claim v0.4-biomedical-grounding --claim test/fixtures/v0.4/claim-bio-out-of-scope.json --workspace bio-demo --json
     exitCode: 0
     prerequisite: null
 expectedOutputs:
@@ -65,7 +65,7 @@ expectedOutputs:
 ciRequired: true
 platformLimitations:
   - platform: windows
-    note: Use node npm/bin/owl4agents.js entry point; direct jar execution may crash on some Windows setups
+    note: Use node tools/npm/bin/owl4agents.js entry point; direct jar execution may crash on some Windows setups
 attribution:
   source: project
   license: Apache-2.0

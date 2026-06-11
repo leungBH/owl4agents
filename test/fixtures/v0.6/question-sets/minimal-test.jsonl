@@ -1,0 +1,1 @@
+{"questionId":"test-001","source":"owl4agents","expectedVerdict":"supported","claims":[{"id":"test-001-c1","type":"subclass","required":true,"subject":{"kind":"class","iri":"http://example.org/A"},"predicate":"subClassOf","object":{"kind":"class","iri":"http://example.org/B"}}],"reviewStatus":"approved"}

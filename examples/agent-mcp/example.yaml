@@ -6,7 +6,7 @@ interfaces:
 fixtures: []
 commands:
   - step: Start MCP server and verify initialize response
-    exec: node npm/bin/owl4agents.js mcp
+    exec: node tools/npm/bin/owl4agents.js mcp
     exitCode: 0
     prerequisite: null
     note: This is a long-running MCP server process. Validation starts it, sends initialize and tools/list, then terminates.
@@ -26,7 +26,7 @@ expectedOutputs:
 ciRequired: true
 platformLimitations:
   - platform: windows
-    note: Use bin/owl4agents-mcp.cmd or node npm/bin/owl4agents.js mcp. Both use java -cp classpath mode for Windows compatibility.
+    note: Use tools/bin/owl4agents-mcp.cmd or node tools/npm/bin/owl4agents.js mcp. Both use java -cp classpath mode for Windows compatibility.
 attribution:
   source: project
   license: Apache-2.0

@@ -19,4 +19,15 @@ public enum Verdict {
     public String jsonName() {
         return jsonName;
     }
+
+    /**
+     * Parse a verdict from its JSON name representation.
+     * Returns UNKNOWN for unrecognized names.
+     */
+    public static Verdict fromJsonName(String name) {
+        for (Verdict v : values()) {
+            if (v.jsonName.equals(name)) return v;
+        }
+        return UNKNOWN;
+    }
 }
