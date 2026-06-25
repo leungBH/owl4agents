@@ -1,5 +1,36 @@
 # Changelog
 
+## 0.7.0 - 2026-06-25
+
+### Added
+
+- Optional HTTP/JSON-RPC transport for the MCP server: `--transport http --host <host> --port <port>`, alongside the existing stdio transport (which remains the default and is byte-level unchanged from v0.6.0).
+- New `modules/ontology-mcp` package class `HttpMcpServer` (built on `com.sun.net.httpserver.HttpServer`) exposing three endpoints: `POST /mcp` (JSON-RPC 2.0), `GET /info` (diagnostics), and `GET /` (banner).
+- New CLI flags on the `mcp` subcommand: `--transport=stdio|http` (default `stdio`), `--host` (default `127.0.0.1`), `--port` (default `8080`), and the project-wide `--home=<dir>` override.
+- Bounded worker pool: 8 core threads + 100-slot `LinkedBlockingQueue` + `AbortPolicy` for non-reasoner tools. Concurrent calls beyond the budget return `HTTP 500` with JSON-RPC `code = -32000`.
+- Single-thread pool with `SynchronousQueue` + `AbortPolicy` for the 14 reasoner-using tools; the 2nd and later concurrent reasoner call is rejected with `HTTP 500` + `code = -32000`, message `"reasoner executor saturated"`.
+- New unified JSON-RPC entry point `McpServerAdapter.handleJsonRpc(JsonObject)`; both stdio and HTTP transports route through it so wire-format field-level parity is guaranteed.
+- Eager service initialization in `McpServerAdapter` constructor: 7 services (`reasonerService` → `consistencyAnalysisService` → `semanticDeepeningService` → `claimVerificationService` → `evidenceGroundingService` → `claimWorkflowService` → `evidenceContextBuilder`) are constructed in dependency order with `final` fields; the prior `getXxxService()` lazy-init accessors are removed.
+- New unit tests: `HttpMcpServerTest` (12 cases covering HTTP behavior, error matrix, content-type/parse-error/SSE handling, and TC-25/TC-27 concurrency gates) and `McpServerAdapterTest` (6 cases covering the unified entry point, eager-init order, and parity).
+- New `test/contracts/v07-acceptance/contracts.md` defining 34 acceptance gates (`V07-HTTP-*`, `V07-PARITY-*`, `V07-INIT-*`, `V07-CONC-*`, `V07-CLI-*`, `V07-VERSION-*`).
+- Stress-test split: 10-concurrent reasoner test is tagged `@Tag("stress")` and runs in the v0.7 acceptance gate only, not in default `gradle test`.
+- Runtime shutdown hook in `HttpMcpServer` to call `stop()` on `SIGTERM`/`SIGINT`.
+- v0.7.0 OpenSpec change: `openspec/changes/add-v0-7-mcp-http-transport/` (proposal, design, tasks, specs, acceptance report).
+
+### Changed
+
+- `McpServerAdapter` refactored from lazy `getXxxService()` accessors to constructor-injected `final` fields (eager init).
+- `McpCommand.runHttp` catches `BindException` (port-in-use, exit 78 per BSD sysexits.h `EX_CONFIG`), `InterruptedException` (exit 130), and `IOException` (exit 1); reflection-based `Class.forName(...).newInstance(...)` loading of `HttpMcpServer` was removed in favor of a direct `new HttpMcpServer(adapter)`.
+- `McpServerIntegrationTest` refactored to use `McpServerAdapter.handleJsonRpc` so the stdio regression is asserted through the same routing entry point as the HTTP transport.
+- `README.md` updated with a v0.7 quick-start section (HTTP transport), and the v0.7 roadmap block is marked delivered.
+- `build.gradle.kts` version bumped to `0.7.0`; `Owl4AgentsCli` picocli `version` attribute set to `0.7.0`.
+
+### Notes
+
+- v0.7 readonly tool count remains at 56 (unchanged from v0.6 baseline).
+- HTTP and stdio transports are **JSON field-level identical**, not byte-level identical. Transport-level framing (HTTP status codes, headers, empty-body semantics for notifications) is explicitly outside the parity contract.
+- The v0.7 OpenSpec change is tracked in `openspec/changes/add-v0-7-mcp-http-transport/` and the runtime verification report is `openspec/changes/add-v0-7-mcp-http-transport/acceptance-report.md`.
+
 ## 0.6.0 - 2026-06-11
 
 ### Added
