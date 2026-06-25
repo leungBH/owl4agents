@@ -4,9 +4,37 @@ Local OWL ontology runtime, reasoner integration, SPARQL query layer, and readon
 
 `owl4agents` is a local-first OWL/RDF ontology runtime for researchers and agent developers. It imports, manages, reasons over, queries, and retrieves structured semantic context from OWL ontologies, then exposes those capabilities through both CLI commands and an MCP server.
 
-> Status: v0.6 research evaluation benchmarks and reasoner comparison. v0.6 adds experiment configuration, benchmark runner, QA evaluation, context-batch mode, evidence context JSONL export, and report generation with 4×4 confusion matrix and static reasoner version mapping.
+> Status: v0.7 MCP HTTP transport. v0.7 adds an optional HTTP/JSON-RPC transport alongside the existing stdio transport, with bounded worker pools, single-thread serialization for reasoner-using tools, and a strict HTTP error matrix. v0.6 readonly tool count remains at 56.
 
-## v0.6 Quick Start
+## v0.7 Quick Start
+
+### New in v0.7: HTTP transport
+
+The MCP server can now run over HTTP in addition to stdio. The default is unchanged (stdio) for backwards compatibility.
+
+```bash
+# Default: stdio transport (backwards compatible with all v0.6 setups)
+node tools/npm/bin/owl4agents.js mcp --readonly
+
+# New in v0.7: HTTP transport
+node tools/npm/bin/owl4agents.js mcp --readonly --transport http --port 8080
+```
+
+Once the HTTP transport is running, send JSON-RPC 2.0 requests to `POST /mcp`:
+
+```bash
+curl -X POST http://127.0.0.1:8080/mcp \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc":"2.0","id":1,"method":"initialize"}'
+```
+
+Key v0.7.0 SLAs (see [openspec/changes/add-v0-7-mcp-http-transport/specs/mcp-http-transport/spec.md](openspec/changes/add-v0-7-mcp-http-transport/specs/mcp-http-transport/spec.md) for the full contract):
+
+- **Endpoints**: `POST /mcp` (JSON-RPC), `GET /info` (diagnostics), `GET /` (health banner).
+- **Worker pool**: 8 core threads + 100-slot queue for non-reasoner tools; 1-thread pool for reasoner-using tools. Saturated worker pool returns HTTP 500 with JSON-RPC `code = -32000`.
+- **Wire-format parity**: HTTP transport and stdio transport return **JSON field-level identical** results for the same request. The wire format is **not** byte-level identical.
+- **Error matrix**: `400` (parse error), `405` (`/mcp` GET), `415` (wrong content type), `500` (saturated pool / adapter exception), `501` (SSE/streaming not supported), `202` (JSON-RPC notification, no body).
+- **Stress tests**: the 10-concurrent reasoner test is tagged `@Tag("stress")` and runs in the v0.7 acceptance gate only, not in default `gradle test`.
 
 ### Requirements
 
@@ -1372,6 +1400,18 @@ Deferred:
 ### v0.7 External Datasets, NL-Claim Extraction, and Ontology Workflow Integrations
 
 Goal: add external dataset support, complete the NL-to-claim extraction pipeline, and evaluate optional ontology workflow integrations.
+
+Released in v0.7.0 (HTTP transport slice):
+
+- [x] Optional HTTP transport for the MCP server (`--transport http`, `--host`, `--port`); stdio remains the default
+- [x] `McpServerAdapter.handleJsonRpc` — single JSON-RPC routing entry point shared by stdio and HTTP transports (no behavior drift)
+- [x] Eager-init service graph: 7 services (`reasonerService` → `consistencyAnalysisService` → `semanticDeepeningService` → `claimVerificationService` → `evidenceGroundingService` → `claimWorkflowService` → `evidenceContextBuilder`) are constructed in dependency order in the constructor, with `final` fields and no `getXxxService()` lazy-init accessors
+- [x] Bounded worker pools: 8 core threads + 100-slot queue for non-reasoner tools; single-thread pool for the 14 reasoner-using tools
+- [x] HTTP error matrix: 200 (success), 202 (notification), 400 (parse error), 405 (wrong method), 415 (wrong content type), 500 (saturated pool / adapter exception), 501 (SSE not supported)
+- [x] `GET /info` and `GET /` diagnostic endpoints
+- [x] v0.7 acceptance contract: 34 acceptance gates across HTTP behavior, error codes, tool-call parity, service init order
+- [x] Stress-test split: low-intensity concurrency tests in default `gradle test`; `@Tag("stress")` 10-concurrent reasoner test in the v0.7 acceptance gate only
+- [x] JSON field-level parity between stdio and HTTP transports (wire format is **not** byte-level identical)
 
 Planned support:
 

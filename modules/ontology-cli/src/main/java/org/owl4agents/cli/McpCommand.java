@@ -3,6 +3,7 @@ package org.owl4agents.cli;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;
 
+import org.owl4agents.mcp.HttpMcpServer;
 import org.owl4agents.mcp.McpServerAdapter;
 import org.owl4agents.storage.HomeDirectoryResolver;
 
@@ -18,7 +19,15 @@ import com.google.gson.JsonParser;
 
 /**
  * CLI command entrypoint for starting the MCP server.
- * Implements JSON-RPC 2.0 over stdin/stdout.
+ * Dispatches to either the stdio transport (default) or the HTTP transport
+ * (--transport=http) per spec.md §"Transport selection".
+ *
+ * <p>stdio path: reads JSON-RPC 2.0 lines from stdin, writes responses to
+ * stdout. JSON-RPC routing is delegated to {@link McpServerAdapter#handleJsonRpc}.</p>
+ *
+ * <p>http path: delegates to {@code HttpMcpServer.start(host, port, adapter)}
+ * and blocks until SIGTERM/SIGINT. The HTTP server registers a JVM shutdown
+ * hook (HttpMcpServer constructor) to call {@code stop()} cleanly.</p>
  */
 @Command(name = "mcp", description = "Start the readonly MCP server.")
 public class McpCommand implements Callable<Integer> {
@@ -32,13 +41,29 @@ public class McpCommand implements Callable<Integer> {
     @Option(names = {"--home"}, description = "owl4agents home directory override")
     private String homeDirectory;
 
-    private static final String PROTOCOL_VERSION = "2024-11-05";
+    @Option(names = {"--transport"}, description = "Transport to use: stdio (default) or http", defaultValue = "stdio")
+    private String transport = "stdio";
+
+    @Option(names = {"--host"}, description = "HTTP host (only used with --transport=http)", defaultValue = "127.0.0.1")
+    private String host = "127.0.0.1";
+
+    @Option(names = {"--port"}, description = "HTTP port (only used with --transport=http); use 0 for ephemeral", defaultValue = "8080")
+    private int port = 8080;
+
     private final Gson gson = GsonFactory.createGson();
 
     @Override
     public Integer call() {
         if (!readonly) {
             System.err.println("Error: owl4agents only supports readonly MCP mode. Use --readonly (default).");
+            return 1;
+        }
+
+        // Validate transport value early. Reject unknown values with a deterministic
+        // error and a non-zero exit code (picocli will also validate, but we want
+        // a stable message independent of picocli's wording).
+        if (!"stdio".equals(transport) && !"http".equals(transport)) {
+            System.err.println("Error: --transport must be 'stdio' or 'http', got '" + transport + "'");
             return 1;
         }
 
@@ -58,12 +83,23 @@ public class McpCommand implements Callable<Integer> {
 
         McpServerAdapter adapter = new McpServerAdapter(serviceContext, logFilePath);
 
-        // MCP server runs on stdin/stdout
+        if ("http".equals(transport)) {
+            return runHttp(adapter);
+        }
+        return runStdio(adapter);
+    }
+
+    /**
+     * Run the stdio transport loop. Reads JSON-RPC 2.0 lines from stdin and
+     * writes responses to stdout. Delegates routing to
+     * {@link McpServerAdapter#handleJsonRpc}.
+     */
+    private int runStdio(McpServerAdapter adapter) {
         BufferedReader reader = new BufferedReader(new InputStreamReader(System.in));
         PrintWriter writer = new PrintWriter(System.out, true);
 
         // Signal that server is ready (write to stderr so it doesn't interfere with protocol)
-        System.err.println("owl4agents MCP server started in readonly mode");
+        System.err.println("owl4agents MCP server started in readonly mode (transport=stdio)");
 
         try {
             String line;
@@ -73,11 +109,15 @@ public class McpCommand implements Callable<Integer> {
 
                 try {
                     JsonObject request = JsonParser.parseString(line).getAsJsonObject();
-                    JsonObject response = handleRequest(request, adapter);
-                    writer.println(gson.toJson(response));
-                    writer.flush();
+                    JsonObject response = adapter.handleJsonRpc(request);
+                    // Notifications return null — do not write anything to stdout
+                    if (response != null) {
+                        writer.println(gson.toJson(response));
+                        writer.flush();
+                    }
                 } catch (Exception e) {
-                    // Send parse error response
+                    // Send parse error response (-32700). spec.md §"Parse error"
+                    // requires the error response to be sent on a parse failure.
                     JsonObject error = new JsonObject();
                     error.addProperty("jsonrpc", "2.0");
                     error.add("id", null);
@@ -97,78 +137,30 @@ public class McpCommand implements Callable<Integer> {
         return 0;
     }
 
-    private JsonObject handleRequest(JsonObject request, McpServerAdapter adapter) {
-        String method = request.has("method") ? request.get("method").getAsString() : "";
-        JsonElement idElement = request.has("id") ? request.get("id") : null;
-
-        JsonObject response = new JsonObject();
-        response.addProperty("jsonrpc", "2.0");
-        if (idElement != null) {
-            response.add("id", idElement);
+    /**
+     * Run the HTTP transport. Delegates to {@code HttpMcpServer.start(host, port, adapter)}
+     * and blocks until the server is stopped (e.g. via SIGTERM, which triggers
+     * the JVM shutdown hook registered in HttpMcpServer's constructor).
+     */
+    private int runHttp(McpServerAdapter adapter) {
+        HttpMcpServer server = new HttpMcpServer(adapter);
+        try {
+            server.start(host, port);
+            // Block the main thread. Shutdown is driven by the JVM shutdown hook
+            // that HttpMcpServer constructor registers (Runtime.getRuntime().addShutdownHook).
+            server.getShutdownLatch().await();
+            return 0;
+        } catch (java.net.BindException be) {
+            // spec.md §"Port already in use" — exit code 78 (sysexits.h EX_CONFIG)
+            System.err.println("port " + host + ":" + port + " already in use");
+            System.exit(78);
+            return 78; // unreachable, but keeps the compiler happy
+        } catch (InterruptedException ie) {
+            Thread.currentThread().interrupt();
+            return 130; // 128 + SIGINT(2)
+        } catch (IOException ioe) {
+            System.err.println("MCP HTTP server error: " + ioe.getMessage());
+            return 1;
         }
-
-        switch (method) {
-            case "initialize" -> {
-                JsonObject result = new JsonObject();
-                result.addProperty("protocolVersion", PROTOCOL_VERSION);
-                JsonObject capabilities = new JsonObject();
-                JsonObject tools = new JsonObject();
-                capabilities.add("tools", tools);
-                result.add("capabilities", capabilities);
-                JsonObject serverInfo = new JsonObject();
-                serverInfo.addProperty("name", "owl4agents");
-                serverInfo.addProperty("version", "0.6.0");
-                result.add("serverInfo", serverInfo);
-                response.add("result", result);
-            }
-            case "notifications/initialized" -> {
-                // No response needed for notifications
-                return null;
-            }
-            case "tools/list" -> {
-                JsonObject result = new JsonObject();
-                List<Map<String, Object>> tools = adapter.listTools();
-                result.add("tools", gson.toJsonTree(tools));
-                response.add("result", result);
-            }
-            case "tools/call" -> {
-                JsonObject params = request.has("params") ? request.getAsJsonObject("params") : new JsonObject();
-                String toolName = params.has("name") ? params.get("name").getAsString() : "";
-                JsonObject arguments = params.has("arguments") ? params.getAsJsonObject("arguments") : new JsonObject();
-
-                // Convert JsonObject to Map
-                Map<String, Object> argsMap = gson.fromJson(arguments, Map.class);
-
-                Map<String, Object> result = adapter.handleToolCall(toolName, argsMap);
-
-                // Convert result to MCP format
-                JsonObject mcpResult = new JsonObject();
-                if (result.containsKey("error")) {
-                    mcpResult.addProperty("isError", true);
-                    List<Map<String, Object>> content = new ArrayList<>();
-                    Map<String, Object> errorContent = new HashMap<>();
-                    errorContent.put("type", "text");
-                    errorContent.put("text", gson.toJson(result.get("error")));
-                    content.add(errorContent);
-                    mcpResult.add("content", gson.toJsonTree(content));
-                } else {
-                    List<Map<String, Object>> content = new ArrayList<>();
-                    Map<String, Object> textContent = new HashMap<>();
-                    textContent.put("type", "text");
-                    textContent.put("text", gson.toJson(result.get("data")));
-                    content.add(textContent);
-                    mcpResult.add("content", gson.toJsonTree(content));
-                }
-                response.add("result", mcpResult);
-            }
-            default -> {
-                JsonObject error = new JsonObject();
-                error.addProperty("code", -32601);
-                error.addProperty("message", "Method not found: " + method);
-                response.add("error", error);
-            }
-        }
-
-        return response;
     }
 }
