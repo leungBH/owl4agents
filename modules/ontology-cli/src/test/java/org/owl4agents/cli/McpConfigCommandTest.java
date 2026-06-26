@@ -163,6 +163,8 @@ class McpConfigCommandTest {
             assertTrue(stderr.contains("generic"));
             assertTrue(stderr.contains("claude"));
             assertTrue(stderr.contains("cursor"));
+            assertTrue(stderr.contains("http"),
+                "stderr should list http as a supported client");
         }
     }
 
@@ -287,9 +289,9 @@ class McpConfigCommandTest {
         }
 
         @Test
-        @DisplayName("All three client types produce parseable JSON")
+        @DisplayName("All four client types produce parseable JSON")
         void allClientTypesProduceParseableJson() {
-            for (String client : List.of("generic", "claude", "cursor")) {
+            for (String client : List.of("generic", "claude", "cursor", "http")) {
                 capturedOut.reset();
                 McpConfigCommand cmd = parseAndCreate("--client", client, "--workspace-home", "/test/home");
                 assertEquals(0, cmd.call());
@@ -299,6 +301,72 @@ class McpConfigCommandTest {
                 assertNotNull(parsed, client + " client should produce parseable JSON");
                 assertTrue(parsed.containsKey("mcpServers"), client + " client JSON should have mcpServers");
             }
+        }
+    }
+
+    // --- 9. HTTP client config (v0.7+) ---
+
+    @Nested
+    @DisplayName("HTTP client config (v0.7+)")
+    class HttpClientTests {
+
+        @Test
+        @DisplayName("--client http generates a single url field pointing at the HTTP listener")
+        void httpClientGeneratesUrl() {
+            McpConfigCommand cmd = parseAndCreate("--client", "http");
+            assertEquals(0, cmd.call());
+
+            String json = capturedOut.toString().trim();
+            Map<String, Object> root = parseJson(json);
+            Map<String, Object> server = extractServerConfig(root);
+
+            assertEquals("http://127.0.0.1:8080/mcp", server.get("url"));
+            assertNull(server.get("command"),
+                "HTTP config should not include a stdio command field");
+            assertNull(server.get("args"),
+                "HTTP config should not include stdio args");
+            assertNull(server.get("env"),
+                "HTTP config should not include stdio env");
+        }
+
+        @Test
+        @DisplayName("--url override takes effect in the generated config")
+        void httpClientUrlOverride() {
+            McpConfigCommand cmd = parseAndCreate("--client", "http", "--url", "http://remote-host:9000/mcp");
+            assertEquals(0, cmd.call());
+
+            String json = capturedOut.toString().trim();
+            Map<String, Object> root = parseJson(json);
+            Map<String, Object> server = extractServerConfig(root);
+
+            assertEquals("http://remote-host:9000/mcp", server.get("url"));
+        }
+
+        @Test
+        @DisplayName("Committed fixture (configs/http-mcp-config.json) is field-level identical to the generator default")
+        void httpFixtureHasMcpUrl() throws Exception {
+            // Generator output for default flags
+            McpConfigCommand cmd = parseAndCreate("--client", "http");
+            assertEquals(0, cmd.call());
+            String generatorJson = capturedOut.toString().trim();
+            Map<String, Object> generatorRoot = parseJson(generatorJson);
+            Map<String, Object> generatorServer = extractServerConfig(generatorRoot);
+
+            // Committed fixture (lives next to the agent-mcp example, not in this module's resources)
+            java.nio.file.Path fixturePath = java.nio.file.Path.of("examples", "agent-mcp", "configs", "http-mcp-config.json");
+            assertTrue(java.nio.file.Files.exists(fixturePath),
+                "Committed HTTP fixture must exist: " + fixturePath);
+            String fixtureJson = java.nio.file.Files.readString(fixturePath).trim();
+            Map<String, Object> fixtureRoot = parseJson(fixtureJson);
+            Map<String, Object> fixtureServer = extractServerConfig(fixtureRoot);
+
+            // Field-level contract: server only has "url" and the value points at /mcp
+            assertEquals(generatorServer.get("url"), fixtureServer.get("url"),
+                "Generator and fixture must agree on the url value");
+            assertTrue(((String) fixtureServer.get("url")).endsWith("/mcp"),
+                "Fixture url must end with /mcp");
+            assertNull(fixtureServer.get("command"),
+                "Fixture must not include a stdio command field");
         }
     }
 }

@@ -19,12 +19,12 @@ import org.owl4agents.storage.HomeDirectoryResolver;
 @Command(name = "mcp-config", description = "Generate MCP client configuration for local agent clients.")
 public class McpConfigCommand implements Callable<Integer> {
 
-    private static final java.util.Set<String> SUPPORTED_CLIENTS = java.util.Set.of("generic", "claude", "cursor");
+    private static final java.util.Set<String> SUPPORTED_CLIENTS = java.util.Set.of("generic", "claude", "cursor", "http");
 
-    @Option(names = {"--client"}, required = true, description = "Client name: generic, claude, or cursor")
+    @Option(names = {"--client"}, required = true, description = "Client name: generic, claude, cursor, or http")
     private String clientName;
 
-    @Option(names = {"--workspace-home"}, description = "owl4agents home directory for generated config")
+    @Option(names = {"--workspace-home"}, description = "owl4agents home directory for generated config (stdio clients only)")
     private String workspaceHome;
 
     @Option(names = {"--out"}, description = "Write config to file instead of stdout")
@@ -35,6 +35,9 @@ public class McpConfigCommand implements Callable<Integer> {
 
     @Option(names = {"--home"}, description = "owl4agents home directory override")
     private String homeDirectory;
+
+    @Option(names = {"--url"}, description = "HTTP transport URL (http client only, default: http://127.0.0.1:8080/mcp)")
+    private String httpUrl;
 
     private static final Gson gson = GsonFactory.createGson();
 
@@ -74,6 +77,9 @@ public class McpConfigCommand implements Callable<Integer> {
                 break;
             case "cursor":
                 config = generateCursorConfig(projectRoot, effectiveWorkspaceHome);
+                break;
+            case "http":
+                config = generateHttpConfig();
                 break;
             case "generic":
                 config = generateGenericConfig(projectRoot, effectiveWorkspaceHome);
@@ -163,6 +169,26 @@ public class McpConfigCommand implements Callable<Integer> {
                 "command", "node",
                 "args", java.util.List.of(launcherPath, "mcp", "--readonly"),
                 "env", Map.of("OWL4AGENTS_HOME", workspaceHome)
+            )
+        ));
+        return config;
+    }
+
+    /**
+     * Generates an HTTP transport MCP client config: a single {@code url} field
+     * pointing at the v0.7 HTTP listener. Used for clients that connect to MCP
+     * over HTTP/JSON-RPC (e.g. Claude Desktop, Cursor, or any HTTP-capable MCP
+     * client). Stdio clients (generic / claude / cursor templates) keep the
+     * command + args + env shape.
+     */
+    private Map<String, Object> generateHttpConfig() {
+        Map<String, Object> config = new LinkedHashMap<>();
+        String url = (httpUrl != null && !httpUrl.isBlank())
+            ? httpUrl
+            : "http://127.0.0.1:8080/mcp";
+        config.put("mcpServers", Map.of(
+            "owl4agents", Map.of(
+                "url", url
             )
         ));
         return config;

@@ -1,15 +1,29 @@
 id: agent-mcp
 title: MCP Agent Integration Demo
-description: Demonstrates how a local agent connects to owl4agents through readonly MCP, including client configuration, startup, tool discovery, and sanitized tool-call transcript samples.
+description: Demonstrates how a local agent connects to owl4agents through readonly MCP, including stdio and HTTP client configurations, startup, tool discovery, and sanitized tool-call transcript samples.
 interfaces:
   - mcp
-fixtures: []
+fixtures:
+  - configs/claude-mcp-config.json
+  - configs/cursor-mcp-config.json
+  - configs/generic-mcp-config.json
+  - configs/http-mcp-config.json
 commands:
-  - step: Start MCP server and verify initialize response
+  - step: Start MCP server (stdio) and verify initialize response
     exec: node tools/npm/bin/owl4agents.js mcp
     exitCode: 0
     prerequisite: null
     note: This is a long-running MCP server process. Validation starts it, sends initialize and tools/list, then terminates.
+  - step: Generate HTTP client config and verify it matches the committed fixture
+    exec: node tools/npm/bin/owl4agents.js mcp-config --client http
+    exitCode: 0
+    prerequisite: http config fixture must exist
+    note: Output is compared field-by-field (url ends with /mcp) against configs/http-mcp-config.json; byte-level parity is NOT required.
+  - step: Start MCP server (HTTP) and verify POST /mcp initialize
+    exec: node tools/npm/bin/owl4agents.js mcp --readonly --transport http --port 8080
+    exitCode: 0
+    prerequisite: port 8080 must be free
+    note: Manual step — the example runner cannot easily assert HTTP probe responses without a temporary port and a probe script. Marked as manual unless the example runner is extended.
 expectedOutputs:
   - field: capabilities
     present: true
@@ -23,6 +37,10 @@ expectedOutputs:
     present: true
     value: ontology_verify_claim
     snippet: '"name": "ontology_verify_claim"'
+  - field: mcpServers.owl4agents.url
+    present: true
+    value: http://127.0.0.1:8080/mcp
+    snippet: '"url": "http://127.0.0.1:8080/mcp"'
 ciRequired: true
 platformLimitations:
   - platform: windows

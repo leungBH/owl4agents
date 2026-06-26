@@ -1,5 +1,26 @@
 # Changelog
 
+## 0.7.1 - 2026-06-25
+
+### Fixed
+
+- `examples/agent-mcp/configs/http-mcp-config.json` is now committed (was missing in v0.7.0). The committed fixture declares `mcpServers.owl4agents.url = "http://127.0.0.1:8080/mcp"` and is consistent (field-level) with the new `mcp-config --client http` generator output.
+- `examples/agent-mcp/README.md` now has a "HTTP Transport (v0.7+)" section covering listener startup (`--transport http --port 8080`), the committed HTTP client config, `curl` probes for `GET /` and `POST /mcp initialize`, the HTTP error matrix, and the stdio parity note. The `initialize` response example in the README now reports `serverInfo.version = "0.7.1"` (was stale `0.4.0`).
+- `examples/agent-mcp/example.yaml` now lists the four config fixtures under `fixtures:` (was empty in v0.7.0) and adds two new validation commands: `mcp-config --client http` and a manual HTTP `mcp --transport http` probe step. The expected-output block now includes `mcpServers.owl4agents.url`.
+- `examples/agent-mcp/transcripts/verify-claim-transcript.md` `initialize` response now reports `serverInfo.version = "0.7.1"` (was stale `0.4.0`).
+- `tools/npm/package.json` `version` field is now `0.7.1` (was stale `0.6.0` from before the v0.7.0 release).
+- `.github/workflows/ci.yml` `--version` assertion now expects `0.7.1` (was stale `0.4.0` from before the v0.7.0 release).
+
+### Added
+
+- `mcp-config --client http` (and `--client=http`) generator and the corresponding `--url <url>` override. The HTTP client config emits a single `mcpServers.owl4agents.url` field (no `command` / `args` / `env`), matching the v0.7 HTTP transport contract. Adds 3 new cases to `McpConfigCommandTest` (`HttpClientTests`).
+- `mcp-config` now accepts `http` in its `SUPPORTED_CLIENTS` set; the unknown-client rejection diagnostic still names `generic`, `claude`, `cursor`, and now also `http` as supported.
+
+### Notes
+
+- v0.7.1 is a docs / example / version-reference fix release. The runtime behavior of v0.7.0 is unchanged. Readonly tool count remains 56.
+- No new external dependencies.
+
 ## 0.7.0 - 2026-06-25
 
 ### Added

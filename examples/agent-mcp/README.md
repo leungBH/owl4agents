@@ -77,7 +77,7 @@ When the MCP server starts, it responds to the `initialize` request with:
   "capabilities": { "tools": {} },
   "serverInfo": {
     "name": "owl4agents",
-    "version": "0.4.0"
+    "version": "0.7.1"
   }
 }
 ```
@@ -101,6 +101,74 @@ Send `tools/list` to discover available tools. The response includes readonly on
 - `ontology_get_inferred_facts`
 
 > Note: `ontology_import` is a write tool planned for v0.8. It requires `--allow-write` and is not available in the default readonly MCP server.
+
+## HTTP Transport (v0.7+)
+
+The v0.7 release added an optional HTTP/JSON-RPC transport alongside stdio. **Stdio remains the default path**; the HTTP transport is opt-in via `--transport http`. Use it when your agent client speaks JSON-RPC over HTTP/POST (e.g. an HTTP-capable MCP client, or a sidecar/in-process setup).
+
+### Start the HTTP listener
+
+```bash
+node tools/npm/bin/owl4agents.js mcp --readonly --transport http --port 8080
+```
+
+Default port is `8080`; default host is `127.0.0.1`. Use `--host 0.0.0.0` to bind on all interfaces. The listener stays in the foreground until killed; the systemd unit on the reference deployment uses `Restart=on-failure` for recovery.
+
+### HTTP client config
+
+A committed HTTP-only MCP client config is at [`configs/http-mcp-config.json`](configs/http-mcp-config.json):
+
+```json
+{
+  "mcpServers": {
+    "owl4agents": {
+      "url": "http://127.0.0.1:8080/mcp"
+    }
+  }
+}
+```
+
+You can regenerate it (or override the URL) with:
+
+```bash
+node tools/npm/bin/owl4agents.js mcp-config --client http
+node tools/npm/bin/owl4agents.js mcp-config --client http --url http://remote-host:9000/mcp
+```
+
+### Probe commands
+
+With the HTTP listener running on `127.0.0.1:8080`:
+
+```bash
+# Liveness banner (GET /)
+curl http://127.0.0.1:8080/
+
+# JSON-RPC initialize handshake (POST /mcp)
+curl -X POST http://127.0.0.1:8080/mcp \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"probe","version":"1.0.0"}}}'
+
+# tools/list
+curl -X POST http://127.0.0.1:8080/mcp \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc":"2.0","id":2,"method":"tools/list"}'
+```
+
+Error matrix for the HTTP transport (matches the v0.7 spec):
+
+| Status | Meaning |
+| --- | --- |
+| 200 | JSON-RPC response with `result` or `result.isError = true` |
+| 202 | JSON-RPC notification (no `id`); no body |
+| 400 | JSON parse error (`code = -32700`) |
+| 405 | `GET /mcp` (mcp is POST-only) |
+| 415 | Wrong `Content-Type` |
+| 500 | Saturated worker pool or adapter exception (`code = -32000`) |
+| 501 | `Accept: text/event-stream` (SSE not supported) |
+
+### Parity with stdio
+
+HTTP and stdio return **JSON field-level identical** responses for the same JSON-RPC request. The wire format is **not** byte-level identical; transport-level framing (HTTP status codes, headers, empty-body for notifications) is outside the parity contract.
 
 ## Tool-Call Transcript Sample
 
