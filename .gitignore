@@ -61,3 +61,74 @@ v*-final-*/
 
 # Numeric scratch files at root
 /[0-9]*/
+
+# Root-level test artifacts, debug logs, and one-off scripts (v0.8+)
+# These are local-only transient files generated during testing.
+# Real acceptance evidence is in reports/acceptance/ (which is itself gitignored).
+# Real regression tests are in modules/*/src/test/ and test/contracts/.
+/*.log
+/NUL
+/hdr.txt
+/post_hdr.txt
+/q.json
+/req_call.json
+/req_call2.json
+/req_tools_list.json
+/sse_a.log
+/sse_b.log
+/server.err
+/server.out
+/server_v3.log
+/trae_call.json
+/trae_call2.json
+/trae_call3.json
+/trae_curl.err
+/trae_curl.out
+/trae_get.json
+/trae_init.json
+/trae_list.json
+/trae_stream.log
+/test_all_tools.ps1
+/test_all_tools_v2.ps1
+/test_all_tools_v3.ps1
+/test_run.log
+/test_run_v2.log
+/test_run_v3.log
+/test_junit.log
+/test_scoreboard.txt
+/test_scoreboard_v2.txt
+/test_scoreboard_v3.txt
+/deploy_swap.ps1
+/deploy_swap.log
+/deploy_v071.ps1
+/deploy_verify.ps1
+/deploy_verify.log
+/deploy_verify2.ps1
+/deploy_verify2.log
+/deploy_verify3.ps1
+/deploy_verify3.log
+/deploy_verify4.ps1
+/deploy_verify4.log
+/deploy_verify5.ps1
+/deploy_verify5.log
+/deploy.log
+/import_bfo.log
+/import_datatype_constraints.log
+/import_disjoint_properties.log
+/import_g02_subclass_transitive.log
+/import_g03_equivalent_classes.log
+/import_g04_disjoint_classes.log
+/import_g05_property_axioms.log
+/import_g06_individual_assertions.log
+/import_g07_sparql_safety.log
+/import_individual_assertions.log
+/import_pizza.log
+/import_relation_assertions.log
+/import_v03_claim_verification.log
+/import_v04_biomedical_grounding.log
+
+# Local runtime workspace (materialized from test/corpus)
+/data/
+
+# Temporary extraction directories
+/temp_jar_check/
