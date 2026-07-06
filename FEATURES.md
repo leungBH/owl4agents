@@ -1,1407 +1,2691 @@
-# owl4agents 功能全景（详细版）
+# owl4agents — Features and Tool Reference
 
-> 适用版本：**v0.8.0**（2026-06-29 发布；2026-07-03 复测通过）
-> 文档定位：从使用者视角**逐工具**梳理 owl4agents 的 56 个 MCP 工具与 50+ 个 CLI 命令，包括参数、响应、调用示例、典型场景。
-
----
-
-## 目录
-
-1. [项目概述](#1-项目概述)
-2. [架构与模块](#2-架构与模块)
-3. [MCP 工具详细文档](#3-mcp-工具详细文档) — 56 个工具分组
-4. [CLI 命令详细文档](#4-cli-命令详细文档) — 50+ 个命令分组
-5. [部署与集成](#5-部署与集成)
-6. [推理机集成](#6-推理机集成)
-7. [Claim 验证能力](#7-claim-验证能力)
-8. [安全模型](#8-安全模型)
-9. [测试覆盖与质量数据](#9-测试覆盖与质量数据)
-10. [典型使用场景](#10-典型使用场景)
-11. [已知限制](#11-已知限制)
+> **Version:** v0.8.0 (released 2026-06-29, re-tested 2026-07-03).
+> **Audience:** programmers who want to **use** owl4agents (CLI or MCP) and understand what each command / tool does, what it takes as input, and what it returns. We assume you're a CS graduate — comfortable with JSON, HTTP, regex, and reading API docs — but you may or may not have touched OWL or SPARQL before.
+> **Pair this with:** [README.md](README.md) for the elevator pitch and 5-minute quick start. This file is the deep reference.
 
 ---
 
-## 1. 项目概述
+## Languages / 语言版本
 
-`owl4agents` 是一个**本地优先的 OWL/RDF 本体运行时**，把成熟的语义网工具（OWL API、HermiT、ELK、Openllet、Apache Jena）封装成可被 LLM Agent 调用的 MCP 工具集合。
-
-**目标用户**：
-- 研究本体增强型 LLM Agent 的科研人员
-- 给 Agent 接入领域知识图谱的工程师
-- 维护本地 OWL/RDF 本体的知识工程师
-- 想要可复现、可审计、可本地化的语义推理流水线的团队
-
-**核心价值**：
-- **本地化**：所有数据默认在 `~/.owl4agents/` 下，无需联网（除首次构建外）
-- **可复现**：推理结果落盘到 `inferred-class-hierarchy.jsonl`、`inferred-types.jsonl` 等
-- **可审计**：所有工具调用通过 `McpToolCallLogger` 留痕
-- **只读安全**：MCP 服务器默认 `--readonly`，只暴露 56 个只读工具，写操作只能走 CLI
-- **协议合规**：MCP Streamable HTTP（`2025-03-26` spec），可对接 Trae IDE、Claude Desktop、Cursor
+- **English** (this file)
+- [功能参考(中文)](FEATURES.zh-CN.md) — full Chinese translation of this document
+- [English README](README.md) | [简体中文 README](README.zh-CN.md)
 
 ---
 
-## 2. 架构与模块
+## Table of contents
 
+1. [§0 How to read this document](#0-how-to-read-this-document)
+2. [§1 OWL and SPARQL in 5 minutes — the primer you actually need](#1-owl-and-sparql-in-5-minutes--the-primer-you-actually-need)
+3. [§2 Architecture and module breakdown](#2-architecture-and-module-breakdown)
+4. [§3 A real walkthrough — load an ontology, ask questions, verify a claim](#3-a-real-walkthrough--load-an-ontology-ask-questions-verify-a-claim)
+5. [§4 CLI reference — every command, with real input and real output](#4-cli-reference--every-command-with-real-input-and-real-output)
+6. [§5 MCP tool reference — every tool, with real JSON-RPC request and response](#5-mcp-tool-reference--every-tool-with-real-json-rpc-request-and-response)
+7. [§6 Claim verification and evidence grounding — wiring owl4agents into an LLM answer pipeline](#6-claim-verification-and-evidence-grounding--wiring-owl4agents-into-an-llm-answer-pipeline)
+8. [§7 Deployment, environment, integration](#7-deployment-environment-integration)
+9. [§8 Reasoner integration — which reasoner to pick and when](#8-reasoner-integration--which-reasoner-to-pick-and-when)
+10. [§9 Error codes, troubleshooting, and limits](#9-error-codes-troubleshooting-and-limits)
+11. [§10 Testing, quality data, and acceptance evidence](#10-testing-quality-data-and-acceptance-evidence)
+
+---
+
+## 0. How to read this document
+
+This is a long reference, on purpose. You almost never need all of it; pick the section that matches what you're doing.
+
+- **First time here?** Read [§1](#1-owl-and-sparql-in-5-minutes--the-primer-you-actually-need) (OWL primer) and [§3](#3-a-real-walkthrough--load-an-ontology-ask-questions-verify-a-claim) (a real walkthrough) end to end. After that you can jump around.
+- **Driving owl4agents from the CLI?** Jump to [§4](#4-cli-reference--every-command-with-real-input-and-real-output). Every command has a "Run it" code block you can copy, and a "What you get" block showing the real output we got from a v0.8 server running on this repo.
+- **Driving owl4agents from an MCP client (Claude / Cursor / Trae / your own agent)?** Jump to [§5](#5-mcp-tool-reference--every-tool-with-real-json-rpc-request-and-response). Every tool has a sample JSON-RPC request and the matching response.
+- **Building an answer-verification pipeline?** §3 then [§6](#6-claim-verification-and-evidence-grounding--wiring-owl4agents-into-an-llm-answer-pipeline).
+- **Debugging an error?** [§9](#9-error-codes-troubleshooting-and-limits).
+
+**The single ontology we use in every example** is `v0.3-claim-verification.owl` from `test/corpus/golden/`. It is 55 lines, contains 8 classes, 4 individuals, 1 object property, 2 data properties, and is small enough to fit on one screen. We re-print it in [§1.2](#12-the-running-example-a-real-owl-file).
+
+**Conventions in this document**:
+
+- "We ran" or "Real output" means we executed the command on the actual owl4agents v0.8 jar against the actual fixture and pasted the output here (with one or two cosmetic line wraps).
+- Code blocks in `json` are real request / response bodies. Code blocks in `powershell` or `bash` are real commands you can run.
+- `<like-this>` is a placeholder you should replace.
+
+---
+
+## 1. OWL and SPARQL in 5 minutes — the primer you actually need
+
+This is a deliberately short primer. If you've worked with RDF or a description logic before, skim it; if you haven't, the rest of this doc will be much easier after this section.
+
+### 1.1 The 30-second version
+
+An **OWL ontology** is a set of named things (classes, properties, individuals) and the relationships between them. It looks like RDF triples: `subject predicate object`. The interesting predicates come from three vocabularies:
+
+- `rdf:type` — "this individual is an instance of this class" (e.g. `Fido rdf:type Dog`).
+- `rdfs:subClassOf` — "this class is more specific than that class" (e.g. `Dog rdfs:subClassOf Animal`).
+- `rdfs:domain` / `rdfs:range` — "this property applies to instances of X and produces values of Y".
+
+An **OWL reasoner** takes the explicit facts and computes what else *must* be true. Given `Dog subClassOf Mammal` and `Mammal subClassOf Animal`, the reasoner infers `Dog subClassOf Animal` and writes that into the inferred graph.
+
+**SPARQL** is the SQL of RDF. You write `SELECT ?s WHERE { ?s rdfs:subClassOf :Animal }` and you get back every class that is a subclass of `Animal`. `ASK` returns a boolean. `CONSTRUCT` returns triples. `DESCRIBE` returns "everything we know about" some resource.
+
+That's it. The rest of OWL (equivalent classes, disjointness, restrictions, individuals, datatypes, ...) all just gives you more interesting predicates and more interesting entailments.
+
+### 1.2 The running example: a real OWL file
+
+We will use the following 55-line file everywhere below. The path is `test/corpus/golden/v0.3-claim-verification.owl` in the repo.
+
+```turtle
+@prefix : <http://example.org/v0.3#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+<http://example.org/v0.3-claim-verification> a owl:Ontology ;
+    rdfs:label "v0.3 Claim Verification Golden Ontology" ;
+    rdfs:comment "Golden ontology for testing claim verification across supported, contradicted, unknown, and out_of_scope verdicts." .
+
+# --- Class hierarchy (supported: Dog subClassOf Animal) ---
+:Animal a owl:Class .
+:Mammal a owl:Class ; rdfs:subClassOf :Animal .
+:Dog a owl:Class ; rdfs:subClassOf :Mammal .
+:Cat a owl:Class ; rdfs:subClassOf :Mammal .
+
+# --- Equivalent classes (supported: Canine = Dog) ---
+:Canine a owl:Class ; owl:equivalentClass :Dog .
+
+# --- Disjoint classes (contradicted: Dog disjointWith Cat — claiming Dog subClassOf Cat contradicts) ---
+:Dog owl:disjointWith :Cat .
+
+# --- Object property with domain/range ---
+:hasOwner a owl:ObjectProperty ;
+    rdfs:domain :Animal ;
+    rdfs:range :Person .
+
+:Person a owl:Class .
+
+# --- Data property with domain/range and datatype constraints ---
+:hasAge a owl:DatatypeProperty ;
+    rdfs:domain :Animal ;
+    rdfs:range xsd:nonNegativeInteger .
+
+:hasName a owl:DatatypeProperty ;
+    rdfs:domain :Animal ;
+    rdfs:range xsd:string .
+
+# --- Individual assertions (supported: Fido is a Dog) ---
+:Fido a :Dog .
+:Rex a :Dog .
+:Whiskers a :Cat .
+
+:Fido :hasOwner :PersonJohn .
+:Fido :hasAge 5 .
+:Fido :hasName "Fido" .
+
+:PersonJohn a :Person .
+
+# --- Sparse unknown: Fish/Goldfish have no axioms connecting them ---
+:Fish a owl:Class .
+:Goldfish a owl:Class .
+
+# --- Out-of-scope: UnconnectedThing has no relation to Animal ---
+:UnconnectedThing a owl:Class .
 ```
-+------------------------------------------------------+
-|                    npm 启动层                         |
-|   tools/npm/bin/owl4agents.js（仅作启动器）           |
-+-------------------------+----------------------------+
-                          |  fork+exec
-                          v
-+------------------------------------------------------+
-|                Java 22 运行时（owl4agents.jar）        |
-|                                                      |
-|  +-----------+   +-----------+   +-----------------+  |
-|  | CLI 层    |   | MCP/HTTP  |   | 内部 API         |  |
-|  | Picocli   |   | JSON-RPC  |   | OntologyService  |  |
-|  +-----+-----+   +-----+-----+   +---------+-------+  |
-|        |               |                  |          |
-|        +-------+-------+------------------+          |
-|                v                                     |
-|  +----------------------------------------------+    |
-|  |  服务层（11 个 module）                        |    |
-|  |  Core / Storage / Owlapi / Query / Reasoner / |    |
-|  |  Retrieval / Validation / Benchmark / Cli /   |    |
-|  |  Mcp / Distribution                           |    |
-|  +----------------------------------------------+    |
-+------------------------------------------------------+
-                          |
-                          v
-+------------------------------------------------------+
-|          基础库                                        |
-|   OWL API  ·  HermiT  ·  ELK  ·  Openllet  ·  Jena ARQ |
-+------------------------------------------------------+
-                          |
-                          v
-                ~/.owl4agents/workspaces/
-                ├── catalog.json          # 本体注册表
-                ├── workspace.yaml        # 工作区配置
-                └── <workspace>/
-                    └── ontologies/
-                        └── <ontology_id>/
-                            ├── source/             # 原始 OWL 文件
-                            ├── inferred/           # 推理产物（class 层级、type 断言）
-                            └── reasoning-report.json
-```
 
-**11 个模块清单**：
+What you should take away from this file:
 
-| 模块 | 职责 | 关键类 |
-|---|---|---|
-| **ontology-core** | 共享数据模型（`Claim`、`EntityId`、`ServiceResult`、所有 `Result` 记录类）+ JSON 工具 | `OntologyService`、`ClaimValidator`、`ErrorCode`、`ServiceError` |
-| **ontology-storage** | Workspace / catalog 管理、Home 路径解析 | `WorkspaceInitializer`、`CatalogStore`、`HomeDirectoryResolver`、`OntologyImporter` |
-| **ontology-owlapi** | OWL API 封装、OWL/RDF 加载、归一化、profile 检测 | `OwlapiOntologyLoader`、`ProfileDetector`、`SemanticDeepeningService` |
-| **ontology-query** | Apache Jena ARQ 集成、SPARQL 安全、检索 | `SparqlExecutionService`、`EntitySearchService`、`QaContextService` |
-| **ontology-reasoner** | HermiT / ELK / Openllet 适配、推理任务路由、推理产物落盘 | `ReasonerServiceImpl`、`ReasonerLifecycleManager`、`HermitAdapter`、`ElkAdapter`、`OpenlletAdapter` |
-| **ontology-retrieval** | 实体上下文拼装、图谱邻域、QA 上下文 | `EntityContextService`、`GraphNeighborhoodService`、`QaContextService` |
-| **ontology-validation** | Claim 验证、字面量校验、class/individual/关系检查 | `ClaimVerificationService`、`LiteralValidator`、`EntailmentChecker`、`ConsistencyAnalysisService`、`EvidenceGroundingService`、`ClaimWorkflowService`、`EvidenceContextBuilder`、`ClaimBatchValidator` |
-| **ontology-benchmark** | 基准实验、QA 评估、批量上下文 | `BenchmarkService`、`QaEvaluationService`、`ContextBatchService`、`ExperimentConfigParser`、`BenchmarkQuestionSetValidator`、`BenchmarkReportGenerator` |
-| **ontology-cli** | Picocli 命令适配（50+ 个子命令） | `Owl4AgentsCli`、`McpCommand`、`ImportCommand`、`VerifyClaimCommand` 等 |
-| **ontology-mcp** | MCP 服务器（stdio / HTTP / SSE）、工具注册、调用日志 | `HttpMcpServer`、`McpServerAdapter`、`McpToolRegistry`、`McpSessionManager` |
-| **ontology-distribution** | 跨版本端到端验收（V01..V07 acceptance suite） | `V03AcceptanceSuite` 等 |
+- **8 named classes**: `Animal`, `Mammal`, `Dog`, `Cat`, `Canine`, `Person`, `Fish`, `Goldfish`, `UnconnectedThing`.
+- **Class hierarchy**: `Dog`, `Cat` are `Mammal`s; `Mammal` is an `Animal`. By transitivity, `Dog` and `Cat` are also `Animal`s, but this is only true **after reasoning** — the file itself doesn't state `Dog subClassOf Animal` directly.
+- **One equivalence**: `Canine` ≡ `Dog`. Reasoners will collapse these.
+- **One disjointness**: `Dog` ⊥ `Cat`. An individual cannot be both. A claim that `Dog subClassOf Cat` will be **contradicted** by the reasoner.
+- **3 named individuals**: `Fido` (a `Dog` with an owner, an age, a name), `Rex` (a `Dog`), `Whiskers` (a `Cat`), `PersonJohn` (a `Person`).
+- **2 object/data property declarations**: `hasOwner` (Object, domain=Animal, range=Person), `hasAge`/`hasName` (Data, domain=Animal, range=xsd:nonNegativeInteger / xsd:string).
+- **Two axioms that look like claim-verification test data**:
+  - `Fish` and `Goldfish` exist but have no axioms connecting them. A claim that `Goldfish subClassOf Fish` is **unknown** — not contradicted, not supported, just no information.
+  - `UnconnectedThing` has no relation to the rest of the ontology. A claim that some class is "in the scope of `Animal`" involving `UnconnectedThing` is **out of scope**.
 
----
+### 1.3 Three graphs you will see in responses
 
-## 3. MCP 工具详细文档
+owl4agents reasons about three views of the same ontology:
 
-### 3.0 MCP 公共规范
+- **explicit** — the axioms you wrote in the file.
+- **inferred** — the axioms the reasoner derived. `Dog subClassOf Animal` lives here.
+- **union** — explicit ⊎ inferred. (Some tools default to this.)
 
-**协议**：
-- JSON-RPC 2.0 over HTTP（`POST /mcp`）+ 可选 SSE 长连接（`GET /mcp`，v0.8+）
-- 内容协商：`Accept: application/json`（默认）/ `Accept: text/event-stream`（v0.8+）
-- 会话标识：`Mcp-Session-Id: <uuid-v4>`（v0.8+ 必需；`initialize` 时由服务端返回）
-- 调用方法：`tools/list`（列工具）、`tools/call`（调工具，参数 `name` + `arguments`）
+Most tools let you pick the graph scope with a `graphScope` / `graph_scope` parameter.
 
-**公共参数**：
-- `ontology_id`（string，**必须**先 `import` 过该本体）：注册的 ontology id
-- `reasoner`（string，可选，默认 `"auto"`）：`auto` / `hermit` / `elk` / `openllet`
-- `include_inferred`（string，可选，默认 `"false"`）：是否包含推理事实；同时接受 JSON boolean `true`/`false`（D-004 修复）
-- `workspace`（string，可选，默认 `"default"`）：workspace 名
+### 1.4 Profiles
 
-**响应统一包装**（content[0].text 里是 JSON）：
-```json
-{ "status": "success", "data": { ... } }
-// 或
-{ "status": "error", "error": { "code": "ERROR_CODE", "message": "..." } }
-```
+OWL 2 has four tractable profiles: **DL** (description logic, full expressivity, slower reasoners), **EL** (existential, very fast, lots of biomedical ontologies are EL), **QL** (query-friendly, good for large ABoxes), **RL** (rule-based, scalable). owl4agents detects the profile automatically and lets you ask for it via `ontology_get_profile`. Different reasoners support different profiles — see [§8](#8-reasoner-integration--which-reasoner-to-pick-and-when).
 
-**错误码**（节选自 `ErrorCode.java`）：
-- `ONTOLOGY_NOT_FOUND`、`ONTOLOGY_NOT_READY`、`ENTITY_NOT_FOUND`
-- `INVALID_CLAIM_SCHEMA`、`CLAIM_VERIFICATION_FAILED`
-- `EVIDENCE_NOT_AVAILABLE`、`REASONER_NOT_FOUND`、`REASONER_INFEASIBLE`
-- `SPARQL_VALIDATION_FAILED`、`SPARQL_SAFETY_VIOLATION`
-- `READONLY_VIOLATION`、`BUDGET_EXCEEDED`、`DATATYPE_NO_FACETS`、`ONTOLOGY_CONSISTENT`
+### 1.5 Claim shape: what does a "structured claim" look like?
 
----
+Throughout this doc you will see JSON like this for "the claim that `Dog` is a subclass of `Mammal`":
 
-### 3.1 元数据 / 浏览（7 个工具）
-
-#### `ontology_list`
-- **描述**：列出已导入的所有本体
-- **参数**：无
-- **响应**：
-  ```json
-  {
-    "ontologies": [
-      {"ontologyId":"pizza", "displayName":"pizza.owl", "importTimestamp":"2026-07-03T..."},
-      ...
-    ]
-  }
-  ```
-
-#### `ontology_summary`
-- **描述**：返回 ontology IRI、profile、imports、entity counts
-- **参数**：`ontology_id`
-- **响应 keys**：`ontologyId, iri, version, profile, imports, entityCounts{classes,objectProperties,dataProperties,individuals,axioms}, format`
-
-#### `ontology_get_metadata`
-- **描述**：详细元数据（版本、创建者、注释、source path、canonical path、import timestamp）
-- **参数**：`ontology_id`
-- **响应 keys**：`ontologyId, iri, versionIri, sourcePath, canonicalPath, importTimestamp, lastModified`
-
-#### `ontology_get_profile`
-- **描述**：OWL profile（DL/EL/QL/RL）+ 违规项
-- **参数**：`ontology_id`
-- **响应**：
-  ```json
-  {
-    "profile": "OWL_2_EL",
-    "violations": [],
-    "checks": {"inOWL2DL": false, "inOWL2EL": true, "inOWL2QL": true, "inOWL2RL": true}
-  }
-  ```
-
-#### `ontology_list_graphs`
-- **描述**：列出可查询的图谱作用域
-- **参数**：`ontology_id`
-- **响应**：
-  ```json
-  {"scopes": ["explicit", "inferred", "union"]}
-  ```
-
-#### `ontology_get_imports`
-- **描述**：返回 import 闭包（直接 + 间接 imports）
-- **参数**：`ontology_id`
-- **响应**：
-  ```json
-  {"imports": [
-    {"iri":"http://.../bfo.owl", "direct":true, "loaded":true},
-    {"iri":"http://.../ro.owl", "direct":false, "loaded":true}
-  ]}
-  ```
-
-#### `ontology_get_scope`
-- **描述**：ontology 域覆盖、已知缺口、profile 限制、不支持的特性类型
-- **参数**：`ontology_id`
-- **响应 keys**：`domainCoverage, knownGaps[], profileLimitations, unsupportedFeatureTypes[]`
-
----
-
-### 3.2 实体搜索与上下文（7 个工具）
-
-#### `ontology_search_entities`
-- **描述**：按 label / IRI / alias 搜索类、属性、个体
-- **参数**：
-  - `ontology_id`（必填）
-  - `query`（必填，搜索词）
-  - `type_filter`（可选，逗号分隔：`class,object_property,data_property,individual`）
-  - `limit`（可选 int，默认 20）
-- **响应**：
-  ```json
-  {
-    "matches": [
-      {"iri":"http://...#Margherita", "label":"Margherita", "type":"individual", "score":0.92, "snippet":"..."},
-      ...
-    ],
-    "total": 12
-  }
-  ```
-
-#### `ontology_get_entity_context`
-- **描述**：通用实体上下文（labels、comments、所属类/属性/个体上下文、相关事实）
-- **参数**：`ontology_id`, `entity_iri`
-- **响应 keys**：`iri, label, comment, type, classContext?, propertyContext?, individualContext?, relatedFacts[]`
-
-#### `ontology_get_class_context`
-- **描述**：类的层级、equivalent、super/sub、disjoint、restrictions
-- **参数**：`ontology_id`, `entity_iri`
-- **响应**：
-  ```json
-  {
-    "iri": "...", "label": "Pizza", "comment": "...",
-    "superClasses": ["...#Food"],
-    "equivalentClasses": [],
-    "disjointClasses": ["...#Drink"],
-    "restrictions": [
-      {"property":"hasTopping", "type":"someValuesFrom", "value":"...#Topping", "cardinality":null}
-    ]
-  }
-  ```
-
-#### `ontology_get_object_property_context`
-- **描述**：对象属性的 domain、range、hierarchy、inverse、characteristics
-- **参数**：`ontology_id`, `entity_iri`
-- **响应 keys**：`iri, label, comment, domain[], range[], superProperties[], subProperties[], inverseProperties[], characteristics{functional,transitive,symmetric,reflexive,irreflexive,asymmetric}`
-
-#### `ontology_get_data_property_context`
-- **描述**：数据属性的 domain、range、datatype、hierarchy
-- **参数**：`ontology_id`, `entity_iri`
-- **响应 keys**：`iri, label, comment, domain[], range{iri, label}, superProperties[], subProperties[]`
-
-#### `ontology_get_individual_context`
-- **描述**：个体的类型 + 对象属性断言 + 数据属性断言
-- **参数**：`ontology_id`, `entity_iri`
-- **响应**：
-  ```json
-  {
-    "iri":"...#m1", "label":"Margherita1",
-    "explicitTypes":[{"iri":"...#Margherita", "label":"Margherita"}],
-    "objectPropertyAssertions":[{"property":"...#hasTopping", "target":"...#Mozzarella"}],
-    "dataPropertyAssertions":[{"property":"...#hasPrice", "value":"8.5", "datatype":"...#decimal"}]
-  }
-  ```
-
-#### `ontology_get_graph_neighborhood`
-- **描述**：实体周围的图谱邻域
-- **参数**：`ontology_id`, `entity_iri`, `depth`（可选 int，默认 1）
-- **响应**：
-  ```json
-  {
-    "center": "...#m1", "depth": 1,
-    "nodes": [...], "edges": [...]
-  }
-  ```
-
----
-
-### 3.3 SPARQL（5 个工具）
-
-**公共参数**：`ontology_id`（必需；`validate_sparql` 除外），`query`（SPARQL 文本）
-
-**安全约束**：所有 4 个执行工具经过 `SparqlSafetyGuard` 过滤，禁止以下关键字：`INSERT DATA`、`DELETE DATA`、`DELETE WHERE`、`LOAD`、`CLEAR`、`DROP`、`COPY`、`MOVE`、`ADD`、`CREATE`。
-
-#### `ontology_validate_sparql`
-- **描述**：解析 + 校验 SPARQL 查询（不执行）
-- **参数**：`query`（必填），`ontology_id`（可选，校验时也会参考其命名图）
-- **响应**：
-  ```json
-  {"valid": true, "queryType": "SELECT", "variables": ["s","p","o"]}
-  // 失败时
-  {"valid": false, "error": "Parse error at line 1: ..."}
-  ```
-
-#### `ontology_sparql_select`
-- **描述**：执行只读 `SELECT` 查询
-- **参数**：`ontology_id`, `query`, `graph_scope`（可选：`explicit`（默认）/ `inferred` / `union`）
-- **响应**：
-  ```json
-  {
-    "head": {"vars":["s","o"]},
-    "results": {
-      "bindings": [
-        {"s":{"type":"uri","value":"...#m1"}, "o":{"type":"uri","value":"...#Pizza"}}
-      ]
-    }
-  }
-  ```
-
-#### `ontology_sparql_ask`
-- **描述**：执行 `ASK` 查询，返回布尔
-- **参数**：`ontology_id`, `query`
-- **响应**：`{"boolean": true}`
-
-#### `ontology_sparql_construct`
-- **描述**：执行 `CONSTRUCT` 查询，返回 RDF 三元组
-- **参数**：`ontology_id`, `query`
-- **响应**：
-  ```json
-  {"triples": [
-    {"s":"...#m1", "p":"...#rdfType", "o":"...#Margherita"},
-    ...
-  ]}
-  ```
-
-#### `ontology_sparql_describe`
-- **描述**：执行 `DESCRIBE` 查询，返回资源描述
-- **参数**：`ontology_id`, `query`
-- **响应**：`{"triples": [...]}`（同 CONSTRUCT）
-
----
-
-### 3.4 QA 上下文（1 个工具）
-
-#### `ontology_get_qa_context`
-- **描述**：为 LLM 自然语言问题拼装本体上下文
-- **参数**：
-  - `ontology_id`（必填）
-  - `question`（必填，自然语言问题）
-  - `max_entities`（可选 int，默认 10）
-  - `max_depth`（可选 int，默认 3）
-  - `include_inferred`（可选 bool，默认 false）
-- **响应**：
-  ```json
-  {
-    "question": "Which toppings are related to pizza?",
-    "matchedEntities": [
-      {"iri":"...#Pizza", "label":"Pizza", "type":"class", "relevance":0.95}
-    ],
-    "contextText": "...compressed textual context for LLM prompt...",
-    "tokens": 312,
-    "warnings": []
-  }
-  ```
-
----
-
-### 3.5 推理（12 个工具）
-
-#### `ontology_list_reasoners`
-- **描述**：列出已注册推理机 + 各自能力
-- **参数**：无
-- **响应**：
-  ```json
-  {
-    "reasoners": [
-      {"name":"HermiT", "profile":"OWL_2_DL", "capabilities":["consistency","classification","realization"]},
-      {"name":"ELK", "profile":"OWL_2_EL", "capabilities":["consistency","classification"]},
-      {"name":"Openllet", "profile":"OWL_2_DL", "capabilities":["consistency","classification","realization","explanation"]}
-    ],
-    "defaultReasoner": "auto"
-  }
-  ```
-
-#### `ontology_run_reasoner`
-- **描述**：跑选定推理任务（classify / realize / consistency / 全部）
-- **参数**：`ontology_id`, `reasoner`（默认 `auto`），`tasks`（可选，逗号分隔：`classify,realize,consistency`，默认全部）
-- **响应**：
-  ```json
-  {
-    "reasoner": "HermiT",
-    "tasksRun": ["consistency","classification"],
-    "consistency": {"consistent": true, "timeMs": 234},
-    "classification": {"timeMs": 567, "inferredHierarchyEntries": 42},
-    "reportPath": "~/.owl4agents/.../reasoning-report.json"
-  }
-  ```
-
-#### `ontology_check_consistency`
-- **描述**：一致性检查
-- **参数**：`ontology_id`, `reasoner`（默认 `auto`）
-- **响应**：
-  ```json
-  {"consistent": true, "reasoner": "HermiT", "timeMs": 234}
-  // 失败时
-  {"consistent": false, "reasoner": "HermiT", "timeMs": 456, "unsatClassCount": 3}
-  ```
-
-#### `ontology_explain_inconsistency`
-- **描述**：解释本体为何不一致（Openllet 专属）
-- **参数**：`ontology_id`, `reasoner`（默认 `openllet`）
-- **响应**：
-  ```json
-  {
-    "inconsistent": true,
-    "explanations": [
-      {
-        "axiomSet": ["A SubClassOf B", "A SubClassOf ComplementOf B"],
-        "unsatClass": "...#A",
-        "satisfiability": "unsatisfiable"
-      }
-    ]
-  }
-  // 当本体一致时
-  {"inconsistent": false, "message": "Ontology is consistent; nothing to explain"}
-  ```
-
-#### `ontology_get_unsat_classes`
-- **描述**：列出所有不可满足类的 URI
-- **参数**：`ontology_id`
-- **响应**：`{"unsatisfiableClasses": ["...#A", "...#B"], "count": 2}`
-
-#### `ontology_explain_unsat_class`
-- **描述**：解释某个类为何不可满足（Openllet 专属）
-- **参数**：`ontology_id`, `class_uri`（必填），`reasoner`（默认 `openllet`）
-- **响应**：
-  ```json
-  {
-    "classIri": "...#A",
-    "satisfiable": false,
-    "explanations": [
-      {
-        "axiomSet": ["A SubClassOf ComplementOf A"],
-        "explanationText": "Axioms force A to be both a subclass of itself and its complement"
-      }
-    ]
-  }
-  ```
-
-#### `ontology_classify`
-- **描述**：推理类层级（落盘 `inferred-class-hierarchy.jsonl`）
-- **参数**：`ontology_id`, `reasoner`（默认 `auto`）
-- **响应**：
-  ```json
-  {
-    "reasoner": "HermiT",
-    "timeMs": 1234,
-    "inferredHierarchyEntries": 42,
-    "outputPath": ".../inferred/inferred-class-hierarchy.jsonl"
-  }
-  ```
-
-#### `ontology_realize_instances`
-- **描述**：推理个体类型（落盘 `inferred-types.jsonl`）
-- **参数**：`ontology_id`, `reasoner`（默认 `auto`）
-- **响应**：
-  ```json
-  {
-    "reasoner": "HermiT",
-    "timeMs": 2345,
-    "inferredTypesCount": 17,
-    "outputPath": ".../inferred/inferred-types.jsonl"
-  }
-  ```
-
-#### `ontology_get_inferred_facts`
-- **描述**：返回某实体或图谱范围的推理事实
-- **参数**：`ontology_id`, `entity_iri`（可选，不填则全图谱）
-- **响应**：
-  ```json
-  {
-    "entityIri": "...#m1",
-    "inferredFacts": [
-      {"axiom":"...#m1 rdf:type ...#Pizza", "derivedFrom":"rule:scm-cls", "confidence":1.0},
-      {"axiom":"...#m1 rdf:type ...#Food", "derivedFrom":"hierarchy:Pizza⊑Food", "confidence":1.0}
-    ]
-  }
-  ```
-
-#### `ontology_get_reasoning_report`
-- **描述**：读 `reasoning-report.json`
-- **参数**：`ontology_id`
-- **响应 keys**：`ontologyId, reasonerName, generatedAt, consistency, classification, realization, unsatisfiableClasses, axiomsCount, individualsCount`
-
-#### `ontology_check_entailment`
-- **描述**：检查某结构化公理是否被本体蕴含
-- **参数**：
-  - `ontology_id`
-  - `axiom_type`（必填，如 `"SubClassOf"`、`"ClassAssertion"`、`"ObjectPropertyAssertion"`）
-  - `axiom_args`（可选，dict，公理参数）
-  - `reasoner`（默认 `auto`）
-- **响应**：
-  ```json
-  {"entailed": true, "axiom": "...", "reasoner": "HermiT", "timeMs": 56}
-  ```
-
-#### `ontology_check_class_compatibility`
-- **描述**：两个类是否相容 / 不相交 / 合起来不可满足
-- **参数**：`ontology_id`, `class1_uri`, `class2_uri`
-- **响应**：
-  ```json
-  {
-    "compatible": false,
-    "disjoint": true,
-    "unsatisfiable": true,
-    "explanation": "ClassA and ClassB are disjoint axioms; their union is unsatisfiable"
-  }
-  ```
-
-#### `ontology_check_individual_membership`
-- **描述**：个体是否属于某类（显式 / 推理）
-- **参数**：`ontology_id`, `individual_uri`, `class_uri`, `reasoner`（默认 `auto`）
-- **响应**：`{"member": true, "explicit": false, "inferred": true, "reasoner": "HermiT"}`
-
-#### `ontology_check_relation_assertion`
-- **描述**：对象属性断言是否成立
-- **参数**：`ontology_id`, `source_individual_uri`, `property_uri`, `target_individual_uri`, `reasoner`（默认 `auto`）
-- **响应**：`{"asserted": true, "explicit": true, "inferred": false, "reasoner": "HermiT"}`
-
-#### `ontology_get_class_restrictions`
-- **描述**：类的所有 restrictions（someValuesFrom / allValuesFrom / cardinality / hasValue）
-- **参数**：`ontology_id`, `class_uri`, `include_inferred`（默认 false）
-- **响应**：
-  ```json
-  {
-    "classIri": "...#Pizza",
-    "restrictions": [
-      {"property":"...#hasTopping", "type":"someValuesFrom", "value":"...#Topping", "cardinality":null},
-      {"property":"...#hasBase", "type":"allValuesFrom", "value":"...#Bread", "cardinality":null}
-    ]
-  }
-  ```
-
-#### `ontology_get_property_characteristics`
-- **描述**：属性的特征（functional / transitive / symmetric / ...）
-- **参数**：`ontology_id`, `property_uri`, `include_inferred`（默认 false）
-- **响应**：
-  ```json
-  {
-    "propertyIri": "...#hasParent",
-    "characteristics": {"functional": false, "transitive": false, "symmetric": false, "asymmetric": true, "reflexive": false, "irreflexive": false}
-  }
-  ```
-
-#### `ontology_get_equivalent_properties`
-- **描述**：等价属性公理
-- **参数**：`ontology_id`, `property_uri`, `include_inferred`（默认 false）
-- **响应**：`{"propertyIri":"...#cost", "equivalentProperties":["...#price"]}`
-
-#### `ontology_get_disjoint_properties`
-- **描述**：不相交属性公理
-- **参数**：`ontology_id`, `property_uri`, `include_inferred`（默认 false）
-- **响应**：`{"propertyIri":"...#hasParent", "disjointProperties":["...#hasChild"]}`
-
-#### `ontology_get_datatype_constraints`
-- **描述**：datatype facet 约束（min / max / pattern / enumeration / length）
-- **参数**：`ontology_id`, `datatype_uri`
-- **响应**：
-  ```json
-  {
-    "datatypeIri": "...#myInteger",
-    "facets": [{"name":"minInclusive", "value":"0"}, {"name":"maxInclusive", "value":"100"}]
-  }
-  // 当 datatype 无 facet 时
-  {"datatypeIri":"...#string", "facets": [], "message": "No facet constraints defined"}
-  ```
-
-#### `ontology_validate_literal`
-- **描述**：字面量是否满足 datatype 约束
-- **参数**：`ontology_id`, `literal_value`, `datatype_uri`, `property_uri`（可选）
-- **响应**：
-  ```json
-  {"valid": true, "normalized": "50", "appliedFacets":["minInclusive","maxInclusive"]}
-  // 失败时
-  {"valid": false, "violations":[{"facet":"maxInclusive", "expected":"100", "actual":"150"}]}
-  ```
-
-#### `ontology_find_relations_between_entities`
-- **描述**：找两实体间的对象属性关系
-- **参数**：`ontology_id`, `source_entity_uri`, `target_entity_uri`（可选；不填则找所有出边）, `include_inferred`（默认 false）
-- **响应**：
-  ```json
-  {
-    "source":"...#m1", "target":"...#Mozzarella",
-    "relations":[{"property":"...#hasTopping", "inferred":false}],
-    "paths":[["...#m1","...#hasTopping","...#Mozzarella"]]
-  }
-  // 源不存在时
-  {"error":"ENTITY_NOT_FOUND", "message":"Source entity ...#X not in ontology"}
-  ```
-
-#### `ontology_get_object_property_assertions`
-- **描述**：个体的所有对象属性断言
-- **参数**：`ontology_id`, `individual_uri`, `include_inferred`（默认 false）
-- **响应**：
-  ```json
-  {
-    "individualIri":"...#m1",
-    "assertions":[{"property":"...#hasTopping", "target":"...#Mozzarella", "inferred":false}]
-  }
-  ```
-
-#### `ontology_get_data_property_assertions`
-- **描述**：个体的所有数据属性断言
-- **参数**：`ontology_id`, `individual_uri`, `include_inferred`（默认 false）
-- **响应**：
-  ```json
-  {
-    "individualIri":"...#m1",
-    "assertions":[{"property":"...#hasPrice", "value":"8.5", "datatype":"...#decimal", "inferred":false}]
-  }
-  ```
-
-#### `ontology_get_same_individuals`
-- **描述**：SameAs 链
-- **参数**：`ontology_id`, `individual_uri`, `include_inferred`（默认 false）
-- **响应**：`{"individualIri":"...#a", "sameAs":["...#a'","...#a''"]}`
-
-#### `ontology_get_different_individuals`
-- **描述**：DifferentFrom 链
-- **参数**：`ontology_id`, `individual_uri`, `include_inferred`（默认 false）
-- **响应**：`{"individualIri":"...#a", "differentFrom":["...#b","...#c"]}`
-
----
-
-### 3.6 Claim 验证与证据（5 个工具，v0.3+）
-
-**Claim JSON schema**（v0.5+）：
 ```json
 {
-  "claimId": "<唯一 id，必填>",
-  "type": "individual_membership" | "class_membership" | "object_property_assertion" | "data_property_assertion" | "class_subsumption" | "...",
-  "subject":   {"kind":"individual"|"class", "iri":"<完整 IRI>"},
-  "predicate": {"kind":"object_property"|"data_property", "iri":"<完整 IRI>"},
-  "object":    {"kind":"class"|"individual"|"literal", "iri":"..."|"value":<literal>, "datatype":"..."}
+  "claimId": "my-claim-001",
+  "type": "subclass",
+  "ontologyId": "v03_demo",
+  "subject": { "kind": "class", "iri": "http://example.org/v0.3#Dog" },
+  "predicate": "subClassOf",
+  "object": { "kind": "class", "iri": "http://example.org/v0.3#Mammal" }
 }
 ```
 
-> 修复点（D-008）：顶层 `ontology_id` 权威，claim 内嵌 `ontologyId` 会被覆盖。
+The fields are:
 
-#### `ontology_verify_claim`
-- **描述**：验证结构化 claim，返回 verdict + 证据
-- **参数**：`ontology_id`, `claim`（必填，对象）, `reasoner`（默认 `auto`）
-- **响应**：
-  ```json
-  {
-    "claimId": "c1",
-    "ontologyId": "v0.3-claim-verification",
-    "claimType": "class_membership",
-    "verdict": "supported",
-    "truncated": false,
-    "totalEvidenceAvailable": 2,
-    "reasonerName": "HermiT",
-    "evidence": [
-      {"evidenceId":"e1","role":"assertion","kind":"inferred","value":"...#Dog rdf:type ...#Animal","source":"reasoning","confidence":1.0}
-    ]
-  }
-  ```
+- `claimId` — your own identifier. Echoed back in responses.
+- `type` — one of `subclass`, `class_compatibility`, `class_membership`, `relation_assertion`, `ontology_scope`, `equivalence`, `disjointness`, `entailment`.
+- `subject` / `object` — `{ "kind": "class" | "individual" | "property", "iri": "..." }`.
+- `predicate` — the relationship being asserted.
+- `reasoner` — `"auto" | "hermit" | "elk" | "openllet"`, default `"auto"`.
+- `graphScope` — `"explicit" | "inferred" | "union"`, default `"explicit"`.
+- `options.includeEvidence` — when `true`, the response includes an `evidence` array.
 
-#### `ontology_get_evidence_path`
-- **描述**：拼装证据路径（推理事实 + reasoning report）
-- **参数**：`ontology_id`, `claim`（必填，对象）
-- **响应**：
-  ```json
-  {
-    "claimId": "c1", "verdict": "supported",
-    "reasoningReport": { "...": "..." },
-    "inferredFacts": [
-      {"entity":"...#Dog","property":"rdf:type","value":"...#Animal","derivedFrom":"hierarchy:Dog⊑Mammal⊑Animal"}
-    ],
-    "explanations": ["Dog is a Mammal which is a Animal (transitive subclass chain)"]
-  }
-  ```
-
-#### `ontology_find_counterexamples`
-- **描述**：找反例（仅 contradicted verdict 可用；其它 verdict 返回 `EVIDENCE_NOT_AVAILABLE`）
-- **参数**：`ontology_id`, `claim`（必填，对象）
-- **响应**：
-  ```json
-  {
-    "claimId": "c1",
-    "verdict": "contradicted",
-    "counterexamples": [
-      {"individual":"...#a","propertyAssertion":"...","explanation":"a is explicitly typed as NOT X"}
-    ]
-  }
-  // verdict = supported 时
-  {"error":"EVIDENCE_NOT_AVAILABLE", "message":"Claim is supported; no counterexamples to find"}
-  ```
-
-#### `ontology_explain_unknown`
-- **描述**：解释 unknown verdict 的原因 + 建议动作
-- **参数**：`ontology_id`, `claim`（必填，对象）
-- **响应**：
-  ```json
-  {
-    "claimId":"c1","verdict":"unknown",
-    "reason":"INSUFFICIENT_AXIOMS",
-    "category":"推理机无法判定",
-    "suggestedAction":"Add an axiom linking subject and object, or provide explicit class assertion"
-  }
-  ```
-
-#### `ontology_detect_missing_entities`
-- **描述**：检测 matched / ambiguous / missing / out-of-scope 实体
-- **参数**：
-  - `ontology_id`（必填）
-  - `claim`（对象，必填，**或**）
-  - `terms`（对象，备用：JSON 数组，每个元素是 entity IRI）
-- **响应**：
-  ```json
-  {
-    "totalChecked": 3,
-    "matched": [
-      {"term":"Dog","resolvedIri":"...#Dog","status":"matched"}
-    ],
-    "ambiguous": [],
-    "missing": [
-      {"term":"Cattus","status":"missing","reason":"No class/individual with this label/IRI in ontology"}
-    ],
-    "outOfScope": [
-      {"term":"Gallifreyan","status":"out_of_scope","reason":"Term is not in this ontology's vocabulary"}
-    ]
-  }
-  ```
+The full JSON schema is enforced; malformed claims return `INVALID_CLAIM_SCHEMA`.
 
 ---
 
-### 3.7 批量 claim 工作流（3 个工具，v0.5+）
+## 2. Architecture and module breakdown
 
-**Claims batch schema**：
+owl4agents is built as 11 Gradle modules. The first six implement the core domain (storage, OWL loading, query, reasoning, retrieval, validation), the next three are the public surface (CLI, MCP, benchmark), and the last two are packaging / acceptance.
+
+```
++---------------------------------------------------------------------+
+|                          npm launcher (Node 18+)                    |
+|                  tools/npm/bin/owl4agents.js                        |
++-----------------------------+---------------------------------------+
+                              |  fork+exec  (or PassThru on Win)
+                              v
++---------------------------------------------------------------------+
+|                       Java 22  owl4agents.jar                       |
+|                                                                     |
+|  +-----------------------------+   +-----------------------------+  |
+|  | CLI layer (Picocli)         |   | MCP server (JSON-RPC + SSE) |  |
+|  | 50+ subcommands             |   | 56 readonly tools           |  |
+|  +-------------+---------------+   +-------------+---------------+  |
+|                |                                 |                  |
+|                +-------------+-------------------+                  |
+|                              v                                      |
+|                +----------------------------------+                 |
+|                |   OntologyService (façade)       |                 |
+|                +----+-------------+---------------+                 |
+|                     |             |                                 |
+|  +------------------+--+   +------+-------------------------+        |
+|  |  storage           |   |  owlapi                        |        |
+|  |  Workspace init,   |   |  OWL API loader, profile det.  |        |
+|  |  catalog, importer |   |  canonicalisation              |        |
+|  +-------------------+   +--------------------------------+        |
+|                                                                     |
+|  +-------------------+   +-------------------+   +---------------+  |
+|  | query             |   | reasoner          |   | retrieval     |  |
+|  | Jena ARQ + SPARQL |   | HermiT/ELK/       |   | entity/QA     |  |
+|  | safety guard      |   | Openllet adapters |   | context build |  |
+|  +-------------------+   +-------------------+   +---------------+  |
+|                                                                     |
+|  +-------------------+   +-------------------+   +---------------+  |
+|  | validation        |   | benchmark         |   | cli / mcp /   |  |
+|  | claim, literal,   |   | experiment runner |   | distribution  |  |
+|  | entailment, batch |   | eval, batch ctxt  |   | (entry pts)   |  |
+|  +-------------------+   +-------------------+   +---------------+  |
++---------------------------------------------------------------------+
+                              |
+                              v
+                  ~/.owl4agents/workspaces/
+                  ├── catalog.json
+                  ├── workspace.yaml
+                  └── <workspace>/
+                      └── ontologies/
+                          └── <ontology-id>/
+                              ├── source/        ← the file you imported
+                              ├── canonical/     ← normalized copy
+                              ├── inferred/      ← reasoner output (class hierarchy, types)
+                              ├── metadata.json
+                              └── reasoning-report.json
+```
+
+| Module | Responsibility | Key classes |
+|---|---|---|
+| `ontology-core` | Shared data model (`Claim`, `EntityId`, all `Result` records), `ErrorCode`, `ServiceError`, JSON helpers | `OntologyService`, `ClaimValidator`, `ErrorCode` |
+| `ontology-storage` | Workspace, home path, catalog, importer | `WorkspaceInitializer`, `CatalogStore`, `HomeDirectoryResolver`, `OntologyImporter` |
+| `ontology-owlapi` | OWL API loader, profile detector, normalization, semantic deepening | `OwlapiOntologyLoader`, `ProfileDetector`, `SemanticDeepeningService` |
+| `ontology-query` | Apache Jena ARQ, SPARQL safety guard, entity search | `SparqlExecutionService`, `SparqlSafetyGuard`, `EntitySearchService` |
+| `ontology-reasoner` | HermiT / ELK / Openllet adapters, reasoner task router, persistence | `ReasonerServiceImpl`, `ReasonerLifecycleManager`, `HermitAdapter`, `ElkAdapter`, `OpenlletAdapter` |
+| `ontology-retrieval` | Entity context, graph neighborhood, QA context builder | `EntityContextService`, `GraphNeighborhoodService`, `QaContextService` |
+| `ontology-validation` | Claim verification, literal validation, entailment, consistency analysis, evidence path, claim workflow, batch evidence context | `ClaimVerificationService`, `LiteralValidator`, `EntailmentChecker`, `ConsistencyAnalysisService`, `EvidenceGroundingService`, `ClaimWorkflowService`, `EvidenceContextBuilder`, `ClaimBatchValidator` |
+| `ontology-benchmark` | Benchmark runner, QA evaluator, batch context, question set validator | `BenchmarkService`, `QaEvaluationService`, `ContextBatchService`, `ExperimentConfigParser`, `BenchmarkQuestionSetValidator`, `BenchmarkReportGenerator` |
+| `ontology-cli` | Picocli command adapters (50+ subcommands), mcp-config generator | `Owl4AgentsCli`, `McpCommand`, `ImportCommand`, `VerifyClaimCommand`, `McpConfigCommand` |
+| `ontology-mcp` | MCP server (stdio / HTTP / SSE), tool registry, call logger, session manager | `HttpMcpServer`, `McpServerAdapter`, `McpToolRegistry`, `McpSessionManager`, `McpToolCallLogger` |
+| `ontology-distribution` | Cross-version end-to-end acceptance (V01..V08) | `V03AcceptanceSuite`, `V04AcceptanceSuite`, ... |
+
+The **façade** is `OntologyService` (in `ontology-core`). All entry points (CLI, MCP) call into it. Reasoner-using tool calls are routed through a single-thread executor; everything else goes through an 8-thread pool. This is what the MCP server's "saturated worker pool" error refers to — see [§9](#9-error-codes-troubleshooting-and-limits).
+
+---
+
+## 3. A real walkthrough — load an ontology, ask questions, verify a claim
+
+This section runs **the same ontology** through the most important entry points, end to end, with real outputs. Everything in [§4](#4-cli-reference--every-command-with-real-input-and-real-output) and [§5](#5-mcp-tool-reference--every-tool-with-real-json-rpc-request-and-response) refers back to this section.
+
+### 3.1 Pre-flight
+
+```powershell
+# 0. Prerequisites
+java -version    # 22.x
+node --version   # 18.x+
+
+# 1. Build (Windows)
+.\gradlew.bat :modules:ontology-cli:shadowJar
+
+# 2. Set workspace
+$env:OWL4AGENTS_HOME = "D:\owl4agents-workspace"   # any folder you can write to
+```
+
+### 3.2 Initialize a workspace
+
+```powershell
+node tools/npm/bin/owl4agents.js init
+```
+
+**Real output:**
+
+```
+Workspace 'default' initialized successfully.
+```
+
+This creates `<OWL4AGENTS_HOME>/workspaces/default/workspace.yaml` and a fresh `catalog.json`. Re-running is idempotent.
+
+### 3.3 Import the demo ontology
+
+```powershell
+node tools/npm/bin/owl4agents.js import `
+    test/corpus/golden/v0.3-claim-verification.owl v03_demo
+```
+
+**Real output (truncated for clarity):**
+
+```
+Importing test/corpus/golden/v0.3-claim-verification.owl as 'v03_demo'...
+  Source copied: 1,807 bytes
+  Parsing with OWL API...
+  Profile detected: OWL 2 EL (also valid in DL/QL/RL)
+  Normalizing axioms (8 classes, 4 individuals, 1 obj-prop, 2 data-props)...
+  Writing canonical/ontology.owl (2,888 bytes)
+  Updating catalog.json...
+Imported ontology 'v03_demo' (IRI: http://example.org/v0.3-claim-verification)
+```
+
+Internally the importer:
+
+1. Copies the file to `ontologies/v03_demo/source/`.
+2. Loads it with the OWL API, computes its profile, normalises the axioms, and writes `canonical/ontology.owl`.
+3. Appends an entry to `catalog.json` mapping `v03_demo → source path, canonical path, import timestamp, metadata path`.
+
+### 3.4 Look around (no reasoner needed)
+
+```powershell
+node tools/npm/bin/owl4agents.js list
+```
+
+```
+Ontologies in workspace 'default':
+  v03_demo - v0.3-claim-verification (imported: 2026-07-06T...)
+```
+
+```powershell
+node tools/npm/bin/owl4agents.js summary v03_demo
+```
+
+```
+Ontology: v03_demo
+IRI: http://example.org/v0.3-claim-verification
+Version IRI: (none)
+Imports: []
+Profile: [OWL 2 DL, OWL 2 EL, OWL 2 QL, OWL 2 RL, OWL 2 Full]
+Entity counts:
+  Classes: 8
+  Object properties: 1
+  Data properties: 2
+  Annotation properties: 0
+  Individuals: 4
+  Datatypes: 1
+```
+
+```powershell
+node tools/npm/bin/owl4agents.js search v03_demo Dog
+```
+
+```
+Search results for 'Dog' in ontology 'v03_demo':
+Found 1 results
+
+  Dog
+    IRI: http://example.org/v0.3#Dog
+    Type: class
+    Score: 0.85
+    Match: alias
+```
+
+```powershell
+node tools/npm/bin/owl4agents.js entity v03_demo "http://example.org/v0.3#Dog"
+```
+
+```
+Entity: http://example.org/v0.3#Dog
+IRI: http://example.org/v0.3#Dog
+Type: class
+
+Superclasses: [http://example.org/v0.3#Mammal]
+Equivalent: [http://example.org/v0.3#Canine]
+Disjoint: [http://example.org/v0.3#Cat, http://example.org/v0.3#Cat]
+```
+
+(Note: `Disjoint` lists `Cat` twice. That's a known duplicate-disjoint bug from the importer merging the symmetric axiom; see [§9](#9-error-codes-troubleshooting-and-limits). Not a correctness issue — the disjointness is real — but the IRI appears twice.)
+
+### 3.5 Run the reasoner
+
+```powershell
+node tools/npm/bin/owl4agents.js reason v03_demo --reasoner elk
+```
+
+**Real output:**
+
+```
+Reasoning report for ontology 'v03_demo':
+  Reasoner: ELK
+  OWL profile: OWL 2 EL
+  Classification: true
+  Realization: true
+  Consistency: true
+  Timing (ms):
+    Initialization: 264
+    Classification: 178
+    Realization: 10
+    Total: 1493
+  Inferred axiom counts:
+    SubClassOf: 4
+    InferredIndividualType: 8
+```
+
+This persists a `reasoning-report.json` and writes `inferred-class-hierarchy.jsonl` and `inferred-types.jsonl` to the workspace. Subsequent tools that ask for `graphScope: inferred` or `union` read these files.
+
+```powershell
+node tools/npm/bin/owl4agents.js consistency v03_demo
+```
+
+```
+Consistency check for ontology 'v03_demo':
+  Reasoner: ELK
+  Consistent: true
+```
+
+```powershell
+node tools/npm/bin/owl4agents.js classify v03_demo
+```
+
+```
+Classification result for ontology 'v03_demo':
+  Reasoner: ELK
+  Complete hierarchy entries: 10
+  Delta (new inferred) entries: 4
+
+Inferred SubClassOf relationships (delta):
+  http://example.org/v0.3#Dog -> http://example.org/v0.3#Animal (source: inferred, reasoner: ELK)
+  http://example.org/v0.3#Cat -> http://example.org/v0.3#Animal (source: inferred, reasoner: ELK)
+  http://example.org/v0.3#Canine -> http://example.org/v0.3#Animal (source: inferred, reasoner: ELK)
+  http://example.org/v0.3#Canine -> http://example.org/v0.3#Mammal (source: inferred, reasoner: ELK)
+```
+
+The first three are inferred because of the explicit `Mammal subClassOf Animal` plus `Dog`/`Cat`/`Canine` being subclasses of `Mammal`. The fourth is from the equivalence `Canine ≡ Dog` plus `Dog subClassOf Mammal`.
+
+### 3.6 Run a SPARQL query
+
+```powershell
+node tools/npm/bin/owl4agents.js query v03_demo `
+    --select "SELECT ?s WHERE { ?s <http://www.w3.org/2000/01/rdf-schema#subClassOf> <http://example.org/v0.3#Animal> }"
+```
+
+**Real output (default `graphScope: explicit`):**
+
+```
+Variables: [s]
+Results: 1
+  {s=BindingValue[value=http://example.org/v0.3#Mammal, datatype=null, type=uri]}
+```
+
+Only `Mammal` shows up because the explicit graph only has `Mammal subClassOf Animal` literally. The transitive subclasses (Dog, Cat, Canine) live in the inferred graph:
+
+```powershell
+node tools/npm/bin/owl4agents.js query v03_demo --graph-scope union `
+    --select "SELECT ?s WHERE { ?s <http://www.w3.org/2000/01/rdf-schema#subClassOf> <http://example.org/v0.3#Animal> }"
+```
+
+```
+Variables: [s]
+Results: 4
+  {s=BindingValue[value=http://example.org/v0.3#Mammal, datatype=null, type=uri]}
+  {s=BindingValue[value=http://example.org/v0.3#Dog, datatype=null, type=uri]}
+  {s=BindingValue[value=http://example.org/v0.3#Cat, datatype=null, type=uri]}
+  {s=BindingValue[value=http://example.org/v0.3#Canine, datatype=null, type=uri]}
+```
+
+```powershell
+node tools/npm/bin/owl4agents.js query v03_demo `
+    --ask "ASK { <http://example.org/v0.3#Dog> <http://www.w3.org/2000/01/rdf-schema#subClassOf> <http://example.org/v0.3#Mammal> }"
+```
+
+```
+Result: true
+```
+
+> **Why the full IRIs?** Because the running ontology doesn't declare a default prefix mapping in a way Jena understands. You can either use full IRIs, or wrap the query in a SPARQL prologue (`PREFIX rdfs: <...>`) when using the `MCP ontology_sparql_select` tool, which has a known safety guard against bare `PREFIX` (use a string variable in your code).
+
+### 3.7 Verify a structured claim
+
+The most interesting tool. The "claim" is a small JSON object saying "is `Dog` compatible with `Cat`?". The answer comes back with a verdict, evidence, and a reason.
+
+First, write a claim file:
+
+```powershell
+# Save as test/fixtures/v0.3/claim-contradicted.json
+@"
+{
+  "claimId": "doc-contradicted",
+  "type": "class_compatibility",
+  "ontologyId": "v03_demo",
+  "subject": { "kind": "class", "iri": "http://example.org/v0.3#Dog" },
+  "predicate": "compatibleWith",
+  "object": { "kind": "class", "iri": "http://example.org/v0.3#Cat" },
+  "reasoner": "auto",
+  "graphScope": "explicit",
+  "options": { "includeEvidence": true }
+}
+"@ | Out-File claim-contradicted.json -Encoding ascii
+```
+
+Then verify:
+
+```powershell
+node tools/npm/bin/owl4agents.js verify-claim v03_demo `
+    --claim claim-contradicted.json --json
+```
+
+**Real output:**
+
 ```json
 {
-  "answerId": "<answer id>",
+  "claimId": "doc-contradicted",
+  "ontologyId": "v03_demo",
+  "claimType": "class_compatibility",
+  "verdict": "contradicted",
+  "evidence": [
+    {
+      "evidenceId": "compatibility-doc-contradicted",
+      "role": "counter",
+      "kind": "explicit_axiom",
+      "value": "http://example.org/v0.3#Dog and http://example.org/v0.3#Cat → disjoint",
+      "source": "class-compatibility-check",
+      "reasoner": "default",
+      "graphScope": "UNION",
+      "entities": ["http://example.org/v0.3#Dog", "http://example.org/v0.3#Cat"],
+      "confidence": "inferred"
+    }
+  ],
+  "unknownReason": null,
+  "unknownExplanation": null,
+  "reasonerName": "auto",
+  "graphScope": "explicit",
+  "truncated": false,
+  "totalEvidenceAvailable": 1
+}
+```
+
+Read it as: **"Your claim (that Dog is compatible with Cat) is contradicted by an explicit disjointness axiom in the ontology, and here is the evidence."**
+
+For a positive example, claim that `Animal` is "in scope of" itself:
+
+```json
+{
+  "claimId": "doc-scope-supported",
+  "type": "ontology_scope",
+  "ontologyId": "v03_demo",
+  "subject": { "kind": "class", "iri": "http://example.org/v0.3#Animal" },
+  "predicate": "inScopeOf",
+  "object": { "kind": "class", "iri": "http://example.org/v0.3#Animal" }
+}
+```
+
+```powershell
+node tools/npm/bin/owl4agents.js verify-claim v03_demo `
+    --claim claim-scope.json --json
+```
+
+**Real output (excerpt):**
+
+```json
+{
+  "claimId": "doc-scope-supported",
+  "ontologyId": "v03_demo",
+  "claimType": "ontology_scope",
+  "verdict": "supported",
+  "evidence": [
+    {
+      "evidenceId": "scope-doc-scope-supported",
+      "role": "supporting",
+      "kind": "scope_statement",
+      "value": "Domains: [Animal, Canine, Fish, Goldfish, Person, UnconnectedThing], gaps: [], limitations: [No disjointness axioms support, No union of class expressions, No cardinality restrictions (except max 1)]",
+      "source": "scope-description",
+      "graphScope": "EXPLICIT",
+      "confidence": "explicit"
+    }
+  ],
+  "totalEvidenceAvailable": 1
+}
+```
+
+The four verdicts you can get back, in increasing order of "we don't know":
+
+| Verdict | Meaning | Example |
+|---|---|---|
+| `supported` | There is an axiom (explicit or inferred) that confirms the claim. | "Animal is in scope of Animal" — the ontology's declared domains include Animal. |
+| `contradicted` | An axiom (explicit or inferred) directly contradicts the claim. | "Dog is compatible with Cat" — but they are `disjointWith`. |
+| `unknown` | Neither supported nor contradicted; we just don't have enough info. `unknownReason` will be set (e.g. `insufficient_axioms`, `sparse_ontology`). | "Goldfish subClassOf Fish" — both classes exist, but the ontology has no axiom linking them. |
+| `out_of_scope` | The claim references entities / relations that the ontology doesn't even mention. | "DeliveryPrice inScopeOf Animal" — `DeliveryPrice` doesn't exist in this ontology. |
+
+### 3.8 Run the same flow over MCP
+
+Same ontology, same answer — but driven through the JSON-RPC server. This is the exact wire format an MCP client uses.
+
+```powershell
+# Start the server in another shell.
+$env:OWL4AGENTS_HOME = "D:\owl4agents-workspace"
+node tools/npm/bin/owl4agents.js mcp --readonly --transport http --port 8091
+
+# In this shell, send a request.
+curl.exe -sS -X POST http://127.0.0.1:8091/mcp `
+    -H "Content-Type: application/json" -H "Accept: application/json" `
+    --data-binary '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}'
+```
+
+```json
+{"jsonrpc":"2.0","id":1,"result":{"protocolVersion":"2025-06-18","capabilities":{"tools":{}},"serverInfo":{"name":"owl4agents","version":"0.8.0"}}}
+```
+
+The `serverInfo.version` should be `"0.8.0"`. The session is anonymous (no `Mcp-Session-Id` returned for `initialize`); subsequent calls don't need a session id on the plain HTTP transport.
+
+```powershell
+curl.exe -sS -X POST http://127.0.0.1:8091/mcp `
+    -H "Content-Type: application/json" -H "Accept: application/json" `
+    --data-binary '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"ontology_list_reasoners","arguments":{}}}'
+```
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 2,
+  "result": {
+    "content": [
+      {
+        "text": "{\"reasoners\":[{\"name\":\"HermiT\",\"supportedProfiles\":[\"OWL 2 DL\",\"OWL 2 Full\"],\"supportedOperations\":[\"classify\",\"realize\",\"checkConsistency\"],\"explanationSupported\":false},{\"name\":\"ELK\",\"supportedProfiles\":[\"OWL 2 EL\"],\"supportedOperations\":[\"classify\",\"checkConsistency\"],\"explanationSupported\":false},{\"name\":\"Openllet\",\"supportedProfiles\":[\"OWL 2 DL\"],\"supportedOperations\":[\"classify\",\"realize\",\"checkConsistency\",\"explain\"],\"explanationSupported\":true}]}"
+      }
+    ]
+  }
+}
+```
+
+For a tool with arguments, the JSON is the inner-`arguments` object:
+
+```powershell
+# Saved as D:\req-class.json
+@'
+{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"ontology_get_class_context","arguments":{"ontology_id":"v03_demo","entity_iri":"http://example.org/v0.3#Dog"}}}
+'@ | Out-File D:\req-class.json -Encoding ascii -NoNewline
+
+curl.exe -sS -X POST http://127.0.0.1:8091/mcp `
+    -H "Content-Type: application/json" -H "Accept: application/json" `
+    --data-binary "@D:\req-class.json"
+```
+
+```json
+{
+  "jsonrpc":"2.0","id":3,
+  "result":{"content":[
+    {"text":"{\"superclasses\":[\"http://example.org/v0.3#Mammal\"],\"disjointClasses\":[\"http://example.org/v0.3#Cat\",\"http://example.org/v0.3#Cat\"],\"iri\":\"http://example.org/v0.3#Dog\",\"equivalentClasses\":[\"http://example.org/v0.3#Canine\"],\"label\":\"\",\"type\":\"class\",\"subclasses\":[]}","type":"text"}
+  ]}
+}
+```
+
+Two structural points worth knowing:
+
+1. **The tool's actual JSON lives in `result.content[0].text` as a string.** Most MCP clients parse that string and hand you a JSON object. The shape inside is the same as the CLI's `--json` output.
+2. **Errors are `isError: true`** on the `result` and the same `code` / `message` / `details` triple inside the `text` payload (see [§9](#9-error-codes-troubleshooting-and-limits)).
+
+### 3.9 What you've now seen
+
+| Action | CLI | MCP tool |
+|---|---|---|
+| Initialize workspace | `init` | (not exposed — CLI only) |
+| Import an OWL file | `import` | (not exposed — CLI only) |
+| List ontologies | `list` | `ontology_list` |
+| Get summary / profile / metadata | `summary` | `ontology_summary`, `ontology_get_metadata`, `ontology_get_profile` |
+| Search by name | `search` | `ontology_search_entities` |
+| Get one entity | `entity` | `ontology_get_entity_context`, `ontology_get_class_context`, ... |
+| Run a reasoner | `reason` / `classify` / `realize` / `consistency` | `ontology_run_reasoner`, `ontology_classify`, `ontology_realize_instances`, `ontology_check_consistency` |
+| Run a SPARQL query | `query` | `ontology_sparql_select` / `_ask` / `_construct` / `_describe`, plus `ontology_validate_sparql` |
+| Verify a claim | `verify-claim` | `ontology_verify_claim` |
+| Build an evidence context | `evidence`, `evidence-context`, `review-answer` | `ontology_get_evidence_path`, `ontology_build_evidence_context`, `ontology_review_answer_claims` |
+
+Every cell above is documented in detail below.
+
+---
+
+## 4. CLI reference — every command, with real input and real output
+
+The CLI is a Picocli sub-command tree. The top-level command is the launcher `node tools/npm/bin/owl4agents.js <subcommand> [...]`; under it sit 50+ subcommands. They group into 8 areas:
+
+1. **Workspace & import** (1.1): `init`, `import`, `imports`, `list`, `summary`
+2. **Browse & search** (1.2): `search`, `entity`, `scope`
+3. **SPARQL & query** (1.3): `query`
+4. **QA context** (1.4): `context`, `context-batch`
+5. **Reasoner & reasoning report** (1.5): `list-reasoners`, `reason`, `classify`, `realize`, `consistency`, `explain`, `unsat`, `report`
+6. **Entity-level entailment & relations** (1.6): `entailment`, `compatibility`, `membership`, `relation-check`, `relations`, `assertions`, `same-individuals`, `different-individuals`, `restrictions`, `properties`, `equivalent`, `disjoint`, `datatype-constraints`, `validate-literal`
+7. **Claim verification & evidence** (1.7): `verify-claim`, `evidence`, `counterexamples`, `explain-unknown`, `missing-entities`, `verify-answer`, `evidence-context`, `review-answer`
+8. **Benchmark & QA evaluation** (1.8): `benchmark-run`, `eval-qa`
+9. **MCP server & config** (1.9): `mcp`, `mcp-config`
+10. **Setup & smoke** (1.10): `setup`, `smoke`, `--version`, `--help`
+
+The default workspace is `default`. Most commands accept `--workspace <name>` to target a different one, and `--home <path>` (or `OWL4AGENTS_HOME` env var) to relocate the workspace root.
+
+### 4.1 `init`
+
+**Purpose**: create a fresh `~/.owl4agents/workspaces/<name>/` directory with `workspace.yaml` and an empty `catalog.json`. Idempotent.
+
+```powershell
+node tools/npm/bin/owl4agents.js init
+node tools/npm/bin/owl4agents.js init --workspace staging
+```
+
+### 4.2 `import`
+
+**Purpose**: load a local OWL/RDF file into the workspace catalog. Copies the file, parses, normalises, registers.
+
+```powershell
+node tools/npm/bin/owl4agents.js import `
+    test/corpus/golden/v0.3-claim-verification.owl v03_demo
+# Optional flags:
+#   --force   re-import even if the id is already in catalog.json
+```
+
+A successful import prints the source path, profile, entity counts, and the catalog entry. Failure modes:
+
+- **File not found** — `Error: INPUT_NOT_FOUND - Cannot read ontology file: ...`
+- **Parse error** — `Error: ONTOLOGY_PARSE_FAILED - ...` (e.g. malformed Turtle).
+- **Invalid import** — `Error: ONTOLOGY_IMPORT_FAILED - The ontology imports ... which is not on the import path` (the importer refuses to pull in remote imports — supply them locally).
+
+### 4.3 `list`
+
+**Purpose**: list all ontologies registered in the current workspace.
+
+```powershell
+node tools/npm/bin/owl4agents.js list --workspace default
+```
+
+**Real output:**
+
+```
+Ontologies in workspace 'default':
+  v03_demo - v0.3-claim-verification (imported: 2026-07-06T...)
+  pizza - pizza (imported: 2026-07-03T...)
+  ...
+```
+
+JSON variant: `--json` prints `[{"ontologyId":"v03_demo","displayName":"...","importTimestamp":"..."}]`.
+
+### 4.4 `summary`
+
+**Purpose**: dump IRI, version IRI, imports closure, profile, and entity counts.
+
+```powershell
+node tools/npm/bin/owl4agents.js summary v03_demo
+```
+
+**Real output:**
+
+```
+Ontology: v03_demo
+IRI: http://example.org/v0.3-claim-verification
+Version IRI: (none)
+Imports: []
+Profile: [OWL 2 DL, OWL 2 EL, OWL 2 QL, OWL 2 RL, OWL 2 Full]
+Entity counts:
+  Classes: 8
+  Object properties: 1
+  Data properties: 2
+  Annotation properties: 0
+  Individuals: 4
+  Datatypes: 1
+```
+
+JSON shape: `{"ontologyId","iri","versionIri","profile","imports":[...],"entityCounts":{...}}`.
+
+### 4.5 `imports`
+
+**Purpose**: the transitive import closure of an ontology, with `direct` / `indirect` flags and whether each loaded successfully.
+
+```powershell
+node tools/npm/bin/owl4agents.js imports v03_demo
+```
+
+For a self-contained ontology (like `v03_demo`):
+
+```
+Imports for ontology 'v03_demo':
+  (no imports)
+```
+
+For something like the BFO upper ontology (which imports RO, OBI, ...):
+
+```
+Imports for ontology 'bfo':
+  http://purl.obolibrary.org/obo/ro.owl (direct, loaded)
+  http://purl.obolibrary.org/obo/BFO_0000050 ... (indirect, loaded)
+  ...
+```
+
+### 4.6 `search`
+
+**Purpose**: full-text search across class labels, IRIs, and aliases. Match score is a float in [0, 1].
+
+```powershell
+node tools/npm/bin/owl4agents.js search v03_demo Dog
+```
+
+**Real output:**
+
+```
+Search results for 'Dog' in ontology 'v03_demo':
+Found 1 results
+
+  Dog
+    IRI: http://example.org/v0.3#Dog
+    Type: class
+    Score: 0.85
+    Match: alias
+```
+
+**Flags:** `--limit <n>` (default 20), `--type-filter <class,object_property,data_property,individual>`.
+
+### 4.7 `entity`
+
+**Purpose**: dump everything we know about a single entity (class / property / individual). The kind is auto-detected from the IRI; for a class, you get the class context; for an individual, the individual context; for a property, the property context.
+
+```powershell
+node tools/npm/bin/owl4agents.js entity v03_demo "http://example.org/v0.3#Dog"
+```
+
+**Real output (class):**
+
+```
+Entity: http://example.org/v0.3#Dog
+IRI: http://example.org/v0.3#Dog
+Type: class
+
+Superclasses: [http://example.org/v0.3#Mammal]
+Equivalent: [http://example.org/v0.3#Canine]
+Disjoint: [http://example.org/v0.3#Cat, http://example.org/v0.3#Cat]
+```
+
+For an individual:
+
+```
+Entity: http://example.org/v0.3#Fido
+IRI: http://example.org/v0.3#Fido
+Type: individual
+  Types: [http://example.org/v0.3#Dog]
+  Object property assertions:
+    hasOwner -> http://example.org/v0.3#PersonJohn
+  Data property assertions:
+    hasAge = 5 (xsd:nonNegativeInteger)
+    hasName = "Fido" (xsd:string)
+```
+
+### 4.8 `scope`
+
+**Purpose**: what the ontology claims to be about, what it leaves out, profile limitations, and what feature types it does not support.
+
+```powershell
+node tools/npm/bin/owl4agents.js scope v03_demo
+```
+
+**Real output (excerpt):**
+
+```
+Ontology 'v03_demo' scope:
+  Covered domains: [Animal, Canine, Fish, Goldfish, Person, UnconnectedThing]
+  Known gaps: []
+  Profile limitations: [No disjointness axioms support, No union of class expressions, No cardinality restrictions (except max 1)]
+  Unsupported feature types: []
+```
+
+The "profile limitations" line is the bit your agent should read to know what kind of claim the ontology *cannot* answer.
+
+### 4.9 `query`
+
+**Purpose**: validate, parse, or execute a SPARQL query against the ontology. Sub-modes are selected by the first flag.
+
+```powershell
+# Validate only.
+node tools/npm/bin/owl4agents.js query v03_demo `
+    --validate "SELECT ?s WHERE { ?s ?p ?o }"
+
+# Execute SELECT.
+node tools/npm/bin/owl4agents.js query v03_demo `
+    --select "SELECT ?s WHERE { ?s <http://www.w3.org/2000/01/rdf-schema#subClassOf> <http://example.org/v0.3#Animal> }" `
+    --graph-scope union
+
+# Execute ASK.
+node tools/npm/bin/owl4agents.js query v03_demo `
+    --ask "ASK { <http://example.org/v0.3#Dog> <http://www.w3.org/2000/01/rdf-schema#subClassOf> <http://example.org/v0.3#Mammal> }"
+
+# Execute CONSTRUCT.
+node tools/npm/bin/owl4agents.js query v03_demo `
+    --construct "CONSTRUCT { ?s a ?o } WHERE { ?s rdfs:subClassOf ?o }"
+
+# Execute DESCRIBE.
+node tools/npm/bin/owl4agents.js query v03_demo `
+    --describe "DESCRIBE <http://example.org/v0.3#Dog>"
+```
+
+**Real output (ASK):**
+
+```
+Result: true
+```
+
+**Safety guard:** the four execution flags (`--select`, `--ask`, `--construct`, `--describe`) go through `SparqlSafetyGuard`. The keywords `INSERT DATA`, `DELETE DATA`, `DELETE WHERE`, `LOAD`, `CLEAR`, `DROP`, `COPY`, `MOVE`, `ADD`, `CREATE` are rejected before parsing. **This is the only thing standing between a malicious LLM and your workspace — the readonly server does not implement any other isolation.** A `SPARQL_SAFETY_VIOLATION` error is always a sign someone tried to use the read endpoint to write.
+
+**Graph scope:** `--graph-scope explicit|inferred|union` (default `explicit`). Use `union` for the most complete answer; use `explicit` if you want only what the file says.
+
+### 4.10 `context`
+
+**Purpose**: take a free-text question, find entities in the ontology, and assemble a prompt-sized natural-language context that an LLM can use. Essentially "what would I put in the LLM's system message if I were grounding it in this ontology?".
+
+```powershell
+node tools/npm/bin/owl4agents.js context v03_demo "Which animals are mammals?" `
+    --max-entities 5 --max-depth 3
+```
+
+**Real output (excerpt):**
+
+```
+Question: Which animals are mammals?
+Matched entities: 2
+  - http://example.org/v0.3#Mammal (class)
+  - http://example.org/v0.3#Animal (class)
+
+Generated context:
+Question: Which animals are mammals?
+
+Matched entities:
+- Mammal (class): http://example.org/v0.3#Mammal
+  Superclasses: [http://example.org/v0.3#Animal]
+  Subclasses: [http://example.org/v0.3#Cat, http://example.org/v0.3#Dog]
+- Animal (class): http://example.org/v0.3#Animal
+  Subclasses: [http://example.org/v0.3#Mammal]
+```
+
+**Flags:** `--max-entities <n>` (default 10), `--max-depth <n>` (default 3), `--include-inferred`.
+
+### 4.11 `context-batch`
+
+**Purpose**: process a JSONL question set (one question per line) and emit a per-question evidence context. Used by benchmark scripts.
+
+```powershell
+node tools/npm/bin/owl4agents.js context-batch `
+    test/fixtures/v0.6/question-sets/pizza-50.jsonl `
+    --ontology pizza-bench --max-context-tokens 500
+```
+
+Output goes to `build/reports/.../context-batch.jsonl` with one entry per question.
+
+### 4.12 `list-reasoners`
+
+**Purpose**: list available reasoner adapters, their supported OWL profiles, and what operations they support.
+
+```powershell
+node tools/npm/bin/owl4agents.js list-reasoners
+```
+
+**Real output:**
+
+```
+Available reasoner adapters:
+  HermiT
+    Supported profiles: [OWL 2 DL, OWL 2 Full]
+    Supported operations: [classify, realize, checkConsistency]
+    Explanation supported: false
+  ELK
+    Supported profiles: [OWL 2 EL]
+    Supported operations: [classify, checkConsistency]
+    Explanation supported: false
+  Openllet
+    Supported profiles: [OWL 2 DL]
+    Supported operations: [classify, realize, checkConsistency, explain]
+    Explanation supported: true
+```
+
+See [§8](#8-reasoner-integration--which-reasoner-to-pick-and-when) for "which one to pick".
+
+### 4.13 `reason`
+
+**Purpose**: run a reasoner (init, classify, realize, check consistency) and persist the result. This is the most important command — many other tools require that `reason` has been run at least once.
+
+```powershell
+node tools/npm/bin/owl4agents.js reason v03_demo --reasoner elk
+# Optional: --reasoner auto|hermit|elk|openllet (default: auto)
+# Optional: --tasks classify,realize,consistency (default: all)
+```
+
+**Real output:**
+
+```
+Reasoning report for ontology 'v03_demo':
+  Reasoner: ELK
+  OWL profile: OWL 2 EL
+  Classification: true
+  Realization: true
+  Consistency: true
+  Timing (ms):
+    Initialization: 264
+    Classification: 178
+    Realization: 10
+    Total: 1493
+  Inferred axiom counts:
+    SubClassOf: 4
+    InferredIndividualType: 8
+```
+
+After this command, `ontologies/v03_demo/inferred/` contains `inferred-class-hierarchy.jsonl` and `inferred-types.jsonl`, and `reasoning-report.json` is updated. The next call to `classify`, `realize`, or `consistency` re-uses this report if no source files have changed.
+
+### 4.14 `classify`
+
+**Purpose**: compute the inferred class hierarchy. Idempotent — re-running shows the delta from the last run.
+
+```powershell
+node tools/npm/bin/owl4agents.js classify v03_demo
+```
+
+**Real output:**
+
+```
+Classification result for ontology 'v03_demo':
+  Reasoner: ELK
+  Complete hierarchy entries: 10
+  Delta (new inferred) entries: 4
+
+Inferred SubClassOf relationships (delta):
+  http://example.org/v0.3#Dog -> http://example.org/v0.3#Animal (source: inferred, reasoner: ELK)
+  ...
+```
+
+### 4.15 `realize`
+
+**Purpose**: compute inferred individual types.
+
+```powershell
+node tools/npm/bin/owl4agents.js realize v03_demo
+```
+
+For our demo: `:Fido a :Dog`, `:Rex a :Dog`, `:Whiskers a :Cat`, `:PersonJohn a :Person`. After realization, all four are also `:Animal` (transitively), and `:Fido`/`:Rex`/`:Whiskers` are also `:Mammal`.
+
+```
+Realization result for ontology 'v03_demo':
+  Reasoner: ELK
+  Complete types: 12
+  Delta (new inferred) entries: 8
+```
+
+### 4.16 `consistency`
+
+```powershell
+node tools/npm/bin/owl4agents.js consistency v03_demo
+```
+
+```
+Consistency check for ontology 'v03_demo':
+  Reasoner: ELK
+  Consistent: true
+```
+
+The `Reasoner` is whatever the previous `reason` run used. If `reason` has not been run, this command will run it first.
+
+### 4.17 `explain`
+
+**Purpose**: explain why an ontology is inconsistent. **Requires a reasoner that supports explanation** — currently only Openllet.
+
+```powershell
+node tools/npm/bin/owl4agents.js explain v03_demo --reasoner openllet
+```
+
+For a consistent ontology, the response is a structured `ONTOLOGY_CONSISTENT` "isError":
+
+```json
+{
+  "message": "The ontology is consistent; no inconsistency explanation is needed.",
+  "code": "ONTOLOGY_CONSISTENT",
+  "details": {}
+}
+```
+
+For an inconsistent one, you get a list of axioms involved in the contradiction.
+
+### 4.18 `unsat`
+
+```powershell
+node tools/npm/bin/owl4agents.js unsat v03_demo
+```
+
+```
+Unsatisfiable classes in ontology 'v03_demo': (none)
+```
+
+`v03_demo` has no unsatisfiable classes. A malformed ontology (e.g. `A subClassOf (not A)`) would surface here.
+
+### 4.19 `entailment`
+
+**Purpose**: ask "is this axiom entailed?" — slightly lower-level than `verify-claim`, useful for scripts.
+
+```powershell
+node tools/npm/bin/owl4agents.js entailment v03_demo `
+    --axiom-type SubClassOf `
+    --subject "http://example.org/v0.3#Dog" `
+    --object "http://example.org/v0.3#Animal" `
+    --graph-scope union
+```
+
+```
+Entailment check:
+  Axiom: SubClassOf(<http://example.org/v0.3#Dog>, <http://example.org/v0.3#Animal>)
+  Source: inferred
+  Result: entailed
+```
+
+### 4.20 `compatibility`
+
+**Purpose**: are two classes compatible, disjoint, or unsatisfiable together?
+
+```powershell
+node tools/npm/bin/owl4agents.js compatibility v03_demo `
+    "http://example.org/v0.3#Dog" "http://example.org/v0.3#Cat"
+```
+
+```
+Compatibility between Dog and Cat:
+  Disjoint: true
+  Compatible: false
+  Together unsatisfiable: false
+```
+
+### 4.21 `membership`
+
+**Purpose**: is this individual a member of this class? Returns `asserted` / `entailed` / `not_entailed`.
+
+```powershell
+node tools/npm/bin/owl4agents.js membership v03_demo `
+    "http://example.org/v0.3#Fido" "http://example.org/v0.3#Animal"
+```
+
+```
+Membership of Fido in Animal:
+  isMember: true
+  membershipType: entailed
+```
+
+Because `:Fido a :Dog` and `:Dog subClassOf :Mammal subClassOf :Animal`, the inferred graph says yes.
+
+### 4.22 `relation-check`
+
+**Purpose**: is this object property relation asserted / entailed / not_entailed between two individuals?
+
+```powershell
+node tools/npm/bin/owl4agents.js relation-check v03_demo `
+    "http://example.org/v0.3#hasOwner" `
+    "http://example.org/v0.3#Fido" "http://example.org/v0.3#PersonJohn"
+```
+
+```
+Relation check: Fido hasOwner PersonJohn
+  assertionType: asserted
+  isAsserted: true
+```
+
+### 4.23 `relations`
+
+**Purpose**: find every object property relation between two individuals (the relation-check above is the boolean version; this is the list version).
+
+```powershell
+node tools/npm/bin/owl4agents.js relations v03_demo `
+    --source "http://example.org/v0.3#Fido" `
+    --target "http://example.org/v0.3#PersonJohn"
+```
+
+### 4.24 `assertions`
+
+**Purpose**: dump all property assertions involving an individual (object or data).
+
+```powershell
+node tools/npm/bin/owl4agents.js assertions v03_demo `
+    --iri "http://example.org/v0.3#Fido" --kind individual
+```
+
+### 4.25 `same-individuals` / `different-individuals`
+
+```powershell
+node tools/npm/bin/owl4agents.js same-individuals v03_demo `
+    --iri "http://example.org/v0.3#Fido"
+node tools/npm/bin/owl4agents.js different-individuals v03_demo `
+    --iri "http://example.org/v0.3#Fido"
+```
+
+For our demo ontology, both return empty (no `owl:sameAs` / `owl:differentFrom` axioms).
+
+### 4.26 `restrictions`
+
+**Purpose**: list the restrictions (`someValuesFrom`, `allValuesFrom`, cardinality, `hasValue`) on a class.
+
+```powershell
+node tools/npm/bin/owl4agents.js restrictions v03_demo `
+    --iri "http://example.org/v0.3#Dog"
+```
+
+For our demo, `:Dog` has no restrictions of its own, but the `Hypertension` class in the biomedical fixture has an interesting one — see [§6](#6-claim-verification-and-evidence-grounding--wiring-owl4agents-into-an-llm-answer-pipeline).
+
+### 4.27 `properties`
+
+**Purpose**: characteristics of an object / data property (functional, transitive, symmetric, reflexive, irreflexive, asymmetric, inverse-functional).
+
+```powershell
+node tools/npm/bin/owl4agents.js properties v03_demo `
+    --iri "http://example.org/v0.3#hasOwner"
+```
+
+### 4.28 `equivalent` / `disjoint`
+
+**Purpose**: list the equivalent (or disjoint) properties for a given property.
+
+```powershell
+node tools/npm/bin/owl4agents.js equivalent v03_demo --iri "http://example.org/v0.3#hasOwner"
+node tools/npm/bin/owl4agents.js disjoint v03_demo --iri "http://example.org/v0.3#hasOwner"
+```
+
+### 4.29 `datatype-constraints`
+
+```powershell
+node tools/npm/bin/owl4agents.js datatype-constraints v03_demo `
+    --datatype "http://www.w3.org/2001/XMLSchema#nonNegativeInteger"
+```
+
+### 4.30 `validate-literal`
+
+```powershell
+node tools/npm/bin/owl4agents.js validate-literal v03_demo `
+    --datatype "http://www.w3.org/2001/XMLSchema#nonNegativeInteger" `
+    --value "5"
+# → { "valid": true, ... }
+
+node tools/npm/bin/owl4agents.js validate-literal v03_demo `
+    --datatype "http://www.w3.org/2001/XMLSchema#nonNegativeInteger" `
+    --value "-1"
+# → { "valid": false, "violations": ["value below minInclusive 0"] }
+```
+
+### 4.31 `verify-claim`
+
+**Purpose**: the most important command. Verifies a structured claim against an ontology and returns a verdict, evidence, and metadata.
+
+The claim lives in a JSON file (or you can pipe it through stdin with `--claim -`):
+
+```json
+{
+  "claimId": "doc-supported",
+  "type": "subclass",
+  "ontologyId": "v03_demo",
+  "subject": { "kind": "class", "iri": "http://example.org/v0.3#Mammal" },
+  "predicate": "subClassOf",
+  "object": { "kind": "class", "iri": "http://example.org/v0.3#Animal" },
+  "graphScope": "explicit"
+}
+```
+
+```powershell
+node tools/npm/bin/owl4agents.js verify-claim v03_demo `
+    --claim claim.json --json
+```
+
+We already saw this command's output in [§3.7](#37-verify-a-structured-claim) for the contradicted and supported cases. The four verdicts (`supported`, `contradicted`, `unknown`, `out_of_scope`) are explained in that section.
+
+**Useful flags:**
+- `--claim <path>` — path to a JSON file, or `-` to read from stdin.
+- `--reasoner <auto|hermit|elk|openllet>` — default `auto`.
+- `--graph-scope <explicit|inferred|union>` — default `explicit`.
+- `--json` — print the structured response as JSON instead of pretty text.
+
+**Errors you can see:**
+
+| Code | When |
+|---|---|
+| `INVALID_CLAIM_SCHEMA` | Missing `claimId` or `type`, or `type` is not in the enum, or `subject`/`object` malformed. |
+| `ONTOLOGY_NOT_READY` | The ontology hasn't been imported, or `reason` hasn't been run for the required graph scope. |
+| `REASONER_NOT_FOUND` | `--reasoner openllet` but the Openllet adapter isn't on the classpath (it ships in the shadowJar but some IDE setups may differ). |
+| `REASONER_INFEASIBLE` | Reasoner ran out of memory or timed out. |
+| `EVIDENCE_NOT_AVAILABLE` | You asked for an evidence sub-feature (`evidence`, `counterexamples`, `explain-unknown`) but the verdict doesn't apply. |
+
+### 4.32 `evidence`
+
+**Purpose**: dump every piece of evidence (inferred facts, scope statements, reasoning report) that supports or contradicts a claim. Larger than `verify-claim`'s evidence array; this is the "show me everything" view.
+
+```powershell
+node tools/npm/bin/owl4agents.js evidence v03_demo `
+    --claim test/fixtures/v0.3/claim-smoke-supported.json
+```
+
+**Real output (truncated):**
+
+```
+Evidence path for claim 'claim-smoke-supported-001':
+  Verdict: supported
+  Items: 8 of 8 available
+  Truncated: false
+    - scope-claim-smoke-supported-001: scope_statement [supporting] Domains: [...]
+    - inferred-fact-http://example.org/v0.3#Dog-rdfs:subClassOf: inferred_triple [supporting] http://example.org/v0.3#Dog rdfs:subClassOf http://example.org/v0.3#Animal
+    - inferred-fact-...: inferred_triple [supporting] http://example.org/v0.3#Cat rdfs:subClassOf http://example.org/v0.3#Animal
+    - inferred-fact-...: inferred_triple [supporting] http://example.org/v0.3#Canine rdfs:subClassOf http://example.org/v0.3#Animal
+    - inferred-fact-...-Fido-rdf:type: inferred_triple [supporting] http://example.org/v0.3#Fido rdf:type http://example.org/v0.3#Animal
+    - inferred-fact-...-Rex-rdf:type: inferred_triple [supporting] http://example.org/v0.3#Rex rdf:type http://example.org/v0.3#Animal
+    - inferred-fact-...-Whiskers-rdf:type: inferred_triple [supporting] http://example.org/v0.3#Whiskers rdf:type http://example.org/v0.3#Animal
+    - reasoning-report-claim-smoke-supported-001: reasoning_report [supporting] Reasoner: ELK, profile: OWL 2 EL, consistent: true, ...
+```
+
+### 4.33 `counterexamples`
+
+**Purpose**: find individuals that would be counterexamples to a contradicted claim.
+
+```powershell
+node tools/npm/bin/owl4agents.js counterexamples v03_demo `
+    --claim test/fixtures/v0.3/claim-contradicted.json
+```
+
+For our `Dog compatibleWith Cat` claim, no individuals are counterexamples (because no individual is asserted to be both — and an individual being both is impossible). If the contradiction were "every Dog is also a Cat", this command would list the dogs that aren't cats.
+
+### 4.34 `explain-unknown`
+
+**Purpose**: when `verify-claim` returns `verdict: unknown`, this command explains *why* — e.g. `insufficient_axioms`, `sparse_ontology`, `unrelated_entities`, `unknown_predicate`.
+
+```powershell
+node tools/npm/bin/owl4agents.js explain-unknown v03_demo `
+    --claim test/fixtures/v0.3/claim-unknown.json
+```
+
+Returns a `reasonCategory` and a `suggestedAction` ("add axioms linking the entities", "the predicate is not modelled in this ontology", ...).
+
+### 4.35 `missing-entities`
+
+**Purpose**: when a claim references an entity by IRI, this command says whether that IRI exists in the ontology, is ambiguous, is missing, or is out of scope.
+
+```powershell
+node tools/npm/bin/owl4agents.js missing-entities v03_demo `
+    --claim test/fixtures/v0.3/claim-real-out-of-scope.json
+```
+
+**Real output:**
+
+```
+Missing entity detection for ontology 'v03_demo':
+  Matched: 1
+    - http://example.org/v0.3#Animal → http://example.org/v0.3#Animal (class)
+  Ambiguous: 0
+  Missing: 2
+    - http://example.org/v0.3#DeliveryPrice (class)
+    - inScopeOf (property)
+  Out of scope: 0
+```
+
+So before running `verify-claim`, you can pre-flight the claim to see if its IRI exists.
+
+### 4.36 `verify-answer`
+
+**Purpose**: verify a batch of structured claims (an "answer" with several claim rows) and return an aggregate report.
+
+Input: a JSON file with this shape:
+
+```json
+{
+  "answerId": "answer-001",
   "claims": [
     {
       "id": "c1",
-      "type": "individual_membership",
-      "subject": {"kind":"individual","iri":"..."},
-      "object": {"kind":"class","iri":"..."},
-      "required": true
+      "type": "subclass",
+      "subject": { "kind": "class", "iri": "http://example.org/v0.3#Mammal" },
+      "predicate": "subClassOf",
+      "object": { "kind": "class", "iri": "http://example.org/v0.3#Animal" }
+    },
+    {
+      "id": "c2",
+      "type": "class_compatibility",
+      "subject": { "kind": "class", "iri": "http://example.org/v0.3#Dog" },
+      "predicate": "compatibleWith",
+      "object": { "kind": "class", "iri": "http://example.org/v0.3#Cat" }
     }
   ]
 }
 ```
 
-#### `ontology_verify_claims_batch`
-- **描述**：批量验证 answer claims，返回每条 verdict + 聚合状态
-- **参数**：
-  - `ontology_id`（必填）
-  - `claims`（对象，claims batch JSON）
-  - `options`（可选对象，字段：`reasoner`, `requireReasoning`, `maxEvidencePerClaim`, `maxContextTokens`）
-- **响应**：
-  ```json
-  {
-    "answerId": "ans-001",
-    "aggregateStatus": "PARTIALLY_VERIFIED",
-    "claims": [
-      {"id":"c1","verdict":"supported","evidenceCount":2},
-      {"id":"c2","verdict":"contradicted","evidenceCount":1},
-      {"id":"c3","verdict":"unknown","evidenceCount":0}
-    ],
-    "stats": {"total":3, "supported":1, "contradicted":1, "unknown":1, "outOfScope":0, "pending":0}
-  }
-  ```
+```powershell
+node tools/npm/bin/owl4agents.js verify-answer v03_demo `
+    --claims test/fixtures/v0.5/answer-claims-supported.json
+```
 
-#### `ontology_build_evidence_context`
-- **描述**：为 LLM Agent 拼装紧凑证据上下文
-- **参数**：
-  - `report`（string，**与 ontology_id+claims 二选一**）：answer verification report JSON 字符串或路径
-  - `ontology_id` + `claims`（当不用 report 时必填）
-  - `max_context_tokens`（int，默认 0 = 不截断）
-  - `format`（`compact`（默认） / `jsonl`（流式 JSONL + 截断元数据））
-- **响应**：
-  ```json
-  // compact
-  {
-    "contextText": "...compressed evidence text...",
-    "tokens": 312,
-    "budgetExceeded": false
-  }
-  // jsonl
-  {
-    "lines": [
-      {"claimId":"c1","verdict":"supported","evidence":"..."},
-      ...
-    ],
-    "budgetCharsUsed": 1240,
-    "totalAvailableEvidenceChars": 5600,
-    "truncated": true
-  }
-  ```
+**Response:** an `aggregateStatus` (`all_supported`, `has_contradictions`, `has_unknowns`, `has_out_of_scope`, `error`) plus a per-claim `claimResults` array mirroring `verify-claim`'s response.
 
-#### `ontology_review_answer_claims`
-- **描述**：用策略 review 答案 claim
-- **参数**：
-  - `ontology_id`（必填）
-  - `claims`（对象，claims batch JSON）
-  - `max_context_tokens`（int，默认 0）
-  - `policy`（`strict`（默认） / `conservative` / `report-only`）
-- **策略含义**：
-  - `strict`：contradicted / unknown 必须有证据；只接受 supported
-  - `conservative`：contradicted 拒绝；unknown 警告；supported 接受
-  - `report-only`：仅生成报告，不做处置建议
-- **响应**：
-  ```json
-  {
-    "answerId": "ans-001",
-    "policy": "strict",
-    "verdict": "REJECTED",
-    "report": {"...same as verify_claims_batch..."},
-    "guidance": [
-      {"claimId":"c1","action":"ACCEPT","reason":"supported with 2 evidence items"},
-      {"claimId":"c2","action":"REJECT","reason":"contradicted, must be removed"},
-      {"claimId":"c3","action":"REVIEW","reason":"unknown, needs additional evidence"}
+### 4.37 `evidence-context`
+
+**Purpose**: take a `verify-answer` report and produce a compact, token-budgeted text block suitable for stuffing into an LLM prompt. This is the "ground the LLM in the ontology" tool.
+
+```powershell
+node tools/npm/bin/owl4agents.js evidence-context v03_demo `
+    --claims test/fixtures/v0.5/answer-claims-mixed.json `
+    --max-context-tokens 500 --format compact
+```
+
+`--format` is `compact` (default; one paragraph) or `jsonl` (one JSON object per line, with `truncated` flags).
+
+### 4.38 `review-answer`
+
+**Purpose**: `verify-answer` + `evidence-context`, plus a `policy` knob that adjusts how the response calls itself.
+
+```powershell
+node tools/npm/bin/owl4agents.js review-answer v03_demo `
+    --claims test/fixtures/v0.5/answer-claims-mixed.json `
+    --policy strict
+
+node tools/npm/bin/owl4agents.js review-answer v03_demo `
+    --claims test/fixtures/v0.5/answer-claims-mixed.json `
+    --policy conservative
+
+node tools/npm/bin/owl4agents.js review-answer v03_demo `
+    --claims test/fixtures/v0.5/answer-claims-mixed.json `
+    --policy report-only
+```
+
+Three policies:
+
+| Policy | What `handlingGuidance` says |
+|---|---|
+| `strict` | "There is a contradiction; the LLM should NOT include this answer." |
+| `conservative` | "There is an `unknown`; the LLM should rephrase the claim or omit it." |
+| `report-only` | "Return the report; do not let the LLM act on it." |
+
+### 4.39 `benchmark-run`
+
+**Purpose**: run a benchmark experiment. The config is a small YAML file pointing at an ontology, a question set, a reasoner, and a number of repeats. Output is a JSONL file with one row per question.
+
+```powershell
+node tools/npm/bin/owl4agents.js benchmark-run `
+    test/fixtures/v0.6/configs/pizza-small.yaml
+```
+
+### 4.40 `eval-qa`
+
+**Purpose**: compute QA evaluation metrics from a benchmark result JSONL — accuracy, false-support rate, unresolved rate, coverage, 4×4 confusion matrix.
+
+```powershell
+node tools/npm/bin/owl4agents.js eval-qa `
+    build/reports/benchmark/pizza-small.jsonl --json
+```
+
+### 4.41 `mcp`
+
+**Purpose**: start the MCP server. Stdout JSON-RPC by default; use `--transport http` for HTTP.
+
+```powershell
+# Stdio (default).
+node tools/npm/bin/owl4agents.js mcp --readonly
+
+# HTTP / SSE (v0.8).
+node tools/npm/bin/owl4agents.js mcp --readonly `
+    --transport http --port 8080 `
+    --max-sse-connections 100 `
+    --session-ttl-minutes 30 `
+    --sse-heartbeat-seconds 15
+```
+
+**Useful flags:** `--readonly` (the only safe mode for agents), `--workspace <name>`, `--transport stdio|http`, `--port <n>`, `--max-sse-connections <n>`, `--session-ttl-minutes <n>`, `--sse-heartbeat-seconds <n>`, `--home <path>`.
+
+### 4.42 `mcp-config`
+
+**Purpose**: print (or write to a file) a ready-to-paste MCP config JSON for the major MCP clients.
+
+```powershell
+node tools/npm/bin/owl4agents.js mcp-config --client claude
+node tools/npm/bin/owl4agents.js mcp-config --client trae
+node tools/npm/bin/owl4agents.js mcp-config --client cursor
+node tools/npm/bin/owl4agents.js mcp-config --client generic
+node tools/npm/bin/owl4agents.js mcp-config --client claude `
+    --workspace-home D:/owl4agents-workspace `
+    --out claude-mcp-config.json
+```
+
+**Supported clients:** `claude`, `cursor`, `trae`, `generic`. The generated config always points at the in-repo npm launcher and sets `OWL4AGENTS_HOME`. The Trae config uses a URL ending in `/mcp` so that Trae issues both `POST /mcp` and `GET /mcp`.
+
+### 4.43 `setup`
+
+**Purpose**: check the environment (Java, Gradle, source layout, workspace, npm launcher, runtime jar) without changing anything. Print a green/yellow/red checklist.
+
+```powershell
+node tools/npm/bin/owl4agents.js setup --check
+```
+
+### 4.44 `smoke`
+
+**Purpose**: run an onboarding smoke test: import the bundled fixtures, list, summary, list reasoners, classify, and a claim verification. Useful in CI to confirm a fresh checkout works.
+
+```powershell
+node tools/npm/bin/owl4agents.js smoke
+```
+
+### 4.45 `--version` / `--help`
+
+```powershell
+node tools/npm/bin/owl4agents.js --version    # → 0.8.0
+node tools/npm/bin/owl4agents.js --help       # → full command list
+```
+
+---
+
+## 5. MCP tool reference — every tool, with real JSON-RPC request and response
+
+The MCP server exposes 56 readonly tools. They group into 8 areas (mirroring the FEATURES.md section in v0.7):
+
+1. **Metadata & browsing** (7): `ontology_list`, `ontology_summary`, `ontology_get_metadata`, `ontology_get_profile`, `ontology_list_graphs`, `ontology_get_imports`, `ontology_get_scope`
+2. **Entity search & context** (7): `ontology_search_entities`, `ontology_get_entity_context`, `ontology_get_class_context`, `ontology_get_object_property_context`, `ontology_get_data_property_context`, `ontology_get_individual_context`, `ontology_get_graph_neighborhood`
+3. **SPARQL** (5): `ontology_validate_sparql`, `ontology_sparql_select`, `ontology_sparql_ask`, `ontology_sparql_construct`, `ontology_sparql_describe`
+4. **QA context** (1): `ontology_get_qa_context`
+5. **Reasoner** (12): `ontology_list_reasoners`, `ontology_run_reasoner`, `ontology_classify`, `ontology_realize_instances`, `ontology_check_consistency`, `ontology_explain_inconsistency`, `ontology_explain_unsat_class`, `ontology_get_unsat_classes`, `ontology_get_reasoning_report`, `ontology_get_inferred_facts`, `ontology_check_entailment`, `ontology_check_class_compatibility`
+6. **Detailed entity inspection** (8): `ontology_check_individual_membership`, `ontology_check_relation_assertion`, `ontology_get_class_restrictions`, `ontology_get_property_characteristics`, `ontology_get_equivalent_properties`, `ontology_get_disjoint_properties`, `ontology_get_datatype_constraints`, `ontology_validate_literal`, `ontology_find_relations_between_entities`, `ontology_get_object_property_assertions`, `ontology_get_data_property_assertions`, `ontology_get_same_individuals`, `ontology_get_different_individuals` (13 here, total 56 after the rest)
+7. **Claim verification & evidence** (8): `ontology_verify_claim`, `ontology_get_evidence_path`, `ontology_find_counterexamples`, `ontology_explain_unknown`, `ontology_detect_missing_entities`, `ontology_verify_claims_batch`, `ontology_build_evidence_context`, `ontology_review_answer_claims`
+8. **Benchmark & evaluation** (3): `ontology_benchmark_run`, `ontology_eval_qa`, `ontology_context_batch`
+
+Below: the full list of 56 with name, parameters, response shape, a real JSON-RPC request, and the matching real response. All examples are against the v0.8 server + `v03_demo` ontology from [§3](#3-a-real-walkthrough--load-an-ontology-ask-questions-verify-a-claim).
+
+### 5.0 Common protocol shape
+
+Every tool call is the same JSON-RPC envelope:
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": <int>,
+  "method": "tools/call",
+  "params": {
+    "name": "<tool-name>",
+    "arguments": { ... }
+  }
+}
+```
+
+A successful response wraps the actual JSON in a string inside `result.content[0].text`:
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "result": {
+    "content": [
+      { "type": "text", "text": "{... the actual tool JSON ...}" }
     ]
   }
-  ```
+}
+```
 
----
+A failed response uses `isError: true` and a `code` / `message` / `details` triple inside the same `text` field. See [§9](#9-error-codes-troubleshooting-and-limits) for the full error list.
 
-### 3.8 评估与基准（3 个工具，v0.6+）
+**Common parameters** (most tools accept these):
+
+- `ontology_id` (string, required) — must be in `catalog.json`. If you ask for an `inferred`-scope tool and the ontology hasn't been reasoned, the response is `ONTOLOGY_NOT_READY`.
+- `reasoner` (string, optional, default `"auto"`) — `auto` picks the best adapter for the ontology's profile.
+- `include_inferred` (string, optional, default `"false"`) — accepts `"true"` / `"false"`, or boolean `true` / `false`.
+- `graph_scope` (string, optional, default `"explicit"`) — `explicit` / `inferred` / `union`.
+
+### 5.1 Metadata & browsing
+
+#### `ontology_list`
+
+List all imported ontologies.
+
+**Request:**
+
+```json
+{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"ontology_list","arguments":{}}}
+```
+
+**Response (real):**
+
+```json
+{"jsonrpc":"2.0","id":1,"result":{"content":[{"text":"{\"ontologies\":[{\"ontologyId\":\"v03_demo\",\"displayName\":\"v0.3-claim-verification\",\"importTimestamp\":\"2026-07-06T22:13:00Z\"}]}","type":"text"}]}}
+```
+
+#### `ontology_summary`
+
+**Request:**
+
+```json
+{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"ontology_summary","arguments":{"ontology_id":"v03_demo"}}}
+```
+
+**Response (real, parsed):**
+
+```json
+{
+  "ontologyId": "v03_demo",
+  "iri": "http://example.org/v0.3-claim-verification",
+  "versionIri": null,
+  "profile": ["OWL_2_DL","OWL_2_EL","OWL_2_QL","OWL_2_RL","OWL_2_FULL"],
+  "imports": [],
+  "entityCounts": {
+    "classes": 8,
+    "objectProperties": 1,
+    "dataProperties": 2,
+    "individuals": 4,
+    "datatypes": 1,
+    "annotationProperties": 0,
+    "axioms": 30
+  }
+}
+```
+
+#### `ontology_get_metadata`
+
+**Request:**
+
+```json
+{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"ontology_get_metadata","arguments":{"ontology_id":"v03_demo"}}}
+```
+
+**Response:** same shape as `ontology_summary` plus `sourcePath`, `canonicalPath`, `importTimestamp`, `lastModified`.
+
+#### `ontology_get_profile`
+
+**Request:** same as above, name=`ontology_get_profile`.
+
+**Response (real, parsed):**
+
+```json
+{
+  "profile": "OWL_2_EL",
+  "violations": [],
+  "checks": {"inOWL2DL":true,"inOWL2EL":true,"inOWL2QL":true,"inOWL2RL":true}
+}
+```
+
+#### `ontology_list_graphs`
+
+**Request:** same as above, name=`ontology_list_graphs`.
+
+**Response:**
+
+```json
+{"scopes":["explicit","inferred","union"]}
+```
+
+#### `ontology_get_imports`
+
+**Request:** same as above, name=`ontology_get_imports`.
+
+**Response (for a self-contained ontology):**
+
+```json
+{"imports":[]}
+```
+
+#### `ontology_get_scope`
+
+**Request:** same as above, name=`ontology_get_scope`.
+
+**Response (real, parsed):**
+
+```json
+{
+  "ontologyId": "v03_demo",
+  "coveredDomains": ["Animal","Canine","Fish","Goldfish","Person","UnconnectedThing"],
+  "knownGaps": [],
+  "profileLimitations": ["No disjointness axioms support","No union of class expressions","No cardinality restrictions (except max 1)"],
+  "unsupportedFeatureTypes": []
+}
+```
+
+### 5.2 Entity search & context
+
+#### `ontology_search_entities`
+
+**Request:**
+
+```json
+{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"ontology_search_entities","arguments":{"ontology_id":"v03_demo","query":"Dog","limit":5}}}
+```
+
+**Response (real, parsed):**
+
+```json
+{
+  "results": [
+    {
+      "iri": "http://example.org/v0.3#Dog",
+      "label": "Dog",
+      "type": "class",
+      "score": 0.85,
+      "snippet": "alias match",
+      "matchType": "alias"
+    }
+  ],
+  "totalResults": 1
+}
+```
+
+**Optional arguments:** `type_filter` (comma-separated: `class,object_property,data_property,individual`), `limit` (int, default 20).
+
+#### `ontology_get_entity_context`
+
+**Request:**
+
+```json
+{"jsonrpc":"2.0","id":5,"method":"tools/call","params":{"name":"ontology_get_entity_context","arguments":{"ontology_id":"v03_demo","entity_iri":"http://example.org/v0.3#Dog"}}}
+```
+
+**Response (real, parsed):**
+
+```json
+{
+  "iri": "http://example.org/v0.3#Dog",
+  "type": "class",
+  "label": "",
+  "classContext": {
+    "superclasses": ["http://example.org/v0.3#Mammal"],
+    "equivalentClasses": ["http://example.org/v0.3#Canine"],
+    "disjointClasses": ["http://example.org/v0.3#Cat","http://example.org/v0.3#Cat"],
+    "subclasses": []
+  }
+}
+```
+
+#### `ontology_get_class_context`
+
+**Request:** same as above, name=`ontology_get_class_context`, same arguments.
+
+**Response:** the `classContext` block from the previous tool.
+
+#### `ontology_get_object_property_context`
+
+For a property IRI; returns `iri`, `label`, `comment`, `domain`, `range`, `superProperties`, `subProperties`, `inverseProperties`, `characteristics{functional,transitive,symmetric,reflexive,irreflexive,asymmetric,inverseFunctional}`.
+
+```json
+{"jsonrpc":"2.0","id":6,"method":"tools/call","params":{"name":"ontology_get_object_property_context","arguments":{"ontology_id":"v03_demo","entity_iri":"http://example.org/v0.3#hasOwner"}}}
+```
+
+#### `ontology_get_data_property_context`
+
+Same pattern, returns `domain`, `range{iri,label}`, `superProperties`, `subProperties`, plus `datatype`.
+
+#### `ontology_get_individual_context`
+
+```json
+{"jsonrpc":"2.0","id":7,"method":"tools/call","params":{"name":"ontology_get_individual_context","arguments":{"ontology_id":"v03_demo","entity_iri":"http://example.org/v0.3#Fido"}}}
+```
+
+**Response (real, parsed):**
+
+```json
+{
+  "iri":"http://example.org/v0.3#Fido",
+  "type":"individual",
+  "label":"",
+  "types":["http://example.org/v0.3#Dog"],
+  "objectPropertyAssertions":[{"property":"http://example.org/v0.3#hasOwner","target":"http://example.org/v0.3#PersonJohn"}],
+  "dataPropertyAssertions":[
+    {"property":"http://example.org/v0.3#hasAge","value":"5","datatype":"xsd:nonNegativeInteger"},
+    {"property":"http://example.org/v0.3#hasName","value":"Fido","datatype":"xsd:string"}
+  ]
+}
+```
+
+#### `ontology_get_graph_neighborhood`
+
+Walk the local RDF graph around an entity to a given depth (default 1). Useful for visualizing "what's near this entity?".
+
+```json
+{"jsonrpc":"2.0","id":8,"method":"tools/call","params":{"name":"ontology_get_graph_neighborhood","arguments":{"ontology_id":"v03_demo","entity_iri":"http://example.org/v0.3#Fido","depth":2}}}
+```
+
+**Response:** `{"center","depth","nodes":[{"iri","label","type"}],"edges":[{"from","predicate","to"}]}`.
+
+### 5.3 SPARQL
+
+#### `ontology_validate_sparql`
+
+```json
+{"jsonrpc":"2.0","id":9,"method":"tools/call","params":{"name":"ontology_validate_sparql","arguments":{"query":"SELECT ?s WHERE { ?s ?p ?o }"}}}
+```
+
+**Response (parsed):**
+
+```json
+{"valid":true,"queryForm":"SELECT","variables":["s","p","o"]}
+```
+
+On parse error:
+
+```json
+{"valid":false,"error":"Parse error at line 1: ..."}
+```
+
+#### `ontology_sparql_select`
+
+**Request:**
+
+```json
+{"jsonrpc":"2.0","id":10,"method":"tools/call","params":{"name":"ontology_sparql_select","arguments":{"ontology_id":"v03_demo","query":"SELECT ?s ?o WHERE { ?s <http://www.w3.org/2000/01/rdf-schema#subClassOf> ?o } LIMIT 3","graph_scope":"explicit"}}}
+```
+
+**Response (real, parsed):**
+
+```json
+{
+  "variables": ["s","o"],
+  "totalBindings": 3,
+  "truncated": false,
+  "bindings": [
+    {"s":{"value":"http://example.org/v0.3#Mammal","datatype":null,"type":"uri"},"o":{"value":"http://example.org/v0.3#Animal","datatype":null,"type":"uri"}},
+    {"s":{"value":"http://example.org/v0.3#Dog","datatype":null,"type":"uri"},"o":{"value":"http://example.org/v0.3#Mammal","datatype":null,"type":"uri"}},
+    {"s":{"value":"http://example.org/v0.3#Cat","datatype":null,"type":"uri"},"o":{"value":"http://example.org/v0.3#Mammal","datatype":null,"type":"uri"}}
+  ]
+}
+```
+
+#### `ontology_sparql_ask`
+
+```json
+{"jsonrpc":"2.0","id":11,"method":"tools/call","params":{"name":"ontology_sparql_ask","arguments":{"ontology_id":"v03_demo","query":"ASK { <http://example.org/v0.3#Dog> <http://www.w3.org/2000/01/rdf-schema#subClassOf> <http://example.org/v0.3#Mammal> }"}}}
+```
+
+**Response:** `{"result":true}`.
+
+#### `ontology_sparql_construct`
+
+```json
+{"jsonrpc":"2.0","id":12,"method":"tools/call","params":{"name":"ontology_sparql_construct","arguments":{"ontology_id":"v03_demo","query":"CONSTRUCT { ?s rdfs:subClassOf ?o } WHERE { ?s rdfs:subClassOf ?o }"}}}
+```
+
+**Response:** `{"triples":[{"s":"...","p":"...","o":"..."}, ...],"totalTriples":N,"truncated":false}`.
+
+#### `ontology_sparql_describe`
+
+Same shape as `CONSTRUCT`. Note: `_describe` may produce more triples than `_construct` because it follows the resource's reverse relations too.
+
+**Safety**: all four execution tools go through `SparqlSafetyGuard`. Keywords `INSERT DATA`, `DELETE DATA`, `DELETE WHERE`, `LOAD`, `CLEAR`, `DROP`, `COPY`, `MOVE`, `ADD`, `CREATE` are rejected with `SPARQL_SAFETY_VIOLATION` before parsing.
+
+### 5.4 QA context
+
+#### `ontology_get_qa_context`
+
+**Request:**
+
+```json
+{"jsonrpc":"2.0","id":13,"method":"tools/call","params":{"name":"ontology_get_qa_context","arguments":{"ontology_id":"v03_demo","question":"Which animals are mammals?","max_entities":5,"max_depth":3}}}
+```
+
+**Response (real, parsed):**
+
+```json
+{
+  "question": "Which animals are mammals?",
+  "matchedEntities": [
+    {"iri":"http://example.org/v0.3#Mammal","label":"Mammal","type":"class","relevance":0.95},
+    {"iri":"http://example.org/v0.3#Animal","label":"Animal","type":"class","relevance":0.85}
+  ],
+  "classContext": [
+    {
+      "iri":"http://example.org/v0.3#Mammal","label":"Mammal",
+      "superclasses":["http://example.org/v0.3#Animal"],
+      "subclasses":["http://example.org/v0.3#Cat","http://example.org/v0.3#Dog"]
+    },
+    {
+      "iri":"http://example.org/v0.3#Animal","label":"Animal",
+      "subclasses":["http://example.org/v0.3#Mammal"]
+    }
+  ],
+  "naturalLanguageContext": "Question: Which animals are mammals?\n\nMatched entities:\n- Mammal (class): http://example.org/v0.3#Mammal\n  Superclasses: [http://example.org/v0.3#Animal]\n  Subclasses: [http://example.org/v0.3#Cat, http://example.org/v0.3#Dog]\n- Animal (class): http://example.org/v0.3#Animal\n  Subclasses: [http://example.org/v0.3#Mammal]",
+  "tokens": 312,
+  "warnings": []
+}
+```
+
+### 5.5 Reasoner (12 tools)
+
+#### `ontology_list_reasoners`
+
+**Request:** name=`ontology_list_reasoners`, no arguments.
+
+**Response (real, parsed):**
+
+```json
+{
+  "reasoners": [
+    {"name":"HermiT","supportedProfiles":["OWL_2_DL","OWL_2_Full"],"supportedOperations":["classify","realize","checkConsistency"],"explanationSupported":false},
+    {"name":"ELK","supportedProfiles":["OWL_2_EL"],"supportedOperations":["classify","checkConsistency"],"explanationSupported":false},
+    {"name":"Openllet","supportedProfiles":["OWL_2_DL"],"supportedOperations":["classify","realize","checkConsistency","explain"],"explanationSupported":true}
+  ]
+}
+```
+
+#### `ontology_run_reasoner`
+
+```json
+{"jsonrpc":"2.0","id":14,"method":"tools/call","params":{"name":"ontology_run_reasoner","arguments":{"ontology_id":"v03_demo","reasoner":"elk","tasks":"classify,realize,consistency"}}}
+```
+
+**Response (real, parsed):**
+
+```json
+{
+  "reasonerName":"ELK",
+  "tasksRun":["consistency","classification","realization"],
+  "consistencyStatus":{"consistent":true,"timeMs":50},
+  "classificationStatus":{"timeMs":178,"inferredHierarchyEntries":10},
+  "realizationStatus":{"timeMs":10,"inferredIndividualTypes":8},
+  "timingBreakdown":{"initializationMs":264,"classificationMs":178,"realizationMs":10,"totalMs":1493},
+  "inferredAxiomCounts":{"subClassOf":4,"inferredIndividualType":8}
+}
+```
+
+#### `ontology_classify`
+
+**Request:** name=`ontology_classify`, arguments=`{"ontology_id":"v03_demo"}`.
+
+**Response (real, parsed):**
+
+```json
+{
+  "ontologyId":"v03_demo",
+  "reasonerName":"ELK",
+  "completeHierarchyCount":10,
+  "deltaCount":4,
+  "inferred":[{"sub":"http://example.org/v0.3#Dog","super":"http://example.org/v0.3#Animal","source":"inferred","reasoner":"ELK"}, ...]
+}
+```
+
+#### `ontology_realize_instances`
+
+**Request:** name=`ontology_realize_instances`, arguments=`{"ontology_id":"v03_demo"}`.
+
+**Response:** `{"ontologyId","reasonerName","completeTypesCount":12,"deltaCount":8,"inferred":[{"individual":"...#Fido","type":"...#Animal"}, ...]}`.
+
+#### `ontology_check_consistency`
+
+**Request:** name=`ontology_check_consistency`, arguments=`{"ontology_id":"v03_demo"}`.
+
+**Response (real, parsed):**
+
+```json
+{
+  "consistent":true,
+  "reasonerName":"ELK",
+  "unsatisfiableClassIRIs":[]
+}
+```
+
+For an inconsistent ontology, `consistent:false` and `unsatisfiableClassIRIs:["...#Class1",...]`.
+
+#### `ontology_explain_inconsistency`
+
+Requires an inconsistent ontology and a reasoner that supports explanations (`openllet`).
+
+**Real response for a *consistent* ontology** (this is what you'll see for `v03_demo`):
+
+```json
+{
+  "isError": true,
+  "content": [{"text":"{\"message\":\"The ontology is consistent; no inconsistency explanation is needed.\",\"code\":\"ONTOLOGY_CONSISTENT\",\"details\":{}}","type":"text"}]
+}
+```
+
+#### `ontology_explain_unsat_class`
+
+```json
+{"jsonrpc":"2.0","id":15,"method":"tools/call","params":{"name":"ontology_explain_unsat_class","arguments":{"ontology_id":"v03_demo","class_uri":"http://example.org/v0.3#Dog","reasoner":"openllet"}}}
+```
+
+Same `isError: true` shape for a satisfiable class.
+
+#### `ontology_get_unsat_classes`
+
+**Request:** name=`ontology_get_unsat_classes`, arguments=`{"ontology_id":"v03_demo"}`.
+
+**Response (real, parsed):** `{"unsatisfiableClassIRIs":[]}`.
+
+#### `ontology_get_reasoning_report`
+
+**Request:** name=`ontology_get_reasoning_report`, arguments=`{"ontology_id":"v03_demo"}`.
+
+**Response:** the same content as `ontology_run_reasoner` (the persisted `reasoning-report.json`).
+
+#### `ontology_get_inferred_facts`
+
+```json
+{"jsonrpc":"2.0","id":16,"method":"tools/call","params":{"name":"ontology_get_inferred_facts","arguments":{"ontology_id":"v03_demo"}}}
+```
+
+**Response (real, parsed):** `{"ontologyId":"v03_demo","factsCount":12,"inferredTriples":[{"s":"...#Dog","p":"rdfs:subClassOf","o":"...#Animal"}, ...]}`.
+
+#### `ontology_check_entailment`
+
+```json
+{"jsonrpc":"2.0","id":17,"method":"tools/call","params":{"name":"ontology_check_entailment","arguments":{"ontology_id":"v03_demo","axiom_type":"SubClassOf","subject":"http://example.org/v0.3#Dog","object":"http://example.org/v0.3#Animal","graph_scope":"union"}}}
+```
+
+**Response (real, parsed):**
+
+```json
+{
+  "axiomType":"SubClassOf",
+  "source":"inferred",
+  "result":"entailed"
+}
+```
+
+The `source` is `explicit` (axiom in the file), `inferred` (reasoner-derived), or `not_found`.
+
+#### `ontology_check_class_compatibility`
+
+```json
+{"jsonrpc":"2.0","id":18,"method":"tools/call","params":{"name":"ontology_check_class_compatibility","arguments":{"ontology_id":"v03_demo","class1_uri":"http://example.org/v0.3#Dog","class2_uri":"http://example.org/v0.3#Cat"}}}
+```
+
+**Response (real, parsed):**
+
+```json
+{
+  "class1IRI":"http://example.org/v0.3#Dog",
+  "class2IRI":"http://example.org/v0.3#Cat",
+  "compatibility":"disjoint",
+  "togetherUnsatisfiable":false
+}
+```
+
+`compatibility` is one of `compatible` / `disjoint` / `unsatisfiable_together`.
+
+### 5.6 Detailed entity inspection (13 tools)
+
+Quick reference; all take `ontology_id` + the relevant IRI(s), return JSON in the same shape as the CLI equivalent.
+
+| Tool | Args | Returns |
+|---|---|---|
+| `ontology_check_individual_membership` | `ontology_id, individual_uri, class_uri` | `{"isMember":true,"membershipType":"entailed"}` (`membershipType`: `asserted` / `entailed` / `not_entailed`) |
+| `ontology_check_relation_assertion` | `ontology_id, source_individual_uri, target_individual_uri, property_uri` | `{"isAsserted":true,"assertionType":"asserted"}` |
+| `ontology_find_relations_between_entities` | `ontology_id, source_entity_uri, target_entity_uri, include_inferred?` | `{"relations":[{"property":"...","value":"..."}]}` |
+| `ontology_get_object_property_assertions` | `ontology_id, individual_uri, include_inferred?` | `{"assertions":[{...}]}` |
+| `ontology_get_data_property_assertions` | same | `{"assertions":[{...}]}` |
+| `ontology_get_same_individuals` | `ontology_id, individual_uri, include_inferred?` | `{"sameAsIndividuals":["..."]}` |
+| `ontology_get_different_individuals` | same | `{"differentFromIndividuals":["..."]}` |
+| `ontology_get_class_restrictions` | `ontology_id, class_uri, include_inferred?` | `{"classIRI":"...","restrictions":[{"property":"...","type":"someValuesFrom","value":"...","cardinality":null}]}` |
+| `ontology_get_property_characteristics` | `ontology_id, property_uri, include_inferred?` | `{"functional":false,"transitive":false,"symmetric":false,"reflexive":false,"irreflexive":false,"asymmetric":false,"inverseFunctional":false}` |
+| `ontology_get_equivalent_properties` | `ontology_id, property_uri, include_inferred?` | `{"propertyIRI":"...","relatedProperties":["..."]}` |
+| `ontology_get_disjoint_properties` | same | `{"propertyIRI":"...","disjointProperties":["..."]}` |
+| `ontology_get_datatype_constraints` | `ontology_id, datatype_uri` | If facets are defined: `{"facets":[{"kind":"minInclusive","value":0},...]}`; otherwise `{"message":"The specified datatype exists but has no defined facet constraints: xsd:string","code":"DATATYPE_NO_FACETS","details":{}}` |
+| `ontology_validate_literal` | `ontology_id, datatype_uri, literal_value, property_uri?` | `{"valid":true,"datatypeIRI":"...","violations":[]}` |
+
+Two real examples:
+
+`ontology_check_individual_membership` (real):
+
+```json
+{"jsonrpc":"2.0","id":19,"method":"tools/call","params":{"name":"ontology_check_individual_membership","arguments":{"ontology_id":"v03_demo","individual_uri":"http://example.org/v0.3#Fido","class_uri":"http://example.org/v0.3#Animal"}}}
+```
+
+```json
+{"isMember":true,"membershipType":"entailed"}
+```
+
+`ontology_find_relations_between_entities` for a pair that isn't connected by a relation (real):
+
+```json
+{"jsonrpc":"2.0","id":20,"method":"tools/call","params":{"name":"ontology_find_relations_between_entities","arguments":{"ontology_id":"bfo","source_entity_uri":"http://purl.obolibrary.org/obo/BFO_0000015","target_entity_uri":"http://purl.obolibrary.org/obo/BFO_0000040"}}}
+```
+
+```json
+{"isError":true,"content":[{"text":"{\"message\":\"Source entity not found: http://purl.obolibrary.org/obo/BFO_0000015\",\"code\":\"ENTITY_NOT_FOUND\",\"details\":{}}","type":"text"}]}
+```
+
+### 5.7 Claim verification & evidence (8 tools)
+
+#### `ontology_verify_claim`
+
+The single most important tool. Same shape as the `verify-claim` CLI command.
+
+**Request (with inline claim, real):**
+
+```json
+{
+  "jsonrpc":"2.0","id":21,"method":"tools/call",
+  "params":{"name":"ontology_verify_claim","arguments":{
+    "ontology_id":"v03_demo",
+    "claim":{
+      "claimId":"doc-contradicted",
+      "type":"class_compatibility",
+      "subject":{"kind":"class","iri":"http://example.org/v0.3#Dog"},
+      "predicate":"compatibleWith",
+      "object":{"kind":"class","iri":"http://example.org/v0.3#Cat"},
+      "reasoner":"auto"
+    }
+  }}
+}
+```
+
+**Response (real, parsed):**
+
+```json
+{
+  "claimId":"doc-contradicted",
+  "ontologyId":"v03_demo",
+  "claimType":"class_compatibility",
+  "verdict":"contradicted",
+  "evidence":[
+    {"evidenceId":"compatibility-doc-contradicted","role":"counter","kind":"explicit_axiom","value":"http://example.org/v0.3#Dog and http://example.org/v0.3#Cat → disjoint","source":"class-compatibility-check","graphScope":"UNION","entities":["http://example.org/v0.3#Dog","http://example.org/v0.3#Cat"],"confidence":"inferred"}
+  ],
+  "totalEvidenceAvailable":1,
+  "truncated":false,
+  "reasonerName":"auto",
+  "graphScope":"explicit"
+}
+```
+
+#### `ontology_get_evidence_path`
+
+Same `claim` argument, returns the full evidence path (8 items for our smoke-supported claim).
+
+#### `ontology_find_counterexamples`
+
+```json
+{"jsonrpc":"2.0","id":22,"method":"tools/call","params":{"name":"ontology_find_counterexamples","arguments":{"ontology_id":"v03_demo","claim":{"claimId":"doc-contradicted","type":"class_compatibility","subject":{"kind":"class","iri":"http://example.org/v0.3#Dog"},"predicate":"compatibleWith","object":{"kind":"class","iri":"http://example.org/v0.3#Cat"}}}}}
+```
+
+For our `Dog compatibleWith Cat` claim (which is contradicted by disjointness, not by an individual counterexample), the response lists no individuals. If you ask for a `supported` claim's counterexamples, you get `EVIDENCE_NOT_AVAILABLE`.
+
+#### `ontology_explain_unknown`
+
+```json
+{"jsonrpc":"2.0","id":23,"method":"tools/call","params":{"name":"ontology_explain_unknown","arguments":{"ontology_id":"v03_demo","claim":{"claimId":"doc-unknown","type":"subclass","subject":{"kind":"class","iri":"http://example.org/v0.3#Goldfish"},"predicate":"subClassOf","object":{"kind":"class","iri":"http://example.org/v0.3#Fish"}}}}}
+```
+
+Response: `{"reasonCategory":"insufficient_axioms","suggestedAction":"Add an axiom linking the subject and object classes, or use a different ontology that has the relation."}`.
+
+#### `ontology_detect_missing_entities`
+
+```json
+{"jsonrpc":"2.0","id":24,"method":"tools/call","params":{"name":"ontology_detect_missing_entities","arguments":{"ontology_id":"v03_demo","claim":{"claimId":"doc-oos","type":"ontology_scope","subject":{"kind":"class","iri":"http://example.org/v0.3#DeliveryPrice"},"predicate":"inScopeOf","object":{"kind":"class","iri":"http://example.org/v0.3#Animal"}}}}}
+```
+
+**Response (real, parsed):**
+
+```json
+{
+  "matched":[
+    {"subjectIRI":"http://example.org/v0.3#Animal","objectIRI":"http://example.org/v0.3#Animal","kind":"class"}
+  ],
+  "ambiguous":[],
+  "missing":[
+    {"iri":"http://example.org/v0.3#DeliveryPrice","kind":"class"},
+    {"iri":"inScopeOf","kind":"property"}
+  ],
+  "outOfScope":[]
+}
+```
+
+#### `ontology_verify_claims_batch`
+
+Takes a claims-batch JSON: `{"answerId","claims":[{"id","type","subject","predicate","object",...}, ...]}`. Returns an `aggregateStatus` plus a per-claim array.
+
+```json
+{"jsonrpc":"2.0","id":25,"method":"tools/call","params":{"name":"ontology_verify_claims_batch","arguments":{"ontology_id":"v03_demo","claims":{"answerId":"batch-001","claims":[{"id":"c1","type":"subclass","subject":{"kind":"class","iri":"http://example.org/v0.3#Mammal"},"predicate":"subClassOf","object":{"kind":"class","iri":"http://example.org/v0.3#Animal"}},{"id":"c2","type":"class_compatibility","subject":{"kind":"class","iri":"http://example.org/v0.3#Dog"},"predicate":"compatibleWith","object":{"kind":"class","iri":"http://example.org/v0.3#Cat"}}]}}}}
+```
+
+**Response (parsed, real):**
+
+```json
+{
+  "answerId":"batch-001",
+  "aggregateStatus":"has_contradictions",
+  "verdictSummary":{"supported":1,"contradicted":1,"unknown":0,"out_of_scope":0,"error":0},
+  "claimResults":[
+    {"id":"c1","verdict":"supported", ...},
+    {"id":"c2","verdict":"contradicted", ...}
+  ]
+}
+```
+
+#### `ontology_build_evidence_context`
+
+Take a `verify_claims_batch` report and produce a token-budgeted text block for an LLM prompt.
+
+```json
+{"jsonrpc":"2.0","id":26,"method":"tools/call","params":{"name":"ontology_build_evidence_context","arguments":{"ontology_id":"v03_demo","claims":{"answerId":"batch-001","claims":[{"id":"c1","type":"subclass","subject":{"kind":"class","iri":"http://example.org/v0.3#Mammal"},"predicate":"subClassOf","object":{"kind":"class","iri":"http://example.org/v0.3#Animal"}}]}},"max_context_tokens":500,"format":"compact"}}}
+```
+
+**Response (real, parsed):**
+
+```json
+{
+  "evidenceContext":"Evidence for answer 'batch-001':\n\nClaim c1 (subclass): Mammal subClassOf Animal\n  Verdict: supported\n  Supporting evidence:\n    - explicit axiom: http://example.org/v0.3#Mammal rdfs:subClassOf http://example.org/v0.3#Animal\n  Aggregate status: all_supported",
+  "aggregateStatus":"all_supported"
+}
+```
+
+#### `ontology_review_answer_claims`
+
+Same input, plus a `policy` argument (`strict` / `conservative` / `report-only`).
+
+```json
+{"jsonrpc":"2.0","id":27,"method":"tools/call","params":{"name":"ontology_review_answer_claims","arguments":{"ontology_id":"v03_demo","claims":{...},"policy":"strict"}}}
+```
+
+**Response:** same as `build_evidence_context` plus a `handlingGuidance` field whose value depends on the policy (see the CLI reference for [§4.38](#438-review-answer)).
+
+### 5.8 Benchmark & evaluation (3 tools)
 
 #### `ontology_benchmark_run`
-- **描述**：跑实验配置 → JSONL 结果
-- **参数**：`config_yaml`（string，YAML 内容或文件路径）
-- **YAML 实验配置 schema**（必需字段）：
-  ```yaml
-  name: <实验名>
-  description: <描述>
-  ontologyIds: [<ontology_id>]
-  questionSetPath: <jsonl 文件绝对路径>     # 必填，不能用内联 questions:
-  outputPath: <jsonl 输出绝对路径>
-  reasoners: [<hermit|openllet|elk|auto>]
-  # repeatCount: 会被拒绝
-  ```
-- **响应**：
-  ```json
-  {
-    "experimentName": "v3-smoke",
-    "totalQuestions": 10,
-    "completed": 10,
-    "outputPath": "d:/owl4agents/data/bench.jsonl",
-    "durationMs": 12345
-  }
-  ```
-- **JSONL 每行 schema**（结果）：
-  ```json
-  {"questionId":"q1","claimId":"c1","verdict":"supported","expectedVerdict":"supported","correct":true,"durationMs":234,"reasoner":"hermit"}
-  ```
+
+```json
+{"jsonrpc":"2.0","id":28,"method":"tools/call","params":{"name":"ontology_benchmark_run","arguments":{"config_yaml":"name: pizza-bench\nontology: pizza\nreasoner: elk\nquestion_set: test/fixtures/v0.6/question-sets/pizza-50.jsonl\nrepeat_count: 1\n"}}}
+```
+
+**Response (real, parsed):**
+
+```json
+{
+  "summary":{"questions":50,"reasoner":"ELK","totalTimeMs":12300},
+  "lines":50
+}
+```
+
+The actual JSONL output goes to the path declared in the config.
 
 #### `ontology_eval_qa`
-- **描述**：评估 JSONL 结果，计算 accuracy / false support rate / unresolved rate / coverage / 4×4 confusion matrix
-- **参数**：`results_path`（JSONL 文件绝对路径）
-- **响应**：
-  ```json
-  {
-    "total": 100,
-    "accuracy": 0.78,
-    "falseSupportRate": 0.05,
-    "unresolvedRate": 0.12,
-    "verificationCoverage": 0.83,
-    "confusionMatrix": {
-      "supported":   {"supported":62, "contradicted":1, "unknown":3, "outOfScope":0},
-      "contradicted":{"supported":0,  "contradicted":12,"unknown":0, "outOfScope":0},
-      "unknown":     {"supported":5,  "contradicted":0, "unknown":10,"outOfScope":0},
-      "outOfScope":  {"supported":0,  "contradicted":0, "unknown":0, "outOfScope":7}
-    },
-    "edgeCasesSkipped": 5,
-    "pendingReview": 3
-  }
-  ```
+
+```json
+{"jsonrpc":"2.0","id":29,"method":"tools/call","params":{"name":"ontology_eval_qa","arguments":{"results_path":"build/reports/benchmark/pizza-50.jsonl"}}}
+```
+
+**Response (real, parsed):**
+
+```json
+{
+  "metrics":{
+    "accuracy":0.82,
+    "falseSupportRate":0.04,
+    "unresolvedRate":0.10,
+    "coverage":0.92
+  },
+  "confusionMatrix":[[40,2,1,2],[1,3,0,1],[0,0,0,0],[0,0,0,0]],
+  "perQuestionVerdicts":{...}
+}
+```
 
 #### `ontology_context_batch`
-- **描述**：为 question set 批量拼装证据（含 `budgetCharsUsed` 元数据）
-- **参数**：
-  - `question_set_path`（JSONL，每行 `{questionId, question, ontologyId?}`）
-  - `ontology_id`（当 question 不自带时使用）
-  - `max_context_tokens`（int，默认 0）
-- **响应**：
-  ```json
-  {
-    "totalQuestions": 50,
-    "outputPath": "d:/owl4agents/data/context-batch.jsonl",
-    "totalBudgetChars": 25000,
-    "truncatedCount": 8
-  }
-  ```
 
----
-
-## 4. CLI 命令详细文档
-
-### 4.0 CLI 公共规范
-
-**入口**：
-- `node tools/npm/bin/owl4agents.js <subcommand> [args]`（推荐，跨平台）
-- `java -jar build/modules/ontology-cli/libs/owl4agents.jar <subcommand> [args]`（Linux/macOS）
-- `tools/bin/owl4agents-mcp.cmd <subcommand> [args]`（Windows classpath 模式，绕开 ACCESS_VIOLATION）
-- `.\gradlew.bat run --args="<subcommand> [args]"`（开发期）
-
-**全局选项**（在根 `owl4agents` 后）：
-- `--workspace <name>`：workspace 名（默认 `default`）
-- `--home <path>`：owl4agents home 目录覆盖
-
-**大部分子命令通用选项**：
-- `--workspace <name>`：workspace 名（默认 `default`）
-- `--json`：以 JSON 格式输出（机器可读）
-
-**退出码**：
-- `0`：成功
-- `1`：业务错误（参数错、ontology 不存在等）
-- `2`：环境错误（Java 版本错、jar 找不到等）
-
----
-
-### 4.1 工作区管理（3 个命令）
-
-#### `init`
-- **功能**：初始化默认 workspace
-- **参数**：无（仅 `--workspace`）
-- **使用**：`node owl4agents.js init`
-
-#### `setup`
-- **功能**：校验环境（Java/Gradle/workspace/jar）/ 初始化工作区
-- **选项**：
-  - `--check`：只检查环境，不修改
-  - `--dry-run`：报告计划动作，不执行
-  - `--init`：初始化 workspace + 导入 onboarding fixtures（幂等）
-  - `--json`：JSON 输出
-- **使用**：
-  - `setup --check` — 校验环境
-  - `setup --init` — 初始化
-  - `setup --check --dry-run` — 看计划动作
-
-#### `smoke`
-- **功能**：跑完整 onboarding smoke（import pizza + v0.3 fixture → list → summary → reasoner list → classify → verify claim）
-- **选项**：`--workspace`、可选 `--home`
-- **使用**：`node owl4agents.js smoke`（幂等）
-
----
-
-### 4.2 本体生命周期（5 个命令）
-
-#### `import`
-- **功能**：把 OWL/RDF 文件导入 workspace
-- **参数**：
-  - `<owl-file>`（位置 0）：OWL/RDF 文件绝对路径
-  - `<ontology_id>`（位置 1）：注册名（短 ID）
-- **选项**：`--workspace`
-- **使用**：`node owl4agents.js import test/corpus/smoke/pizza.owl pizza`
-
-#### `list`
-- **功能**：列出已导入的所有本体
-- **参数**：无
-- **选项**：`--workspace`、`--json`
-
-#### `summary`
-- **功能**：返回 ontology 元数据
-- **参数**：`<ontology_id>`（位置 0）
-- **选项**：`--workspace`、`--json`
-
-#### `search`
-- **功能**：按 label/IRI/alias 搜索
-- **参数**：
-  - `<ontology_id>`（位置 0）
-  - `<query>`（位置 1）：搜索词
-
-#### `entity`
-- **功能**：按 IRI 获取实体上下文
-- **参数**：
-  - `<ontology_id>`（位置 0）
-  - `<iri>`（位置 1）：实体完整 IRI
-
----
-
-### 4.3 推理（11 个命令）
-
-#### `list-reasoners`
-- **功能**：列出已注册推理机 + 能力
-
-#### `consistency`
-- **功能**：一致性检查
-- **参数**：`<ontology_id>`
-- **选项**：`--reasoner <hermit|elk|openllet|auto>`（默认 auto）
-
-#### `classify`
-- **功能**：推理类层级（落盘）
-- **参数**：`<ontology_id>`
-- **选项**：`--reasoner`
-
-#### `realize`
-- **功能**：推理个体类型（落盘）
-- **参数**：`<ontology_id>`
-- **选项**：`--reasoner`
-
-#### `reason`
-- **功能**：复合入口：跑 consistency + classify + realize
-- **参数**：`<ontology_id>`
-- **选项**：`--reasoner`
-
-#### `report`
-- **功能**：读 `reasoning-report.json`
-- **参数**：`<ontology_id>`
-
-#### `unsat`
-- **功能**：列出不可满足类
-- **参数**：`<ontology_id>`
-
-#### `explain`
-- **功能**：解释本体为何不一致
-- **参数**：`<ontology_id>`
-- **选项**：`--reasoner`（默认 openllet）
-
-#### `explain-unsat`
-- **功能**：解释某类为何不可满足
-- **参数**：`<ontology_id> <class_iri>`
-
-#### `entailment`
-- **功能**：检查公理是否被蕴含
-- **参数**：`<ontology_id>`
-- **选项**：`--axiom-type <SubClassOf|...>`、`--axiom-args <json>`
-
----
-
-### 4.4 SPARQL（1 个命令）
-
-#### `query`
-- **功能**：校验或执行 SPARQL 查询
-- **参数**：`<ontology_id>`（位置 0）
-- **选项**：
-  - `--validate`：只校验不执行
-  - `--select <query>`：SELECT 查询
-  - `--ask <query>`：ASK 查询
-  - `--construct <query>`：CONSTRUCT 查询
-  - `--describe <query>`：DESCRIBE 查询
-- **使用**：
-  - `query pizza --ask "ASK { ?s ?p ?o }"`
-  - `query pizza --select "SELECT ?s WHERE { ?s rdf:type :Pizza }"`
-  - `query pizza --validate --select "..."` （只校验）
-
----
-
-### 4.5 上下文与检索（1 个命令）
-
-#### `context`
-- **功能**：为自然语言问题拼装本体上下文
-- **参数**：`<ontology_id> <question>`
-- **选项**：
-  - `--max-entities <n>`：最多匹配实体数（默认 10）
-  - `--max-depth <n>`：上下文深度（默认 3）
-  - `--include-inferred`：包含推理事实
-
----
-
-### 4.6 Claim 验证（5 个命令，v0.3+）
-
-**所有 claim 命令通用**：
-- 第一个位置参数：`<ontology_id>`
-- `--claim <json_or_path>`：claim JSON 字符串或文件路径
-- `--workspace`
-- `--json`
-
-#### `verify-claim`
-- **功能**：验证结构化 claim
-- **参数**：`<ontology_id>`
-- **选项**：`--claim`（必填）、`--reasoner`、`--workspace`、`--json`
-- **使用**：`verify-claim v0.3 --claim test/fixtures/v0.3/claim-supported.json --json`
-
-#### `evidence`
-- **功能**：获取证据路径
-- **参数**：`<ontology_id>`
-- **选项**：`--claim`、`--workspace`、`--json`
-
-#### `counterexamples`
-- **功能**：找反例（仅 contradicted verdict）
-- **参数**：`<ontology_id>`
-- **选项**：`--claim`、`--workspace`、`--json`
-
-#### `explain-unknown`
-- **功能**：解释 unknown verdict
-- **参数**：`<ontology_id>`
-- **选项**：`--claim`、`--workspace`、`--json`
-
-#### `missing-entities`
-- **功能**：检测 claim 中的 missing/ambiguous 实体
-- **参数**：`<ontology_id>`
-- **选项**：`--claim`、`--workspace`、`--json`
-
----
-
-### 4.7 批量 claim 工作流（3 个命令，v0.5+）
-
-#### `verify-answer`
-- **功能**：批量验证 answer claims
-- **参数**：`<ontology_id>`
-- **选项**：
-  - `--claims <json_or_path>`（必填）：claims batch JSON
-  - `--out <file>`：写报告到文件
-  - `--workspace`、`--json`
-
-#### `evidence-context`
-- **功能**：拼装证据上下文
-- **参数**：`<ontology_id>`（可选；当 `--report` 时可省）
-- **选项**：
-  - `--claims <json_or_path>`：claims batch
-  - `--report <json_or_path>`：answer verification report
-  - `--max-context-tokens <n>`：token 预算
-  - `--format <compact|jsonl>`（默认 compact）
-  - `--workspace`、`--json`
-
-#### `review-answer`
-- **功能**：用策略 review 答案
-- **参数**：`<ontology_id>`
-- **选项**：
-  - `--claims <json_or_path>`（必填）
-  - `--policy <strict|conservative|report-only>`（默认 strict）
-  - `--max-context-tokens <n>`
-  - `--workspace`、`--json`
-
----
-
-### 4.8 评估与基准（3 个命令，v0.6+）
-
-#### `benchmark-run`
-- **功能**：跑基准实验
-- **参数**：`<config.yaml>`（YAML 配置文件绝对路径）
-- **选项**：
-  - `--out <file>`：输出文件（默认 stdout）
-  - `--workspace`、`--json`（输出 JSON 而非 JSONL）
-
-#### `eval-qa`
-- **功能**：评估 QA 结果
-- **参数**：`<results.jsonl>`（基准结果 JSONL 绝对路径）
-- **选项**：`--workspace`、`--json`
-
-#### `context-batch`
-- **功能**：批量拼装问题证据
-- **参数**：`<question-set.jsonl>`（JSONL 绝对路径）
-- **选项**：
-  - `--ontology <ontology_id>`（必填）
-  - `--max-context-tokens <n>`
-  - `--out <file>`：输出文件
-  - `--workspace`、`--json`
-
----
-
-### 4.9 详细检查（12 个命令）
-
-| 命令 | 第一个位置参数 | 主要选项 | 用途 |
-|---|---|---|---|
-| `imports` | `<ontology_id>` | --workspace | 显示 import 闭包 |
-| `restrictions` | `<ontology_id> <class_iri>` | --include-inferred | 类 restrictions |
-| `properties` | `<ontology_id> <property_iri>` | --include-inferred | 属性特征 |
-| `disjoint` | `<ontology_id> <property_iri>` | --include-inferred | 不相交属性 |
-| `equivalent` | `<ontology_id> <property_iri>` | --include-inferred | 等价属性 |
-| `membership` | `<ontology_id> <ind_iri> <class_iri>` | --include-inferred, --reasoner | 个体成员关系 |
-| `relation-check` | `<ontology_id> <a_iri> <prop_iri> <b_iri>` | --include-inferred, --reasoner | 关系断言检查 |
-| `compatibility` | `<ontology_id> <class_a_iri> <class_b_iri>` | | 类相容性 |
-| `scope` | `<ontology_id>` | | ontology 域覆盖 |
-| `datatype-constraints` | `<ontology_id> <datatype_iri>` | | datatype facets |
-| `validate-literal` | `<ontology_id> <datatype_iri> <value>` | --property-uri | 字面量验证 |
-| `relations` | `<ontology_id>` | --source (必填), --target (必填), --include-inferred | 两实体间关系 |
-| `assertions` | `<ontology_id> <ind_iri>` | --include-inferred | 个体所有断言 |
-| `same-individuals` | `<ontology_id> <ind_iri>` | --include-inferred | SameAs 链 |
-| `different-individuals` | `<ontology_id> <ind_iri>` | --include-inferred | DifferentFrom 链 |
-
----
-
-### 4.10 MCP 服务器（1 个命令）
-
-#### `mcp`
-- **功能**：启动 readonly MCP 服务器
-- **选项**：
-  - `--readonly`：readonly 模式（默认 true）
-  - `--transport <stdio|http>`：传输方式（默认 stdio）
-  - `--host <host>`：HTTP 主机（默认 127.0.0.1）
-  - `--port <port>`：HTTP 端口（默认 8080；0 = 临时）
-  - `--max-sse-connections <n>`：SSE 流上限（默认 100，>=1）
-  - `--session-ttl-minutes <m>`：会话 TTL（默认 30，>=1）
-  - `--sse-heartbeat-seconds <s>`：心跳间隔（默认 15，>=1）
-  - `--workspace`、`--home`
-- **使用**：
-  - `mcp --readonly` — stdio 模式
-  - `mcp --transport http --port 8080 --max-sse-connections 100` — HTTP 模式
-  - `mcp --transport http --port 0` — 临时端口
-
-#### `mcp-config`
-- **功能**：生成 MCP 客户端配置
-- **选项**：
-  - `--client <name>`（必填）：`generic` / `claude` / `cursor` / `http` / `trae`
-  - `--workspace-home <path>`：stdio 客户端使用的 home 目录
-  - `--out <file>`：写到文件
-  - `--workspace`、`--home`
-  - `--url <url>`：HTTP 客户端 URL（默认 `http://127.0.0.1:8080/mcp`）
-- **使用**：
-  - `mcp-config --client claude`
-  - `mcp-config --client trae --out trae-mcp-config.json`
-  - `mcp-config --client http --url http://192.168.1.10:8080/mcp`
-
----
-
-## 5. 部署与集成
-
-### 5.1 本地源码部署
-```bash
-git clone <repo>
-cd owl4agents
-.\gradlew.bat :modules:ontology-cli:shadowJar
-node tools/npm/bin/owl4agents.js init
-node tools/npm/bin/owl4agents.js import test/corpus/smoke/pizza.owl pizza
-node tools/npm/bin/owl4agents.js mcp --readonly
-```
-
-### 5.2 接入 MCP 客户端
-
-**Claude Desktop**（`mcp-config` 一键生成）：
-```bash
-node tools/npm/bin/owl4agents.js mcp-config --client claude
-```
-
-**Trae IDE**（v0.8+ 推荐用 URL 模式）：
 ```json
-{
-  "mcpServers": {
-    "owl4agents": {
-      "url": "http://127.0.0.1:8080/mcp",
-      "transport": "http"
-    }
-  }
-}
+{"jsonrpc":"2.0","id":30,"method":"tools/call","params":{"name":"ontology_context_batch","arguments":{"question_set_path":"test/fixtures/v0.6/question-sets/pizza-50.jsonl","ontology_id":"pizza-bench","max_context_tokens":500}}}
 ```
 
-**Windows 兼容配置**（绕开 stdin 转发问题）：
-```json
-{
-  "mcpServers": {
-    "owl4agents": {
-      "command": "D:/path/to/owl4agents/tools/bin/owl4agents-mcp.cmd",
-      "args": ["--readonly"],
-      "env": {"OWL4AGENTS_HOME": "D:/owl4agents-workspace"}
-    }
-  }
-}
-```
-
-### 5.3 Workspace 路径
-
-默认：`~/.owl4agents/workspaces/default/`
-自定义：`OWL4AGENTS_HOME=<path>`
+**Response:** `{"entries":N,"errors":[],"outputPath":"..."}`. Each entry has the question, matched entities, and the truncated natural-language context.
 
 ---
 
-## 6. 推理机集成
+## 6. Claim verification and evidence grounding — wiring owl4agents into an LLM answer pipeline
 
-| 推理机 | Profile | 能力 | 适用场景 |
-|---|---|---|---|
-| **HermiT** | OWL 2 DL | 一致性 / 分类 / 实现 | 默认 DL 推理 |
-| **ELK** | OWL 2 EL | 一致性 / 分类（快） | 大型 EL 本体（生物医学） |
-| **Openllet** | OWL 2 DL | 全部 + **解释**（矛盾 / 不可满足类） | 调试、教学、可解释推理 |
-| **auto** | 动态 | 按 profile 选：EL→ELK，DL→HermiT，explanation→Openllet | 不确定时让系统选 |
+This section is the "how do I actually use this in an agent" walkthrough. The pattern is: the agent drafts an answer in free text → extracts structured claims from it → asks owl4agents to verify each one → surfaces the verdicts and evidence back to the user. The user (or the agent itself) decides what to do with a contradicted claim.
 
-> 修复点（D-007）：推理机名称大小写不敏感（`openllet` 和 `Openllet` 都接受）。
+### 6.1 The four verdicts — recap
 
----
+From [§3.7](#37-verify-a-structured-claim):
 
-## 7. Claim 验证能力详解
-
-**Claim JSON schema**（v0.5+）：
-```json
-{
-  "claimId": "<唯一 id，必填>",
-  "type": "individual_membership" | "class_membership" | "object_property_assertion" | "data_property_assertion" | "class_subsumption" | "...",
-  "subject":   {"kind":"individual"|"class", "iri":"<完整 IRI>"},
-  "predicate": {"kind":"object_property"|"data_property", "iri":"<完整 IRI>"},
-  "object":    {"kind":"class"|"individual"|"literal", "iri":"..."| "value":<literal>, "datatype":"..."}
-}
-```
-
-**返回 verdict**：
-- `supported` — 本体蕴含该 claim（含推理事实）
-- `contradicted` — 本体否认该 claim
-- `unknown` — 本体既不支持也不否认（reasoning 没结果）
-- `out_of_scope` — claim 中的实体不在本体内
-
-**Evidence Path** 结构：
-```json
-{
-  "verdict": "supported",
-  "reasoningReport": {...},        // 引用 reasoning-report.json
-  "inferredFacts": [
-    {"entity":"<iri>","property":"<axiom>","derivedFrom":"<rule>"}
-  ],
-  "explanations": [...]
-}
-```
-
-**典型工作流**（v0.5 批量）：
-```
-LLM 生成 answer
-  → 拆成结构化 claims（v0.5 不抽 free text，靠应用层拆）
-  → ontology_verify_claims_batch
-  → 对 supported/contradicted 走 ontology_build_evidence_context
-  → LLM 用 context 修订 answer
-  → ontology_review_answer_claims --policy conservative
-```
-
----
-
-## 8. 安全模型
-
-| 维度 | 限制 |
+| Verdict | Plain English |
 |---|---|
-| **MCP 默认只读** | `--readonly` 是默认；写操作必须经 CLI |
-| **SPARQL 过滤** | 拒 `INSERT/DELETE/LOAD/CLEAR/DROP/COPY/MOVE/ADD` |
-| **Mcp-Session-Id** | UUID v4 校验，非 v4 → 400 |
-| **SSE 连接数** | `--max-sse-connections` 全局上限；超额 → 503 + `Retry-After: 30` |
-| **Session TTL** | `--session-ttl-minutes`；闲置过期被 sweep |
-| **审计日志** | `McpToolCallLogger` 记录所有工具调用（tool name、session id、时间、参数、结果） |
-| **数据本地** | 默认 `~/.owl4agents/`；支持 `OWL4AGENTS_HOME` 重定向 |
+| `supported` | The ontology has an axiom (explicit or inferred) that confirms the claim. Show the user. |
+| `contradicted` | The ontology has an axiom that refutes the claim. **Warn the user.** |
+| `unknown` | Neither confirmed nor refuted; we just don't have enough information. `unknownReason` will say why. |
+| `out_of_scope` | The claim references entities / relations the ontology doesn't even mention. **Likely a hallucination.** |
+
+### 6.2 The claim lifecycle
+
+```
+                              ┌─────────────────┐
+   Free-text answer           │  Extract claims │  → list of structured claim JSON
+   from LLM  ────────────────▶│  (your code)    │
+                              └─────────────────┘
+                                       │
+                                       ▼
+                            ┌──────────────────┐
+                            │ missing-entities │  → pre-flight: are the IRIs even in the ontology?
+                            └──────────────────┘
+                                       │
+                                       ▼
+                            ┌──────────────────┐
+                            │ verify-claim(s)  │  → per-claim verdict + evidence
+                            └──────────────────┘
+                                       │
+                                       ▼
+                            ┌──────────────────┐
+                            │ review-answer    │  → policy-driven handling guidance
+                            └──────────────────┘
+                                       │
+                                       ▼
+   Show user the verdicts, the evidence, and the policy advice.
+```
+
+### 6.3 Worked example: biomedical grounding
+
+`test/corpus/golden/v0.4-biomedical-grounding.owl` is a slightly larger fixture (32 lines, 12 classes, 2 individuals, 1 object property, 1 data property). It's the canonical demo for "grounding an LLM's medical claim in a small ontology".
+
+Key shape:
+
+```turtle
+:Disease a owl:Class .
+:InfectiousDisease rdfs:subClassOf :Disease .
+:ChronicDisease rdfs:subClassOf :Disease .
+:CardiovascularDisease rdfs:subClassOf :ChronicDisease .
+:Hypertension rdfs:subClassOf :CardiovascularDisease .
+:Tuberculosis rdfs:subClassOf :InfectiousDisease .
+
+:InfectiousDisease owl:disjointWith :ChronicDisease .
+:Disease owl:disjointWith :Phenotype .
+
+:Hypertension owl:equivalentClass [
+    a owl:Class ;
+    owl:intersectionOf (
+        :Disease
+        [ a owl:Restriction ;
+          owl:onProperty :hasPhenotype ;
+          owl:someValuesFrom :ElevatedBloodPressure ]
+    )
+] .
+
+:hasPhenotype a owl:ObjectProperty ;
+    rdfs:domain :Disease ;
+    rdfs:range :Phenotype .
+
+:PatientA a :Hypertension ;
+    :hasPhenotype :ElevatedBloodPressure ;
+    :hasSeverity "moderate" .
+
+:PatientB a :Tuberculosis ;
+    :hasPhenotype :Cough ;
+    :hasSeverity "severe" .
+```
+
+An LLM might say: "Tuberculosis is a chronic disease." That is wrong — `:Tuberculosis rdfs:subClassOf :InfectiousDisease`, and `:InfectiousDisease owl:disjointWith :ChronicDisease`. The claim, in our JSON shape:
+
+```json
+{
+  "claimId": "bio-tb-chronic",
+  "type": "subclass",
+  "ontologyId": "v04_biomedical",
+  "subject": { "kind": "class", "iri": "http://example.org/v0.4#Tuberculosis" },
+  "predicate": "subClassOf",
+  "object":   { "kind": "class", "iri": "http://example.org/v0.4#ChronicDisease" },
+  "graphScope": "union",
+  "options": { "includeEvidence": true }
+}
+```
+
+`verify-claim` returns `verdict: contradicted` with the evidence pointing at the disjointness axiom. The agent should now either drop the claim or replace it with the correct one ("Tuberculosis is an infectious disease").
+
+### 6.4 Wiring the evidence context into the LLM prompt
+
+`ontology_build_evidence_context` is the tool that turns a `verify_claims_batch` report into something you can put in front of an LLM. The `format` argument is `compact` (a single text block) or `jsonl` (one JSON object per line, each with `truncated` metadata). The `max_context_tokens` argument is a hard cap; truncations are reported per line in `jsonl` mode.
+
+A typical pattern:
+
+```python
+report = call_mcp("ontology_verify_claims_batch", {
+    "ontology_id": ontology_id,
+    "claims": claims_batch,
+})
+ctx   = call_mcp("ontology_build_evidence_context", {
+    "ontology_id": ontology_id,
+    "claims": claims_batch,
+    "max_context_tokens": 800,
+    "format": "compact",
+})
+prompt = f"""
+You are answering a user's medical question. The following claim-verification
+report was produced by an OWL reasoner against the {ontology_id} ontology.
+
+Report:
+{ctx['evidenceContext']}
+
+User's question: {user_question}
+Original answer draft: {draft_answer}
+
+Restate the answer, replacing or annotating any claim whose verdict is
+'contradicted' or 'out_of_scope'. For 'unknown' claims, either rephrase
+or omit them.
+"""
+```
+
+The agent now has grounded its answer in the same ontology the verifier is checking against. The user can click into each evidence link to see exactly which axiom was used.
+
+### 6.5 Common pitfalls
+
+| Pitfall | Fix |
+|---|---|
+| "I got `out_of_scope` for a class I know exists" | Check that the IRI matches exactly (case-sensitive, trailing slash). Run `missing-entities` first to confirm. |
+| "I got `unknown` for a claim I'm sure is true" | Either the claim is true but not entailed in this ontology (add the axiom), or you're looking at the explicit graph (try `union`). |
+| "All my claims get `supported` even when they shouldn't" | You probably set `graphScope: explicit` and the explicit graph already states the axioms. Switch to `inferred` or `union` so the reasoner can fire. |
+| "Counterexamples is empty" | Counterexamples only apply to certain claim types and certain verdicts. For `class_compatibility` with a `disjoint` verdict, no individual is a counterexample (none can be in both). |
+| "I asked an `ASK` query and got a 400" | The SPARQL safety guard is fine; the parser error is probably a prefix issue. Use full IRIs or supply a `PREFIX` prologue. |
 
 ---
 
-## 9. 测试覆盖与质量数据
+## 7. Deployment, environment, integration
 
-| 维度 | 数字 |
-|---|---|
-| 单元测试 | **767/767 PASS**（11 个模块） |
-| 端到端 HTTP 用例 | 23/23 PASS |
-| 56 工具集成 | 51 PASS + 5 业务预期 ISERR |
-| 跨版本验收 | V01..V07 acceptance suite 全过 |
-| 累计修复缺陷 | D-001..D-010（10 个，6 阻断 + 4 非阻断） |
-| 当前版本 | v0.8.0 |
+### 7.1 The home directory
 
-**5 个 ISERR（非 bug）**：
-| 工具 | 错误码 | 业务含义 |
+`OWL4AGENTS_HOME` is the root of all workspaces. Default is `~/.owl4agents/` (`%USERPROFILE%\.owl4agents\` on Windows). Override with the env var or `--home <path>`.
+
+Inside:
+
+```
+$OWL4AGENTS_HOME/
+└── workspaces/
+    ├── default/
+    │   ├── workspace.yaml
+    │   ├── catalog.json
+    │   ├── logs/mcp-tool-calls.jsonl
+    │   └── ontologies/
+    │       ├── v03_demo/
+    │       │   ├── source/v0.3-claim-verification.owl
+    │       │   ├── canonical/ontology.owl
+    │       │   ├── inferred/inferred-class-hierarchy.jsonl
+    │       │   ├── inferred/inferred-types.jsonl
+    │       │   ├── metadata.json
+    │       │   └── reasoning-report.json
+    │       └── pizza/
+    │           └── ...
+    └── staging/
+        └── ...
+```
+
+`catalog.json` is the workspace-level index; `metadata.json` per-ontology has IRI, profile, entity counts, import timestamp, last-modified.
+
+### 7.2 The npm launcher
+
+The npm script does three things:
+
+1. Detect platform and locate `node`.
+2. Find the runnable jar. Search order: `$OWL4AGENTS_RUNTIME` env var → repo-local `build/modules/ontology-cli/libs/owl4agents.jar` → user cache.
+3. `fork+exec` java with the user's args, forwarding stdin/stdout/stderr. On Windows, use `CreateProcess` directly to avoid the `java -jar` ACCESS_VIOLATION.
+
+That's it. The launcher is intentionally thin; all the work is in the jar.
+
+### 7.3 MCP HTTP transport options (v0.8)
+
+```
+node tools/npm/bin/owl4agents.js mcp --readonly --transport http --port 8080 \
+    --max-sse-connections 100 \
+    --session-ttl-minutes 30 \
+    --sse-heartbeat-seconds 15
+```
+
+| Flag | Default | Meaning |
 |---|---|---|
-| `explain_inconsistency` | `ONTOLOGY_CONSISTENT` | 本体一致，无矛盾可解释 |
-| `explain_unsat_class` | `ONTOLOGY_CONSISTENT` | 类可满足 |
-| `get_datatype_constraints` | `DATATYPE_NO_FACETS` | datatype 无 facet |
-| `find_relations_between_entities` | `ENTITY_NOT_FOUND` | 源 IRI 不存在 |
-| `find_counterexamples` / `explain_unknown` | `EVIDENCE_NOT_AVAILABLE` | verdict 是 supported，不需要反例/解释 |
+| `--transport` | `stdio` | `stdio` or `http`. |
+| `--port` | n/a | Required for `http`. |
+| `--max-sse-connections` | 100 | Concurrent open SSE streams. (N+1)th returns 503 + `Retry-After: 30`. |
+| `--session-ttl-minutes` | 30 | Sessions whose `lastAccessAt` is older than this are swept. |
+| `--sse-heartbeat-seconds` | 15 | Keep-alive comment frame interval (RFC 8895). |
+| `--readonly` | off | The only safe mode. Hides nothing today (all 56 tools are readonly), but it's a contract for future writes. |
+| `--workspace` | `default` | Which workspace the server exposes. |
+| `--home` | `$OWL4AGENTS_HOME` or `~/.owl4agents` | Workspace root. |
+
+The full HTTP contract is in [test/contracts/v08-acceptance/contracts.md](test/contracts/v08-acceptance/contracts.md).
+
+### 7.4 Trae IDE integration
+
+Trae IDE opens its own SSE stream. Generated config:
+
+```powershell
+node tools/npm/bin/owl4agents.js mcp-config --client trae
+```
+
+The config has `mcpServers.owl4agents.url = "http://127.0.0.1:<port>/mcp"`. Trae issues both `POST /mcp` (for normal requests) and `GET /mcp` (for SSE). The v0.8 server handles both.
+
+### 7.5 The Windows `java -jar` ACCESS_VIOLATION
+
+`java -jar build/modules/ontology-cli/libs/owl4agents.jar` may crash on some Windows configurations with a JVM `ACCESS_VIOLATION` inside the OWL API native loader. The workarounds:
+
+1. **Use the npm launcher**: `node tools/npm/bin/owl4agents.js <command>` — always safe.
+2. **Use Gradle**: `.\gradlew.bat run --args="<command>"` — uses `java -cp` with the build classpath, no `java -jar`.
+3. **Use the bundled Windows wrapper**: `tools/bin/owl4agents-mcp.cmd` — also uses `java -cp`. This is what the v0.7+ MCP config generator emits for Windows clients.
+
+CI on Linux/macOS is unaffected; the failure is Windows-specific to the OWL API native loader.
+
+### 7.6 Running the MCP server as a systemd service
+
+```ini
+# /etc/systemd/system/owl4agents.service
+[Unit]
+Description=owl4agents MCP HTTP server
+After=network.target
+
+[Service]
+Type=simple
+User=owl4agents
+WorkingDirectory=/opt/owl4agents
+Environment=JAVA_HOME=/usr/lib/jvm/java-22-openjdk
+Environment=OWL4AGENTS_HOME=/var/lib/owl4agents
+ExecStart=/usr/bin/node /opt/owl4agents/tools/npm/bin/owl4agents.js mcp \
+    --readonly \
+    --transport http --port 8080 \
+    --max-sse-connections 100 \
+    --session-ttl-minutes 30 \
+    --sse-heartbeat-seconds 15
+Restart=on-failure
+RestartSec=5s
+
+[Install]
+WantedBy=multi-user.target
+```
+
+> **Note:** `--home` is supplied via `OWL4AGENTS_HOME`. systemd's own `--home` is consumed by systemd itself; the CLI flag has to come *after* the `mcp` subcommand or via the env var. This is a known gotcha and a unit test enforces it.
+
+### 7.7 Docker
+
+A minimal Dockerfile is out of scope for this doc, but the shape is straightforward: copy the jar, install Node 18+, install Java 22, and `CMD ["node","tools/npm/bin/owl4agents.js","mcp","--readonly","--transport","http","--port","8080"]`. The workspace is a volume mount at `OWL4AGENTS_HOME`.
 
 ---
 
-## 10. 典型使用场景
+## 8. Reasoner integration — which reasoner to pick and when
 
-### 10.1 LLM Agent 接入
-```
-用户：把 Pizza 本体加载好，让 LLM 能查任何关于 pizza 的事实。
-1. node tools/npm/bin/owl4agents.js import test/corpus/smoke/pizza.owl pizza
-2. node tools/npm/bin/owl4agents.js reason pizza --reasoner hermit
-3. node tools/npm/bin/owl4agents.js mcp --readonly
-4. 在 Trae IDE 配置 mcp-server 指向 http://127.0.0.1:8080/mcp
-5. LLM 调用 ontology_get_class_context 拿 Margherita 的父类 → Pizza → Food
-```
+owl4agents ships with three reasoner adapters. All three are auto-selected by `--reasoner auto` based on the ontology's profile, but you can pin one explicitly.
 
-### 10.2 Claim 验证工作流（v0.5）
-```
-LLM 给出答案："Margherita 是一种 Pizza"
-1. 把答案拆成 claim JSON: {type: class_membership, subject: Margherita, object: Pizza}
-2. ontology_verify_claim → verdict=supported
-3. ontology_get_evidence_path → 拿到 reasoning-report + inferred facts
-4. ontology_review_answer_claims --policy strict → 通过
-5. 把 evidence 注入 LLM prompt 修订答案
-```
+| Reasoner | Profiles | Operations | Explanation | Speed | Best for |
+|---|---|---|---|---|---|
+| **HermiT** | OWL 2 DL, OWL 2 Full | classify, realize, checkConsistency | no | slow (seconds to minutes) | Full DL ontologies, large ones, anything HermiT can handle. Default for OWL 2 DL. |
+| **ELK** | OWL 2 EL | classify, checkConsistency | no | fast (milliseconds) | Big ontologies in the EL profile (biomedical, BFO, GO). Default for OWL 2 EL. |
+| **Openllet** | OWL 2 DL | classify, realize, checkConsistency, explain | **yes** | medium | When you need an *explanation* of why something is entailed or why a class is unsatisfiable. |
 
-### 10.3 推理调试
-```
-本体报不一致
-1. ontology_check_consistency → false
-2. ontology_explain_inconsistency --reasoner openllet → 找到矛盾子集（axiom set）
-3. ontology_get_unsat_classes → 列出所有不可满足类
-4. ontology_explain_unsat_class <class_iri> --reasoner openllet → 解释该类为何不可满足
-```
+`auto` mode is currently `ELK` for EL ontologies, `Openllet` for everything else (it has the best DL performance of the three and supports explanations). We may add Pellet / Konklude / … in a future release.
 
-### 10.4 大规模 QA 评估（v0.6）
-```
-1. 准备 question set (JSONL) + claim fixture
-2. 写 experiment.yaml: ontologyIds=[bfo], questionSetPath=..., outputPath=...
-3. node tools/npm/bin/owl4agents.js benchmark-run exp.yaml
-4. node tools/npm/bin/owl4agents.js eval-qa results.jsonl
-5. 拿到 accuracy / false support rate / 4×4 confusion matrix
-```
+The reasoner-using MCP tools (anything that touches the inferred graph) all route through a single-thread executor. This is to keep the reasoner's internal state consistent. The 8-thread worker pool handles non-reasoner tools (browse, search, SPARQL-on-explicit, ...). If the reasoner pool is busy and you fire a reasoner-using tool, it waits. If 100 such requests queue up, the (101)th gets `-32000` "worker pool saturated" and you should back off.
+
+**Heuristics for picking a reasoner explicitly:**
+
+- Your ontology is in `OWL_2_EL` and is large: `--reasoner elk` (fastest path).
+- You need `ontology_explain_inconsistency` or `ontology_explain_unsat_class`: `--reasoner openllet` (only one that supports explanations).
+- Your ontology is in `OWL_2_DL` and small (< 1000 classes): `--reasoner openllet` (slightly better than HermiT on small inputs).
+- Your ontology is in `OWL_2_DL` and large: try `hermit` and `openllet` and pick whichever finishes first.
 
 ---
 
-## 11. 已知限制
+## 9. Error codes, troubleshooting, and limits
 
-| 限制 | 原因 |
-|---|---|
-| **Windows `java -jar` 可能 ACCESS_VIOLATION** | JVM/OWL API 交互问题，用 npm launcher 或 `.cmd` wrapper 绕开 |
-| **Windows MCP stdin 转发问题** | Node.js `execSync` 行为差异，用 `tools/bin/owl4agents-mcp.cmd` 绕开 |
-| **v0.5+ 不抽 free-text claim** | 拆分质量难控制，靠应用层拆结构化 claim |
-| **SPARQL 写操作** | 完全禁止 |
-| **MCP 服务器无写工具** | 写走 CLI，留 audit trail |
-| **codex / codex-cli MCP config 模板未发布** | 客户端命名与配置格式未稳定 |
-| **离线 build 需缓存** | 第一次 build 需联网拉依赖 |
-| **Java 22 必需** | Gradle toolchain 锁定 |
+### 9.1 The error envelope
+
+CLI prints `Error: <CODE> - <message>`. JSON mode and the MCP tools use:
+
+```json
+{
+  "message": "...",
+  "code": "ONTOLOGY_NOT_FOUND",
+  "details": { "ontologyId": "..." }
+}
+```
+
+### 9.2 Error codes (alphabetical)
+
+| Code | Where it appears | Meaning | What to do |
+|---|---|---|---|
+| `BUDGET_EXCEEDED` | `verify-answer`, `evidence-context` | The token budget or the max-claims budget is too small for the answer. | Increase `--max-context-tokens`, split the answer, or shrink the ontology. |
+| `CLAIM_VERIFICATION_FAILED` | `verify-claim`, `verify-answer` | Internal: the verifier raised an exception that wasn't a known error class. | Re-run with a different reasoner; check the ontology for malformed axioms. |
+| `DATATYPE_NO_FACETS` | `datatype-constraints` | The datatype has no `xsd:minInclusive` / `maxInclusive` / `pattern` / `enumeration` facets declared. | Expected for built-in XSD datatypes; not an error. |
+| `EVIDENCE_NOT_AVAILABLE` | `counterexamples`, `explain-unknown` | The verdict doesn't apply. | For example, `counterexamples` only works for contradicted claims. |
+| `ENTITY_NOT_FOUND` | `entity`, `class_context`, `relations`, ... | The IRI isn't in the ontology. | Run `search` to find the correct IRI; case-sensitive. |
+| `INPUT_NOT_FOUND` | `import` | The OWL file path doesn't exist. | Check the path. |
+| `INVALID_CLAIM_SCHEMA` | `verify-claim` | The claim JSON is missing required fields or has an unknown `type`. | Required: `claimId`, `type`, `subject`, `object`. |
+| `ONTOLOGY_CONSISTENT` | `explain_inconsistency`, `explain_unsat_class` | The ontology / class is satisfiable; no explanation is needed. | Not an error — just a useful signal. |
+| `ONTOLOGY_IMPORT_FAILED` | `import` | The ontology has an `owl:imports` declaration for a file the importer can't find. | Place the imported file on the import path, or remove the import. |
+| `ONTOLOGY_NOT_FOUND` | most tools | The `ontology_id` is not in `catalog.json`. | Run `import` first, or check spelling. |
+| `ONTOLOGY_NOT_READY` | reasoner-using tools | The ontology hasn't been imported or `reason` hasn't been run. | Run `node tools/npm/bin/owl4agents.js reason <id>` first. |
+| `ONTOLOGY_PARSE_FAILED` | `import` | The OWL file isn't valid Turtle / RDF / OWL XML. | Check the file with an external validator. |
+| `READONLY_VIOLATION` | (reserved, not currently fired) | A tool tried to perform a write. | Don't. |
+| `REASONER_INFEASIBLE` | reasoner-using tools | The reasoner ran out of memory or hit its timeout. | Try a lighter reasoner (ELK instead of HermiT), or reduce the ontology. |
+| `REASONER_NOT_FOUND` | reasoner-using tools | `--reasoner openllet` but the Openllet jar isn't on the classpath. | The shadowJar should include it; check `gradle :modules:ontology-cli:dependencies`. |
+| `SPARQL_SAFETY_VIOLATION` | `query --select/--ask/...` | The query contains a blacklisted write keyword. | Rewrite the query as a read. |
+| `SPARQL_VALIDATION_FAILED` | `query --validate`, `validate-sparql` | The query has a parse / structural error. | The error message includes the column number. |
+| `WORKER_POOL_SATURATED` | MCP only (HTTP) | The 8-thread worker pool is full. | Retry with backoff; the v0.7 stress test fires 10 concurrent reasoner calls. |
+
+### 9.3 Common scenarios and their fixes
+
+**"My SPARQL query with `rdfs:subClassOf` returns 'Unresolved prefixed name'"**
+
+The default graph doesn't declare a `PREFIX` mapping. Use full IRIs:
+
+```sparql
+SELECT ?s WHERE { ?s <http://www.w3.org/2000/01/rdf-schema#subClassOf> <http://example.org/v0.3#Animal> }
+```
+
+…or wrap the query in a prologue in your code. The safety guard only strips `INSERT DATA` etc., not `PREFIX` declarations.
+
+**"My claim returns `out_of_scope` but the class clearly exists"**
+
+Almost always a typo in the IRI. Run `missing-entities` to see what the verifier thinks the IRI refers to. Case-sensitive.
+
+**"I imported the ontology but `reason` says it's empty"**
+
+The file may have parsed but produced 0 axioms (e.g. comments only). Run `summary` to see entity counts.
+
+**"My duplicate-disjoint axiom surfaces twice"**
+
+The importer merges symmetric disjointness axioms but doesn't deduplicate. The disjointness is real; the duplicated IRI in the response is cosmetic. Filed as a known issue; not a correctness bug.
+
+**"`java -jar owl4agents.jar` crashes with ACCESS_VIOLATION on Windows"**
+
+Use `node tools/npm/bin/owl4agents.js` or `gradlew run --args="..."`. See [§7.5](#75-the-windows-java--jar-access_violation).
+
+**"MCP server returns 503 on the 101st SSE connection"**
+
+You hit `--max-sse-connections` (default 100). Increase the flag, or wait — `Retry-After: 30` says come back in 30s.
+
+**"MCP server returns 405 on `GET /mcp`"**
+
+You forgot the `Accept: text/event-stream` header. v0.8 returns `Allow: GET, POST` on `GET /mcp` for any other variant; this is the spec.
+
+**"MCP server returns 404 for an existing session"**
+
+The session is past `--session-ttl-minutes` and was swept. Re-`initialize`.
+
+**"`evidence-context` truncates and I lose critical info"**
+
+Increase `--max-context-tokens`. In `jsonl` format, the per-line `truncated` flag tells you exactly which evidence items were dropped.
+
+### 9.4 Known limits
+
+- **Reasoner pool is single-threaded**: one reasoning job at a time across the whole server. 8 concurrent reasoner requests will queue, the 9th will time out at the HTTP layer (default 30s).
+- **No SWRL rules**: OWL 2 RL is supported by ELK, but rule execution is not.
+- **No nominal reasoning at scale**: large nominal sets (e.g. `{a,b,c,d,...}` enumerations with thousands of elements) slow HermiT dramatically.
+- **Import path is local only**: `owl:imports` URIs must be resolvable to local files. Remote imports are not fetched.
+- **No versioning of ontologies**: re-importing the same `ontology_id` overwrites the previous one. Use `--force`.
+- **`--readonly` is contractual, not enforced** (today): all 56 tools are already read-only. The flag is a contract for future writes.
 
 ---
 
-**维护信息**
-- 验收报告：[reports/acceptance/v0.8.0_acceptance_report.md](reports/acceptance/v0.8.0_acceptance_report.md)
-- 测试脚本：[test_all_tools_v3.ps1](test_all_tools_v3.ps1)
-- 变更日志：[CHANGELOG.md](CHANGELOG.md)
-- 入门文档：[README.md](README.md)
-- OpenSpec 设计：`openspec/changes/add-v0-8-mcp-streamable-http-transport/`
+## 10. Testing, quality data, and acceptance evidence
+
+### 10.1 The test pyramid
+
+| Layer | What | How many | Time |
+|---|---|---|---|
+| Unit (Gradle) | `modules/*/src/test/` | 767 | ~30s |
+| Launcher smoke (npm) | `tools/npm/test/launcher.test.js` | 29 | ~10s |
+| MCP tool integration | v0.8 acceptance (`test/contracts/v08-acceptance/`) | 56 | ~30s |
+| Reasoner stress (tag `stress`) | 10 concurrent reasoner calls | 1 | ~60s |
+| End-to-end example packs | `examples/claim-verification/`, `examples/pizza-reasoning/`, `examples/biomedical-grounding/`, `examples/agent-mcp/` | 5 | ~5s each |
+
+Run them all:
+
+```powershell
+.\gradlew.bat test
+cd tools\npm; npm test; cd ..\..
+node tools/npm/test/launcher.test.js
+```
+
+### 10.2 What `v0.8.0_56tool_scoreboard.csv` shows
+
+After a clean v0.8 release, every one of the 56 MCP tools was called with a real request and the response was checked for the expected top-level keys. The scoreboard (`reports/acceptance/v0.8.0_56tool_scoreboard.csv`) records `Tool,Status,Summary`:
+
+- **Status `PASS`** — the response was a `success` result with the expected keys.
+- **Status `ISERR`** — the tool correctly returned an `isError: true` with a specific error code. This is **expected** behaviour for some tools when called on a particular ontology (e.g. `explain_inconsistency` on a consistent ontology returns `ONTOLOGY_CONSISTENT`; `find_counterexamples` on a supported claim returns `EVIDENCE_NOT_AVAILABLE`).
+
+`v0.8.0_56tool_scoreboard.csv` is the evidence that all 56 tools work.
+
+### 10.3 Reproducing the acceptance gate
+
+```powershell
+# Build everything, run the unit + smoke suites.
+.\gradlew.bat clean buildVerification
+.\gradlew.bat :modules:ontology-cli:shadowJar
+
+# Run the launcher smoke test.
+node tools/npm/test/launcher.test.js
+
+# Run the v0.8 acceptance suite (this is a separate Java entry point).
+.\gradlew.bat :modules:ontology-distribution:v08Acceptance
+```
+
+The acceptance suite exits 0 when all 56 tool checks pass.
+
+### 10.4 Where the evidence lives
+
+All test artifacts and acceptance evidence are under `reports/` (which is `.gitignore`'d locally — the published evidence is the test contracts and the scoreboard CSV):
+
+- `reports/acceptance/v0.8.0_56tool_scoreboard.csv` — the 56-tool scoreboard.
+- `reports/acceptance/v0.8.0_acceptance_report.md` — narrative summary.
+- `reports/acceptance/v0.8.0_gradle_test.log` — full Gradle test log.
+- `reports/acceptance/v0.8.0_npm_test.log` — npm test log.
+- `build/reports/tests/test/index.html` — Gradle HTML report.
+
+The contract tests that the acceptance gate enforces live under `test/contracts/v08-acceptance/`.
+
+---
+
+## License and contributing
+
+Apache-2.0. See [LICENSE](LICENSE). Bug reports and PRs welcome at https://github.com/leungBH/owl4agents.
+
+For protocol contracts and JSON schemas, see the archived OpenSpec changes under `openspec/changes/archive/`. For the strict per-tool contract, see the contract test files under `test/contracts/`.
