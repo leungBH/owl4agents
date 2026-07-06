@@ -137,13 +137,13 @@ class HttpMcpServerTest {
     }
 
     @Test
-    @DisplayName("GET /info returns 200 with transport=http and version=0.7.0")
+    @DisplayName("GET /info returns 200 with transport=http and the SERVER_VERSION constant")
     void getInfoReturns200() throws Exception {
         HttpResponse<String> response = getJson("/info");
         assertEquals(200, response.statusCode());
         JsonObject body = new Gson().fromJson(response.body(), JsonObject.class);
         assertEquals("http", body.get("transport").getAsString());
-        assertEquals("0.7.0", body.get("version").getAsString());
+        assertEquals(McpServerAdapter.SERVER_VERSION, body.get("version").getAsString());
         assertTrue(body.has("ontologies"));
     }
 
@@ -158,11 +158,12 @@ class HttpMcpServerTest {
         assertEquals(200, response.statusCode());
         String body = response.body();
         assertTrue(body.contains("owl4agents"), "Banner should contain 'owl4agents': " + body);
-        assertTrue(body.contains("0.7.0"), "Banner should contain version: " + body);
+        assertTrue(body.contains(McpServerAdapter.SERVER_VERSION),
+            "Banner should contain version: " + body);
     }
 
     @Test
-    @DisplayName("GET /mcp returns 405 with Allow: POST header")
+    @DisplayName("GET /mcp returns 405 with Allow: GET, POST header (v0.8: GET added for SSE)")
     void getMcpReturns405() throws Exception {
         HttpRequest request = HttpRequest.newBuilder(URI.create(baseUrl + "/mcp"))
             .GET()
@@ -171,7 +172,10 @@ class HttpMcpServerTest {
         HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
         assertEquals(405, response.statusCode());
         assertTrue(response.headers().firstValue("Allow").isPresent());
-        assertEquals("POST", response.headers().firstValue("Allow").get());
+        String allow = response.headers().firstValue("Allow").get();
+        // v0.8 added GET for SSE; both GET and POST are allowed on /mcp now.
+        assertTrue(allow.contains("GET") && allow.contains("POST"),
+            "Allow header must include GET and POST: " + allow);
     }
 
     @Test
@@ -201,8 +205,8 @@ class HttpMcpServerTest {
     }
 
     @Test
-    @DisplayName("POST /mcp with text/event-stream Accept returns 501")
-    void sseAcceptReturns501() throws Exception {
+    @DisplayName("POST /mcp with text/event-stream Accept and no open SSE stream returns 200 with X-Streamable-Http-Fallback (v0.8 fallback path)")
+    void sseAcceptFallsBackToJson() throws Exception {
         HttpRequest request = HttpRequest.newBuilder(URI.create(baseUrl + "/mcp"))
             .header("Content-Type", "application/json")
             .header("Accept", "text/event-stream")
@@ -210,9 +214,17 @@ class HttpMcpServerTest {
             .timeout(Duration.ofSeconds(2))
             .build();
         HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
-        assertEquals(501, response.statusCode());
+        // v0.8: when the client sends Accept: text/event-stream but no open
+        // SSE stream is bound, the server falls back to a plain JSON response
+        // and signals the fallback via the X-Streamable-Http-Fallback header.
+        // (v0.7 returned 501 here — that path is now reserved for unsupported
+        // features, not the SSE-Accept path.)
+        assertEquals(200, response.statusCode());
+        assertTrue(response.headers().firstValue("X-Streamable-Http-Fallback").isPresent(),
+            "v0.8 must signal fallback via X-Streamable-Http-Fallback header");
         JsonObject body = new Gson().fromJson(response.body(), JsonObject.class);
-        assertEquals(-32000, body.getAsJsonObject("error").get("code").getAsInt());
+        assertTrue(body.has("result"),
+            "Body must be a JSON-RPC result envelope: " + response.body());
     }
 
     @Test
@@ -241,7 +253,7 @@ class HttpMcpServerTest {
     }
 
     @Test
-    @DisplayName("POST /mcp initialize returns 200 with protocolVersion=2025-06-18 and version=0.7.0")
+    @DisplayName("POST /mcp initialize returns 200 with protocolVersion=2025-06-18 and the SERVER_VERSION constant")
     void initializeReturns20250618() throws Exception {
         JsonObject req = new JsonObject();
         req.addProperty("jsonrpc", "2.0");
@@ -253,7 +265,8 @@ class HttpMcpServerTest {
         JsonObject body = new Gson().fromJson(response.body(), JsonObject.class);
         JsonObject result = body.getAsJsonObject("result");
         assertEquals("2025-06-18", result.get("protocolVersion").getAsString());
-        assertEquals("0.7.0", result.getAsJsonObject("serverInfo").get("version").getAsString());
+        assertEquals(McpServerAdapter.SERVER_VERSION,
+            result.getAsJsonObject("serverInfo").get("version").getAsString());
     }
 
     /**

@@ -662,6 +662,11 @@ public class ReasonerServiceImpl implements ReasonerService {
             // workspace name "default".
             String home = System.getenv("OWL4AGENTS_HOME");
             if (home == null || home.isBlank()) {
+                // Also accept the OWL4AGENTS_HOME system property (used by integration tests
+                // that cannot mutate the process environment).
+                home = System.getProperty("OWL4AGENTS_HOME");
+            }
+            if (home == null || home.isBlank()) {
                 // Heuristic: look in the current user's home for the owl4agents default workspace
                 String userHome = System.getProperty("user.home");
                 Path candidate = Path.of(userHome, ".owl4agents", "workspaces", workspaceName, "ontologies",

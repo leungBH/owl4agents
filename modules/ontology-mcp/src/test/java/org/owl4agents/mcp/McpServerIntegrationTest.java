@@ -48,8 +48,9 @@ class McpServerIntegrationTest {
         assertEquals("2025-06-18", result.get("protocolVersion").getAsString());
         assertTrue(result.has("capabilities"));
         assertTrue(result.has("serverInfo"));
-        // v0.7.0: serverInfo.version is 0.7.0
-        assertEquals("0.7.0", result.getAsJsonObject("serverInfo").get("version").getAsString());
+        // v0.8.0: serverInfo.version tracks McpServerAdapter.SERVER_VERSION
+        assertEquals(McpServerAdapter.SERVER_VERSION,
+            result.getAsJsonObject("serverInfo").get("version").getAsString());
     }
 
     @Test

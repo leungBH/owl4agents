@@ -68,10 +68,17 @@ class V03AcceptanceSuite {
         importer = new OntologyImporter(homeResolver, catalogStore);
         corpusFixturesPath = System.getProperty("corpus.fixtures", "../test/corpus");
 
+        // Point OWL4AGENTS_HOME at the test's tempDir so the reasoner's stored-
+        // entailment fallback can read inferred-class-hierarchy.jsonl back from disk.
+        System.setProperty("OWL4AGENTS_HOME", tempDir.toString());
+
         initializer.initializeIdempotent(WorkspaceId.DEFAULT);
         importGoldenOntology();
 
         ReasonerServiceImpl reasonerService = createReasonerService();
+        // Pre-run the reasoner so the inferred-class-hierarchy.jsonl is written to the
+        // test's tempDir; the reasoner's stored-entailment fallback path reads it from there.
+        reasonerService.runReasoner(new OntologyId(ONTOLOGY_ID), java.util.Optional.empty());
         String workspaceBasePath = workspaceBasePath();
         ConsistencyAnalysisService consistencyService =
             new ConsistencyAnalysisService(reasonerService.getLifecycleManager(), workspaceBasePath);

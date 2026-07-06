@@ -77,7 +77,7 @@ When the MCP server starts, it responds to the `initialize` request with:
   "capabilities": { "tools": {} },
   "serverInfo": {
     "name": "owl4agents",
-    "version": "0.7.1"
+    "version": "0.8.0"
   }
 }
 ```
@@ -134,6 +134,41 @@ You can regenerate it (or override the URL) with:
 node tools/npm/bin/owl4agents.js mcp-config --client http
 node tools/npm/bin/owl4agents.js mcp-config --client http --url http://remote-host:9000/mcp
 ```
+
+## Trae IDE (v0.8+)
+
+Trae IDE speaks the MCP 2025-03-26 Streamable HTTP transport — it opens a
+`GET /mcp` SSE stream and uses `Mcp-Session-Id` headers to bind a
+logical session. v0.8.0+ owl4agents implements that transport, so the
+configuration is the same as the generic HTTP client above (a single
+`url` field ending in `/mcp`).
+
+A committed Trae-only fixture is at
+[`configs/trae-mcp-config.json`](configs/trae-mcp-config.json):
+
+```json
+{
+  "mcpServers": {
+    "owl4agents": {
+      "url": "http://127.0.0.1:8080/mcp"
+    }
+  }
+}
+```
+
+You can regenerate it (or override the URL) with:
+
+```bash
+node tools/npm/bin/owl4agents.js mcp-config --client trae
+node tools/npm/bin/owl4agents.js mcp-config --client trae --url http://remote-host:9000/mcp
+```
+
+In the Trae IDE MCP configuration dialog, paste the `mcpServers` block
+into the JSON config. The IDE will open a long-lived `GET /mcp` SSE
+stream, send `initialize` to receive a `Mcp-Session-Id`, and use that
+id on every subsequent `POST /mcp` request. If the server is older
+than v0.8.0, Trae IDE will fail to connect with `SSE error: Non-200
+status code (405)` — upgrade to v0.8.0 or later to fix it.
 
 ### Probe commands
 

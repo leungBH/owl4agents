@@ -1,5 +1,52 @@
 # Changelog
 
+## 0.8.0 - 2026-06-29
+
+### Fixed (v0.8.0 post-release retest 2026-07-03)
+
+- **D-004 [BLOCKING] ClassCastException on boolean parameters** — 8 tools that accept `include_inferred` (and similar booleans) crashed with `ClassCastException` when callers sent the JSON boolean `true`/`false` instead of a string. The parameter parser now uses `String.valueOf(args.get(...))` so both `true` and `"true"` are accepted.
+- **D-005 [BLOCKING] `ontology_benchmark_run` rejected inline `questions:` blocks** — The `ExperimentConfigParser` requires a `questionSetPath` (a JSONL file path), not an inline `questions:` array. The test fixture and the `test_all_tools_v3.ps1` integration script now generate a valid JSONL question set and a valid config YAML referencing it.
+- **D-006 [BLOCKING] `entity_iri` vs `class_iri` / `property_iri` schema mismatch** — `McpToolRegistry` declared `class_iri` / `property_iri` / `individual_iri` for four tools, but the implementation reads `entity_iri`. The schemas now use `entity_iri` uniformly, matching the implementation.
+- **D-007 [BLOCKING] Reasoner name case sensitivity** — `ReasonerLifecycleManager` matched the reasoner registry keys with `equals`, so callers passing `openllet` (lowercase) were rejected even though the canonical key is `Openllet`. Added `canonicalReasonerName()` for case-insensitive lookup.
+- **D-008 [BLOCKING] NPE / JSON-RPC error when claim's `ontologyId` differs from the caller's `ontology_id`** — 4 claim-verification tools (`verify_claim`, `get_evidence_path`, `find_counterexamples`, `explain_unknown`) and `detect_missing_entities` previously passed the caller's `ontology_id` as a side-channel and forwarded the claim's own (possibly blank or foreign) `ontologyId` to the service, which then NPE'd inside the service layer. The top-level `ontology_id` is now authoritative: a new `withAuthoritativeOntologyId()` helper rebuilds the claim with the caller's value before invoking any service.
+- **D-009 [BLOCKING] NPE in `QaEvaluationService` on null `Optional`** — Gson 2.13 sometimes deserializes a record component typed as `Optional<String>` as Java `null` (not `Optional.empty()`), and `line.reviewStatus().orElse(null)` then NPE'd. `QaEvaluationService.evaluate()` now treats a null `reviewStatus` as `Optional.empty()`.
+- **D-010 [BLOCKING] `V03AcceptanceSuite` 2 failures (`Subclass claim is supported`, `Supported claim has an evidence path`)** — `ReasonerServiceImpl.checkStoredEntailment()` reads the workspace's `inferred-class-hierarchy.jsonl` only from `OWL4AGENTS_HOME` env var or `~/.owl4agents`, ignoring the constructor's `workspaceBasePath`. The JUnit `@TempDir` was therefore invisible. The lookup now also accepts the `OWL4AGENTS_HOME` system property (needed for `Process`-less JUnit), and the suite now pre-runs the reasoner so the file is on disk before `verify()` is called.
+
+### Added
+
+- **MCP Streamable HTTP transport on `GET /mcp`** — `HttpMcpServer` now handles `GET /mcp` with `Accept: text/event-stream` and upgrades the connection to a long-lived Server-Sent Events (SSE) stream. Each stream is bound to a `Mcp-Session-Id` (UUID v4) issued on `initialize`. Multiple concurrent streams per session are allowed (fan-out). The full protocol follows the MCP 2025-03-26 Streamable HTTP specification.
+- **SSE-upgrade path on `POST /mcp`** — when the client sends `Accept: text/event-stream` and a valid `Mcp-Session-Id`, the JSON-RPC response is delivered as an `event: message` frame on the bound SSE stream and the POST itself returns `200 OK` with an empty body. If the session has no open SSE stream and the global SSE cap is reached, the server falls back to a plain JSON response with `X-Streamable-Http-Fallback: application/json`. The v0.7.x plain-JSON path is unchanged for `Accept: application/json` clients.
+- **Session management** — new `McpSession` and `McpSessionManager` classes track per-session SSE stream sets, last-access timestamps, and global stream counts. Idle sessions are swept every minute using the configured TTL (default 30 minutes).
+- **SSE heartbeats** — new `McpSseStream.writeHeartbeat()` emits an RFC 8895-style comment frame (`: ping\n\n`) every 15 seconds on every open stream to keep idle proxies and Trae IDE alive. A dedicated `ScheduledExecutorService` is used so heartbeats never block the reasoner or worker pools.
+- **Three new CLI options on the `mcp` subcommand** (HTTP transport only):
+  - `--max-sse-connections <n>` (default 100, must be ≥ 1) — global cap on concurrent SSE streams; the server refuses new streams with 503 + `Retry-After: 30` when the cap is reached.
+  - `--session-ttl-minutes <m>` (default 30, must be ≥ 1) — idle session lifetime; sessions are swept every minute.
+  - `--sse-heartbeat-seconds <s>` (default 15, must be ≥ 1) — heartbeat interval per stream.
+  - All three options reject values < 1 at startup with a non-zero exit code and a diagnostic message.
+- **`mcp-config --client trae` generator** — Trae IDE uses the MCP 2025-03-26 Streamable HTTP transport. The generator emits a single `mcpServers.owl4agents.url` field (byte-equivalent to `--client http`) and a committed fixture is provided at `examples/agent-mcp/configs/trae-mcp-config.json`. `examples/agent-mcp/README.md` now has a "Trae IDE (v0.8+)" section.
+- **`Mcp-Session-Id` header on `initialize` and `POST /mcp`** — a v0.7.x plain `initialize` request now returns `Mcp-Session-Id: <uuid>` in the response headers. Subsequent `POST /mcp` requests must echo that header. The header is validated as a UUID v4 string; non-UUID values are rejected with 400.
+- **Shutdown sequencing** — `HttpMcpServer.stop()` (and `close()`) follows a documented six-step sequence (cancel heartbeat scheduler → close all SSE streams → close `HttpServer` → drain worker pools → drain reasoner pool → clear `McpSessionManager`) that completes within 5 seconds under SIGTERM.
+- **New test classes** — `HttpMcpServerSseTest` (32 cases covering accept negotiation, session id lifecycle, fallback headers, multi-stream fan-out, heartbeat, shutdown, cap, header validation, no-new-deps, version assertion) and `McpSessionManagerTest` (sweep expiry, concurrent create, UUID collision, active stream count, close idempotency).
+- **`openspec/change` artifact for the v0.8 design** — the change is validated with `openspec validate --strict` and includes proposal, design, tasks, and four delta specs (mcp-streamable-http-transport, mcp-sse-session, mcp-cli, mcp-server-lifecycle).
+
+### Fixed
+
+- **`GET /mcp` no longer returns 405 for Trae IDE** — Trae IDE speaks the MCP 2025-03-26 Streamable HTTP transport. v0.7.x returned `405 Method Not Allowed` because it only registered `POST /mcp`; v0.8.0 registers a separate `SseGetHandler` that handles `GET + Accept: text/event-stream` and returns `405 + Allow: GET, POST` for any other `GET` variant.
+- **`POST /mcp` no longer returns 501 when the client sends `Accept: text/event-stream` without an open SSE stream** — v0.7.x returned 501 ("SSE not yet implemented"); v0.8.0 falls back transparently to a plain-JSON response with an `X-Streamable-Http-Fallback: application/json` header.
+- **v0.7.x plain-HTTP clients continue to work byte-for-byte** — the legacy `Accept: application/json` path is unchanged; the new SSE header parsing only activates when `text/event-stream` is present in the `Accept` header. A v0.7.x client gets a 200 OK with the same JSON-RPC body it would have gotten before.
+- **Reasoner-using tool calls arriving over SSE are serialized on the same single-thread reasoner executor as the v0.7.x plain-HTTP path** — prevents reasoner races without changing the throughput contract documented in v0.7.1.
+
+### Changed
+
+- **Version bump** — `build.gradle.kts`, `tools/npm/package.json`, `modules/ontology-cli/src/main/java/org/owl4agents/cli/Owl4AgentsCli.java`, `.github/workflows/ci.yml` `--version` assertion, and `examples/agent-mcp/README.md` `initialize` example all now report `0.8.0`.
+- **`McpServerAdapter.SERVER_VERSION` constant** — bumped from `0.7.0` to `0.8.0`; the `initialize` JSON-RPC response now reports `serverInfo.version = "0.8.0"`.
+
+### Notes
+
+- v0.8.0 is backward-compatible with v0.7.1 stdio and HTTP clients. The readonly tool count remains 56.
+- No new external dependencies.
+- The default `session-ttl-minutes` (30) and `sse-heartbeat-seconds` (15) match the v0.8 spec's defaults; operators who need longer sessions or faster heartbeats should override with the new CLI options.
+
 ## 0.7.1 - 2026-06-25
 
 ### Fixed

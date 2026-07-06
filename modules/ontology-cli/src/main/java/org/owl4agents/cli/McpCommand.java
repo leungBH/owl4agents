@@ -9,6 +9,7 @@ import org.owl4agents.storage.HomeDirectoryResolver;
 
 import java.io.*;
 import java.nio.file.Path;
+import java.time.Duration;
 import java.util.*;
 import java.util.concurrent.Callable;
 
@@ -49,6 +50,21 @@ public class McpCommand implements Callable<Integer> {
 
     @Option(names = {"--port"}, description = "HTTP port (only used with --transport=http); use 0 for ephemeral", defaultValue = "8080")
     private int port = 8080;
+
+    @Option(names = {"--max-sse-connections"},
+        description = "Cap on concurrent SSE streams (only used with --transport=http); must be >= 1. Each stream holds a thread, so this is also a soft OS-thread budget. Default: ${DEFAULT-VALUE}",
+        defaultValue = "100")
+    private int maxSseConnections = HttpMcpServer.DEFAULT_MAX_SSE_CONNECTIONS;
+
+    @Option(names = {"--session-ttl-minutes"},
+        description = "Session idle TTL in minutes (only used with --transport=http); must be >= 1. Default: ${DEFAULT-VALUE}",
+        defaultValue = "30")
+    private long sessionTtlMinutes = HttpMcpServer.DEFAULT_SESSION_TTL.toMinutes();
+
+    @Option(names = {"--sse-heartbeat-seconds"},
+        description = "SSE heartbeat interval in seconds (only used with --transport=http); must be >= 1. Default: ${DEFAULT-VALUE}",
+        defaultValue = "15")
+    private long sseHeartbeatSeconds = HttpMcpServer.DEFAULT_HEARTBEAT_INTERVAL.toSeconds();
 
     private final Gson gson = GsonFactory.createGson();
 
@@ -143,7 +159,26 @@ public class McpCommand implements Callable<Integer> {
      * the JVM shutdown hook registered in HttpMcpServer's constructor).
      */
     private int runHttp(McpServerAdapter adapter) {
-        HttpMcpServer server = new HttpMcpServer(adapter);
+        // D-001 fix: wire the three v0.8 CLI options into the HttpMcpServer
+        // constructor. Previously the CLI parsed these flags but discarded
+        // them, so the server always started with the defaults
+        // (max_sse=100, session_ttl_min=30, heartbeat_sec=15) regardless of
+        // what the user passed on the command line.
+        HttpMcpServer server;
+        try {
+            server = new HttpMcpServer(
+                adapter,
+                maxSseConnections,
+                Duration.ofMinutes(sessionTtlMinutes),
+                Duration.ofSeconds(sseHeartbeatSeconds));
+        } catch (IllegalArgumentException iae) {
+            // Constructor validation failure (e.g. max-sse-connections < 1,
+            // session-ttl-minutes < 1, heartbeat-seconds < 1). Emit a
+            // single-line diagnostic and exit with EX_USAGE (64) so the
+            // operator sees a clear message, not a Java stack trace.
+            System.err.println("MCP HTTP configuration error: " + iae.getMessage());
+            return 64;
+        }
         try {
             server.start(host, port);
             // Block the main thread. Shutdown is driven by the JVM shutdown hook

@@ -184,10 +184,11 @@ public class McpServerAdapter {
  public static final String PROTOCOL_VERSION = "2025-06-18";
 
  /**
- * Server version. Bumped from `0.6.0` to `0.7.0` in the v0.7 release.
- * Single source of truth -> ?read by both stdio and HTTP transports.
+ * Server version. Bumped to `0.8.0` in the v0.8 release (Streamable HTTP /
+ * SSE transport support). Single source of truth -> ?read by both stdio and
+ * HTTP transports (including the new `GET /mcp` SSE path).
  */
- public static final String SERVER_VERSION = "0.7.0";
+ public static final String SERVER_VERSION = "0.8.0";
 
  /**
  * Public JSON-RPC 2.0 entry point used by both the stdio transport
@@ -1019,7 +1020,7 @@ public class McpServerAdapter {
  String ontologyIdStr = (String) args.get("ontology_id");
  String classIRI = (String) args.get("class_uri");
  if (ontologyIdStr == null || classIRI == null) return errorResponse(ServiceError.of(ErrorCode.CLASS_NOT_FOUND, "ontology_id and class_uri are required"));
- boolean includeInferred = Boolean.parseBoolean((String) args.getOrDefault("include_inferred", "false"));
+ boolean includeInferred = Boolean.parseBoolean(String.valueOf(args.getOrDefault("include_inferred", "false")));
  try {
  org.owl4agents.owlapi.SemanticDeepeningService service = this.semanticDeepeningService;
  ServiceResult<ClassRestrictionsResult> result = service.getClassRestrictions(new OntologyId(ontologyIdStr), classIRI, includeInferred);
@@ -1037,7 +1038,7 @@ public class McpServerAdapter {
  String ontologyIdStr = (String) args.get("ontology_id");
  String propertyIRI = (String) args.get("property_uri");
  if (ontologyIdStr == null || propertyIRI == null) return errorResponse(ServiceError.of(ErrorCode.PROPERTY_NOT_FOUND, "ontology_id and property_uri are required"));
- boolean includeInferred = Boolean.parseBoolean((String) args.getOrDefault("include_inferred", "false"));
+ boolean includeInferred = Boolean.parseBoolean(String.valueOf(args.getOrDefault("include_inferred", "false")));
  try {
  org.owl4agents.owlapi.SemanticDeepeningService service = this.semanticDeepeningService;
  ServiceResult<PropertyCharacteristicsResult> result = service.getPropertyCharacteristics(new OntologyId(ontologyIdStr), propertyIRI, includeInferred);
@@ -1053,7 +1054,7 @@ public class McpServerAdapter {
  String ontologyIdStr = (String) args.get("ontology_id");
  String propertyIRI = (String) args.get("property_uri");
  if (ontologyIdStr == null || propertyIRI == null) return errorResponse(ServiceError.of(ErrorCode.PROPERTY_NOT_FOUND, "ontology_id and property_uri are required"));
- boolean includeInferred = Boolean.parseBoolean((String) args.getOrDefault("include_inferred", "false"));
+ boolean includeInferred = Boolean.parseBoolean(String.valueOf(args.getOrDefault("include_inferred", "false")));
  try {
  org.owl4agents.owlapi.SemanticDeepeningService service = this.semanticDeepeningService;
  ServiceResult<PropertyAxiomsResult> result = service.getEquivalentProperties(new OntologyId(ontologyIdStr), propertyIRI, includeInferred);
@@ -1067,7 +1068,7 @@ public class McpServerAdapter {
  String ontologyIdStr = (String) args.get("ontology_id");
  String propertyIRI = (String) args.get("property_uri");
  if (ontologyIdStr == null || propertyIRI == null) return errorResponse(ServiceError.of(ErrorCode.PROPERTY_NOT_FOUND, "ontology_id and property_uri are required"));
- boolean includeInferred = Boolean.parseBoolean((String) args.getOrDefault("include_inferred", "false"));
+ boolean includeInferred = Boolean.parseBoolean(String.valueOf(args.getOrDefault("include_inferred", "false")));
  try {
  org.owl4agents.owlapi.SemanticDeepeningService service = this.semanticDeepeningService;
  ServiceResult<PropertyAxiomsResult> result = service.getDisjointProperties(new OntologyId(ontologyIdStr), propertyIRI, includeInferred);
@@ -1111,7 +1112,7 @@ public class McpServerAdapter {
  String sourceIRI = (String) args.get("source_entity_uri");
  String targetIRI = (String) args.get("target_entity_uri");
  if (ontologyIdStr == null || sourceIRI == null || targetIRI == null) return errorResponse(ServiceError.of(ErrorCode.ENTITY_NOT_FOUND, "ontology_id, source_entity_uri, and target_entity_uri are required"));
- boolean includeInferred = Boolean.parseBoolean((String) args.getOrDefault("include_inferred", "false"));
+ boolean includeInferred = Boolean.parseBoolean(String.valueOf(args.getOrDefault("include_inferred", "false")));
  try {
  org.owl4agents.owlapi.SemanticDeepeningService service = this.semanticDeepeningService;
  ServiceResult<PropertyAxiomsResult> result = service.findRelationsBetweenEntities(new OntologyId(ontologyIdStr), sourceIRI, targetIRI, includeInferred);
@@ -1125,7 +1126,7 @@ public class McpServerAdapter {
  String ontologyIdStr = (String) args.get("ontology_id");
  String individualIRI = (String) args.get("individual_uri");
  if (ontologyIdStr == null || individualIRI == null) return errorResponse(ServiceError.of(ErrorCode.INDIVIDUAL_NOT_FOUND, "ontology_id and individual_uri are required"));
- boolean includeInferred = Boolean.parseBoolean((String) args.getOrDefault("include_inferred", "false"));
+ boolean includeInferred = Boolean.parseBoolean(String.valueOf(args.getOrDefault("include_inferred", "false")));
  try {
  org.owl4agents.owlapi.SemanticDeepeningService service = this.semanticDeepeningService;
  ServiceResult<PropertyAxiomsResult> result = service.getObjectPropertyAssertions(new OntologyId(ontologyIdStr), individualIRI, includeInferred);
@@ -1138,7 +1139,7 @@ public class McpServerAdapter {
  String ontologyIdStr = (String) args.get("ontology_id");
  String individualIRI = (String) args.get("individual_uri");
  if (ontologyIdStr == null || individualIRI == null) return errorResponse(ServiceError.of(ErrorCode.INDIVIDUAL_NOT_FOUND, "ontology_id and individual_uri are required"));
- boolean includeInferred = Boolean.parseBoolean((String) args.getOrDefault("include_inferred", "false"));
+ boolean includeInferred = Boolean.parseBoolean(String.valueOf(args.getOrDefault("include_inferred", "false")));
  try {
  org.owl4agents.owlapi.SemanticDeepeningService service = this.semanticDeepeningService;
  ServiceResult<PropertyAxiomsResult> result = service.getDataPropertyAssertions(new OntologyId(ontologyIdStr), individualIRI, includeInferred);
@@ -1151,7 +1152,7 @@ public class McpServerAdapter {
  String ontologyIdStr = (String) args.get("ontology_id");
  String individualIRI = (String) args.get("individual_uri");
  if (ontologyIdStr == null || individualIRI == null) return errorResponse(ServiceError.of(ErrorCode.INDIVIDUAL_NOT_FOUND, "ontology_id and individual_uri are required"));
- boolean includeInferred = Boolean.parseBoolean((String) args.getOrDefault("include_inferred", "false"));
+ boolean includeInferred = Boolean.parseBoolean(String.valueOf(args.getOrDefault("include_inferred", "false")));
  try {
  org.owl4agents.owlapi.SemanticDeepeningService service = this.semanticDeepeningService;
  ServiceResult<PropertyAxiomsResult> result = service.getSameIndividuals(new OntologyId(ontologyIdStr), individualIRI, includeInferred);
@@ -1164,7 +1165,7 @@ public class McpServerAdapter {
  String ontologyIdStr = (String) args.get("ontology_id");
  String individualIRI = (String) args.get("individual_uri");
  if (ontologyIdStr == null || individualIRI == null) return errorResponse(ServiceError.of(ErrorCode.INDIVIDUAL_NOT_FOUND, "ontology_id and individual_uri are required"));
- boolean includeInferred = Boolean.parseBoolean((String) args.getOrDefault("include_inferred", "false"));
+ boolean includeInferred = Boolean.parseBoolean(String.valueOf(args.getOrDefault("include_inferred", "false")));
  try {
  org.owl4agents.owlapi.SemanticDeepeningService service = this.semanticDeepeningService;
  ServiceResult<PropertyAxiomsResult> result = service.getDifferentIndividuals(new OntologyId(ontologyIdStr), individualIRI, includeInferred);
@@ -1210,6 +1211,7 @@ public class McpServerAdapter {
  if (claim == null) {
  return errorResponse(ServiceError.invalidClaimSchema("Failed to parse claim from arguments."));
  }
+ claim = withAuthoritativeOntologyId(claim, ontologyIdStr);
 
  // Validate
  ClaimValidator validator = new ClaimValidator();
@@ -1271,6 +1273,7 @@ public class McpServerAdapter {
  if (claim == null) {
  return errorResponse(ServiceError.invalidClaimSchema("Failed to parse claim from arguments."));
  }
+ claim = withAuthoritativeOntologyId(claim, ontologyIdStr);
 
  ClaimValidator validator = new ClaimValidator();
  ServiceResult<Claim> validationResult = validator.validate(claim);
@@ -1324,6 +1327,7 @@ public class McpServerAdapter {
  if (claim == null) {
  return errorResponse(ServiceError.invalidClaimSchema("Failed to parse claim from arguments."));
  }
+ claim = withAuthoritativeOntologyId(claim, ontologyIdStr);
 
  ClaimValidator validator = new ClaimValidator();
  ServiceResult<Claim> validationResult = validator.validate(claim);
@@ -1375,6 +1379,7 @@ public class McpServerAdapter {
  if (claim == null) {
  return errorResponse(ServiceError.invalidClaimSchema("Failed to parse claim from arguments."));
  }
+ claim = withAuthoritativeOntologyId(claim, ontologyIdStr);
 
  ClaimValidator validator = new ClaimValidator();
  ServiceResult<Claim> validationResult = validator.validate(claim);
@@ -1411,26 +1416,34 @@ public class McpServerAdapter {
  }
 
  private Map<String, Object> executeDetectMissingEntities(Map<String, Object> args) {
- String ontologyIdStr = (String) args.get("ontology_id");
- Object claimObj = args.get("claim");
- Object termsObj = args.get("terms");
- if (ontologyIdStr == null) {
- return errorResponse(ServiceError.of(ErrorCode.INVALID_CLAIM_SCHEMA, "ontology_id is required"));
- }
+        String ontologyIdStr = (String) args.get("ontology_id");
+        Object claimObj = args.get("claim");
+        Object termsObj = args.get("terms");
+        if (ontologyIdStr == null) {
+            return errorResponse(ServiceError.of(ErrorCode.INVALID_CLAIM_SCHEMA, "ontology_id is required"));
+        }
 
- Claim claim = null;
- if (claimObj != null) {
- claim = parseClaimFromMcpArgs(claimObj, null);
- } else if (termsObj != null) {
- // Build a minimal claim from terms list
- String[] iris = parseTermsListFromMcpArgs(termsObj);
- if (iris != null && iris.length > 0) {
- ClaimEntity subject = new ClaimEntity("class", iris[0]);
- ClaimEntity object = iris.length > 1 ? new ClaimEntity("class", iris[1]) : null;
- claim = new Claim("missing-entities-check", ClaimType.SUBCLASS, ontologyIdStr,
- subject, null, object, Optional.empty(), Optional.empty(), Optional.empty());
- }
- }
+        Claim claim = null;
+        if (claimObj != null) {
+            claim = parseClaimFromMcpArgs(claimObj, null);
+            if (claim != null) {
+                // Top-level ontology_id is authoritative — override any
+                // ontologyId embedded in the claim so the service never sees
+                // a blank/foreign ontology id.
+                claim = new Claim(claim.claimId(), claim.type(), ontologyIdStr,
+                    claim.subject(), claim.predicate(), claim.object(),
+                    claim.reasoner(), claim.graphScope(), claim.options());
+            }
+        } else if (termsObj != null) {
+            // Build a minimal claim from terms list
+            String[] iris = parseTermsListFromMcpArgs(termsObj);
+            if (iris != null && iris.length > 0) {
+                ClaimEntity subject = new ClaimEntity("class", iris[0]);
+                ClaimEntity object = iris.length > 1 ? new ClaimEntity("class", iris[1]) : null;
+                claim = new Claim("missing-entities-check", ClaimType.SUBCLASS, ontologyIdStr,
+                    subject, null, object, Optional.empty(), Optional.empty(), Optional.empty());
+            }
+        }
 
  if (claim == null) {
  return errorResponse(ServiceError.invalidClaimSchema("Provide claim or terms with valid data."));
@@ -2115,6 +2128,26 @@ public class McpServerAdapter {
  return null;
  }
  }
+
+    /**
+     * If the caller supplied a non-blank top-level ontology_id and the parsed
+     * claim either has no ontologyId or has a different one, rebuild the claim
+     * with the caller's value. This keeps the MCP-level ontology_id as the
+     * single source of truth and prevents downstream services from receiving
+     * a blank or foreign ontologyId (which would NPE in many services).
+     */
+    private Claim withAuthoritativeOntologyId(Claim claim, String ontologyIdStr) {
+        if (claim == null || ontologyIdStr == null || ontologyIdStr.isBlank()) {
+            return claim;
+        }
+        String claimOntology = claim.ontologyId();
+        if (claimOntology == null || claimOntology.isBlank() || !claimOntology.equals(ontologyIdStr)) {
+            return new Claim(claim.claimId(), claim.type(), ontologyIdStr,
+                claim.subject(), claim.predicate(), claim.object(),
+                claim.reasoner(), claim.graphScope(), claim.options());
+        }
+        return claim;
+    }
 
  private ClaimEntity parseEntityFromMap(Object entityObj) {
  if (entityObj == null) return null;

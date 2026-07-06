@@ -150,12 +150,25 @@ class McpAcceptanceTest {
 
         @Test
         @DisplayName("Tool responses have proper structure (status + data for success)")
-        void toolResponseStructure() {
-            McpServerAdapter adapter = new McpServerAdapter(Map.of(), tempDir.toString());
+        void toolResponseStructure() throws Exception {
+            // The McpServerAdapter reads homeDir from the serviceContext
+            // (NOT from the log file path) and resolves workspaces under
+            // that home. Seed an empty catalog so ontology_list returns
+            // success with an empty `ontologies` list.
+            java.util.HashMap<String, Object> serviceContext = new java.util.HashMap<>();
+            serviceContext.put("homeDir", tempDir.toString());
+            Path catalog = tempDir.resolve("workspaces").resolve("default").resolve("catalog.json");
+            Files.createDirectories(catalog.getParent());
+            Files.writeString(catalog, "[]\n");
+            String logPath = tempDir.resolve("mcp-acceptance-test.log").toString();
+
+            McpServerAdapter adapter = new McpServerAdapter(serviceContext, logPath);
 
             Map<String, Object> result = adapter.handleToolCall("ontology_list", Map.of());
-            assertEquals("success", result.get("status"));
-            assertNotNull(result.get("data"));
+            assertEquals("success", result.get("status"),
+                "Expected success but got: " + result);
+            assertNotNull(result.get("data"),
+                "Expected non-null data, got: " + result);
         }
     }
 

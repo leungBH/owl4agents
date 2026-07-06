@@ -3,6 +3,7 @@ package org.owl4agents.benchmark;
 import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 import org.owl4agents.core.model.Verdict;
 
@@ -66,7 +67,11 @@ public class QaEvaluationService {
 
         for (BenchmarkResultLine line : results) {
             // Skip edgeCase and reviewStatus: pending from primary metrics
-            if (line.edgeCase() || "pending".equals(line.reviewStatus().orElse(null))) {
+            // Tolerate a null reviewStatus (defensive — Gson can produce null
+            // Optionals for record components in some configurations).
+            Optional<String> review = line.reviewStatus();
+            String reviewValue = review == null ? null : review.orElse(null);
+            if (line.edgeCase() || "pending".equals(reviewValue)) {
                 // These lines still count toward totalClaims and unknownRate/outOfScopeRate
                 if (line.actualVerdict() == Verdict.UNKNOWN) unknownCount++;
                 if (line.actualVerdict() == Verdict.OUT_OF_SCOPE) outOfScopeCount++;

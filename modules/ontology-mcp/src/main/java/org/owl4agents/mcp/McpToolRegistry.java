@@ -106,14 +106,14 @@ public class McpToolRegistry {
             Map.of("ontology_id", stringParam("Ontology ID"), "query", stringParam("Search query text"))));
         schemas.add(toolSchema("ontology_get_entity_context", "Return labels, comments, class/property/individual context, and related facts",
             Map.of("ontology_id", stringParam("Ontology ID"), "entity_iri", stringParam("Entity IRI"))));
-        schemas.add(toolSchema("ontology_get_class_context", "Return labels, comments, parents, children, equivalent classes, disjoint classes, and restrictions",
-            Map.of("ontology_id", stringParam("Ontology ID"), "class_iri", stringParam("Class IRI"))));
+        schemas.add(toolSchema("ontology_get_class_context", "Return labels, comments, axioms, equivalent classes, super/sub classes, disjoints, and restrictions for a class",
+            Map.of("ontology_id", stringParam("Ontology ID"), "entity_iri", stringParam("Class IRI"))));
         schemas.add(toolSchema("ontology_get_object_property_context", "Return labels, comments, domain, range, hierarchy, inverse properties, and characteristics",
-            Map.of("ontology_id", stringParam("Ontology ID"), "property_iri", stringParam("Object property IRI"))));
+            Map.of("ontology_id", stringParam("Ontology ID"), "entity_iri", stringParam("Object property IRI"))));
         schemas.add(toolSchema("ontology_get_data_property_context", "Return labels, comments, domain, range, datatype, and hierarchy",
-            Map.of("ontology_id", stringParam("Ontology ID"), "property_iri", stringParam("Data property IRI"))));
+            Map.of("ontology_id", stringParam("Ontology ID"), "entity_iri", stringParam("Data property IRI"))));
         schemas.add(toolSchema("ontology_get_individual_context", "Return labels, comments, explicit types, object property assertions, and data property assertions",
-            Map.of("ontology_id", stringParam("Ontology ID"), "individual_iri", stringParam("Individual IRI"))));
+            Map.of("ontology_id", stringParam("Ontology ID"), "entity_iri", stringParam("Individual IRI"))));
         schemas.add(toolSchema("ontology_get_graph_neighborhood", "Return local graph neighborhood around an entity",
             Map.of("ontology_id", stringParam("Ontology ID"), "entity_iri", stringParam("Entity IRI"), "depth", intParam("Neighborhood depth", 1))));
 

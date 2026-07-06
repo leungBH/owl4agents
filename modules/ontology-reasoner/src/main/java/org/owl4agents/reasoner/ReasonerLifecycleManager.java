@@ -47,6 +47,9 @@ public class ReasonerLifecycleManager {
             reasonerName = selection.reasonerName();
         }
 
+        // Normalize to canonical registry name (case-insensitive match)
+        reasonerName = canonicalReasonerName(reasonerName);
+
         // Check if we already have an active reasoner of the same type
         OWLReasonerAdapter existing = activeReasoners.get(key);
         String existingName = activeReasonerNames.get(key);
@@ -145,6 +148,22 @@ public class ReasonerLifecycleManager {
             default:
                 throw new IllegalArgumentException("Unknown reasoner: " + reasonerName);
         }
+    }
+
+    /**
+     * Map any-case input ("hermit", "HERMIT", "HermiT") to the canonical
+     * registry key ("HermiT", "ELK", "Openllet"). Returns the input unchanged
+     * when no registry match is found so the downstream switch can throw a
+     * precise "Unknown reasoner" error.
+     */
+    private String canonicalReasonerName(String reasonerName) {
+        if (reasonerName == null) return null;
+        for (String key : adapterRegistry.keySet()) {
+            if (key.equalsIgnoreCase(reasonerName)) {
+                return key;
+            }
+        }
+        return reasonerName;
     }
 
     /**

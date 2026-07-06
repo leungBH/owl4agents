@@ -109,8 +109,8 @@ class McpServerAdapterTest {
      * routing logic is exercised without involving a server.
      */
     @Test
-    @DisplayName("handleJsonRpc initialize returns protocolVersion=2025-06-18 and version=0.7.0")
-    void handleJsonRpcInitializeReturnsV070Versions() {
+    @DisplayName("handleJsonRpc initialize returns protocolVersion=2025-06-18 and the current SERVER_VERSION constant")
+    void handleJsonRpcInitializeReturnsCurrentServerVersion() {
         Map<String, Object> serviceContext = new HashMap<>();
         String logPath = tempDir.resolve("mcp-init-test.log").toString();
         McpServerAdapter adapter = new McpServerAdapter(serviceContext, logPath);
@@ -125,7 +125,8 @@ class McpServerAdapterTest {
         assertNotNull(response);
         JsonObject result = response.getAsJsonObject("result");
         assertEquals("2025-06-18", result.get("protocolVersion").getAsString());
-        assertEquals("0.7.0", result.getAsJsonObject("serverInfo").get("version").getAsString());
+        assertEquals(McpServerAdapter.SERVER_VERSION,
+            result.getAsJsonObject("serverInfo").get("version").getAsString());
     }
 
     /**

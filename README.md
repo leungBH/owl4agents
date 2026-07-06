@@ -4,36 +4,143 @@ Local OWL ontology runtime, reasoner integration, SPARQL query layer, and readon
 
 `owl4agents` is a local-first OWL/RDF ontology runtime for researchers and agent developers. It imports, manages, reasons over, queries, and retrieves structured semantic context from OWL ontologies, then exposes those capabilities through both CLI commands and an MCP server.
 
-> Status: v0.7 MCP HTTP transport. v0.7 adds an optional HTTP/JSON-RPC transport alongside the existing stdio transport, with bounded worker pools, single-thread serialization for reasoner-using tools, and a strict HTTP error matrix. v0.6 readonly tool count remains at 56.
+> Status: v0.8 MCP Streamable HTTP transport. v0.8 adds Server-Sent Events on `GET /mcp`, UUID-v4 session management, content negotiation (plain JSON vs SSE), a per-process SSE connection cap, and a `Mcp-Session-Id` round-trip for clients that open their own streams (Trae IDE, etc.). v0.7 HTTP transport remains the no-regression baseline; the wire format on `POST /mcp` is unchanged.
 
-## v0.7 Quick Start
+## v0.8 Quick Start
 
-### New in v0.7: HTTP transport
+### New in v0.8: Streamable HTTP transport (SSE on `GET /mcp`)
 
-The MCP server can now run over HTTP in addition to stdio. The default is unchanged (stdio) for backwards compatibility.
+The HTTP MCP server now exposes the MCP **Streamable HTTP** transport on
+top of the v0.7 plain HTTP transport. The default is unchanged (stdio),
+and `POST /mcp` keeps the v0.7.1 wire format. What is new in v0.8 is the
+companion `GET /mcp` SSE stream that the MCP spec lets clients open for
+server-pushed notifications and request/response correlation.
 
 ```bash
-# Default: stdio transport (backwards compatible with all v0.6 setups)
-node tools/npm/bin/owl4agents.js mcp --readonly
-
-# New in v0.7: HTTP transport
-node tools/npm/bin/owl4agents.js mcp --readonly --transport http --port 8080
+# Start the HTTP transport with v0.8 SSE options (defaults shown)
+node tools/npm/bin/owl4agents.js mcp --readonly \
+    --transport http --port 8080 \
+    --max-sse-connections 100 \
+    --session-ttl-minutes 30 \
+    --sse-heartbeat-seconds 15
 ```
 
-Once the HTTP transport is running, send JSON-RPC 2.0 requests to `POST /mcp`:
+#### 1. Initialize a session
 
 ```bash
 curl -X POST http://127.0.0.1:8080/mcp \
   -H "Content-Type: application/json" \
-  -d '{"jsonrpc":"2.0","id":1,"method":"initialize"}'
+  -d '{"jsonrpc":"2.0","id":1,"method":"initialize"}' \
+  -i
+# 200 OK
+# Mcp-Session-Id: 8a1f...-...-...-...-............
+# Content-Type: application/json
+# {"jsonrpc":"2.0","id":1,"result":{"protocolVersion":"2025-06-18",...}}
 ```
 
-Key v0.7.0 SLAs (see [openspec/changes/add-v0-7-mcp-http-transport/specs/mcp-http-transport/spec.md](openspec/changes/add-v0-7-mcp-http-transport/specs/mcp-http-transport/spec.md) for the full contract):
+The response carries an `Mcp-Session-Id` header (UUID v4). **In v0.8 the
+client MUST pass this header on every subsequent request that targets
+the same session.** A POST that omits the header is treated as a new
+`initialize` (or rejected for non-`initialize` methods).
 
-- **Endpoints**: `POST /mcp` (JSON-RPC), `GET /info` (diagnostics), `GET /` (health banner).
-- **Worker pool**: 8 core threads + 100-slot queue for non-reasoner tools; 1-thread pool for reasoner-using tools. Saturated worker pool returns HTTP 500 with JSON-RPC `code = -32000`.
+#### 2. Open the SSE stream
+
+```bash
+SESSION=8a1f...-...-...-...-....
+
+curl -N http://127.0.0.1:8080/mcp \
+  -H "Accept: text/event-stream" \
+  -H "Mcp-Session-Id: $SESSION"
+# HTTP/1.1 200 OK
+# Content-Type: text/event-stream
+# Cache-Control: no-cache
+# Connection: keep-alive
+#
+# id: 0
+# event: ready
+# data: {"sessionId":"8a1f...","capabilities":{...}}
+#
+# : hb
+# : hb
+# ...
+```
+
+The first event is always a `ready` frame echoing the session id; after
+that the server emits `:` comment frames every `--sse-heartbeat-seconds`
+(RFC 8895 keep-alive).
+
+#### 3. Send a request and read the response from the stream
+
+```bash
+# POST a tools/call while the stream is open
+curl -X POST http://127.0.0.1:8080/mcp \
+  -H "Content-Type: application/json" \
+  -H "Accept: text/event-stream" \
+  -H "Mcp-Session-Id: $SESSION" \
+  -d '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"ontology_list","arguments":{}}}' \
+# The POST itself returns 200 with empty body; the JSON-RPC response
+# arrives on the SSE stream as a `message` event.
+```
+
+If you POST with `Accept: text/event-stream` but the session has no
+open stream, the server falls back to plain JSON and adds
+`X-Streamable-Http-Fallback: application/json` (or `no-open-stream`)
+to the response so the diagnostic is greppable in logs.
+
+#### 4. Resume from `Last-Event-ID`
+
+```bash
+# Reconnect after a network blip and ask the server to ack a known id
+curl -N http://127.0.0.1:8080/mcp \
+  -H "Accept: text/event-stream" \
+  -H "Mcp-Session-Id: $SESSION" \
+  -H "Last-Event-ID: 7"
+# The server writes a single `message` event with
+#   data: {"resumed":true,"lastEventId":7}
+# and then closes the stream. v0.8 does NOT replay history.
+```
+
+#### 5. Cap and limits
+
+- `--max-sse-connections` (default 100) — concurrent open SSE streams
+  per process. The (N+1)th open stream returns **503 Service
+  Unavailable** with `Retry-After: 30`.
+- `--session-ttl-minutes` (default 30) — sessions whose
+  `lastAccessAt` is older than the TTL are swept on the next access.
+- `--sse-heartbeat-seconds` (default 15) — keep-alive comment frame
+  interval. The Mcp-Session-Id MUST be a UUID v4; non-v4 ids are
+  rejected with **400 Bad Request**.
+
+#### 6. Trae IDE and other SSE-aware clients
+
+The Trae IDE MCP client opens its own SSE stream. Make sure the
+generated config uses a URL that ends in `/mcp`:
+
+```bash
+node tools/npm/bin/owl4agents.js mcp-config --client trae
+# Writes examples/agent-mcp/configs/trae-mcp-config.json
+# The "mcpServers.owl4agents.url" field MUST end in "/mcp"
+# so that Trae issues both POST /mcp and GET /mcp against it.
+```
+
+See [openspec/changes/add-v0-8-mcp-streamable-http-transport/specs/mcp-streamable-http-transport/spec.md](openspec/changes/add-v0-8-mcp-streamable-http-transport/specs/mcp-streamable-http-transport/spec.md)
+for the full contract, and
+[test/contracts/v08-acceptance/contracts.md](test/contracts/v08-acceptance/contracts.md)
+for the acceptance gates.
+
+### v0.7 HTTP transport (no regression)
+
+The v0.7 HTTP transport is still the wire-format baseline for `POST /mcp`.
+v0.8 widens the `Allow` header on `GET /mcp` from `POST` to `GET, POST`
+but otherwise does not change `POST /mcp` behaviour: same JSON-RPC 2.0
+envelope, same 8-worker pool for non-reasoner tools, same single-thread
+reasoner pool, same 5-second shutdown SLA, same wire-format parity with
+stdio.
+
+- **Endpoints**: `POST /mcp` (JSON-RPC, plain HTTP), `GET /mcp` (SSE stream, v0.8 — requires `Accept: text/event-stream` and a valid `Mcp-Session-Id`), `GET /info` (diagnostics), `GET /` (health banner).
+- **Worker pool**: 8 core threads + 100-slot queue for non-reasoner tools; 1-thread pool for reasoner-using tools. Saturated worker pool returns HTTP 500 with JSON-RPC `code = -32000`. Reasoner-using calls routed over SSE use the **same** single-thread pool, so a long reasoner call does NOT block the heartbeat scheduler.
 - **Wire-format parity**: HTTP transport and stdio transport return **JSON field-level identical** results for the same request. The wire format is **not** byte-level identical.
-- **Error matrix**: `400` (parse error), `405` (`/mcp` GET), `415` (wrong content type), `500` (saturated pool / adapter exception), `501` (SSE/streaming not supported), `202` (JSON-RPC notification, no body).
+- **Error matrix (v0.8)**: `400` (parse error / non-v4 `Mcp-Session-Id`), `404` (session not found), `405` (`/mcp` GET without `Accept: text/event-stream`, `Allow: GET, POST`), `406` (unsupported `Accept`), `415` (wrong content type), `429` (read-only violation), `500` (saturated pool / adapter exception), `503` (SSE cap reached, `Retry-After: 30`), `202` (JSON-RPC notification, no body).
 - **Stress tests**: the 10-concurrent reasoner test is tagged `@Tag("stress")` and runs in the v0.7 acceptance gate only, not in default `gradle test`.
 
 ### Requirements

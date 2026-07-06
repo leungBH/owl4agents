@@ -19,9 +19,9 @@ import org.owl4agents.storage.HomeDirectoryResolver;
 @Command(name = "mcp-config", description = "Generate MCP client configuration for local agent clients.")
 public class McpConfigCommand implements Callable<Integer> {
 
-    private static final java.util.Set<String> SUPPORTED_CLIENTS = java.util.Set.of("generic", "claude", "cursor", "http");
+    private static final java.util.Set<String> SUPPORTED_CLIENTS = java.util.Set.of("generic", "claude", "cursor", "http", "trae");
 
-    @Option(names = {"--client"}, required = true, description = "Client name: generic, claude, cursor, or http")
+    @Option(names = {"--client"}, required = true, description = "Client name: generic, claude, cursor, http, or trae")
     private String clientName;
 
     @Option(names = {"--workspace-home"}, description = "owl4agents home directory for generated config (stdio clients only)")
@@ -79,6 +79,14 @@ public class McpConfigCommand implements Callable<Integer> {
                 config = generateCursorConfig(projectRoot, effectiveWorkspaceHome);
                 break;
             case "http":
+                config = generateHttpConfig();
+                break;
+            case "trae":
+                // Trae IDE uses the same Streamable HTTP transport as the
+                // generic `http` client — the URL must end in /mcp and the
+                // client opens a GET /mcp SSE stream on its own. We reuse
+                // generateHttpConfig() so the two clients stay byte-equivalent
+                // and only the label differs.
                 config = generateHttpConfig();
                 break;
             case "generic":
