@@ -200,7 +200,7 @@ owl4agents 由 11 个 Gradle 模块构成。前 6 个实现核心域(storage、O
 |                                                                     |
 |  +-----------------------------+   +-----------------------------+  |
 |  | CLI 层 (Picocli)             |   | MCP 服务器 (JSON-RPC + SSE)|  |
-|  | 50+ 子命令                   |   | 56 个只读工具              |  |
+|  | 47 个子命令                   |   | 56 个只读工具              |  |
 |  +-------------+---------------+   +-------------+---------------+  |
 |                |                                 |                  |
 |                +-------------+-------------------+                  |
@@ -252,7 +252,7 @@ owl4agents 由 11 个 Gradle 模块构成。前 6 个实现核心域(storage、O
 | `ontology-retrieval` | 实体 context、图邻居、QA context 构造 | `EntityContextService`、`GraphNeighborhoodService`、`QaContextService` |
 | `ontology-validation` | claim 验证、literal 校验、entailment、一致性分析、证据路径、claim 工作流、批量证据 context | `ClaimVerificationService`、`LiteralValidator`、`EntailmentChecker`、`ConsistencyAnalysisService`、`EvidenceGroundingService`、`ClaimWorkflowService`、`EvidenceContextBuilder`、`ClaimBatchValidator` |
 | `ontology-benchmark` | 基准运行器、QA 评估、批 context、问题集校验 | `BenchmarkService`、`QaEvaluationService`、`ContextBatchService`、`ExperimentConfigParser`、`BenchmarkQuestionSetValidator`、`BenchmarkReportGenerator` |
-| `ontology-cli` | Picocli 命令适配器(50+ 子命令)、mcp-config 生成器 | `Owl4AgentsCli`、`McpCommand`、`ImportCommand`、`VerifyClaimCommand`、`McpConfigCommand` |
+| `ontology-cli` | Picocli 命令适配器(47 个子命令)、mcp-config 生成器 | `Owl4AgentsCli`、`McpCommand`、`ImportCommand`、`VerifyClaimCommand`、`McpConfigCommand` |
 | `ontology-mcp` | MCP 服务器(stdio / HTTP / SSE)、工具注册表、调用日志、会话管理 | `HttpMcpServer`、`McpServerAdapter`、`McpToolRegistry`、`McpSessionManager`、`McpToolCallLogger` |
 | `ontology-distribution` | 跨版本端到端验收(V01..V08) | `V03AcceptanceSuite`、`V04AcceptanceSuite`、... |
 
@@ -678,7 +678,7 @@ curl.exe -sS -X POST http://127.0.0.1:8091/mcp `
 
 ## 4. CLI 参考 —— 每个命令,带真实入参和真实输出
 
-CLI 是一个 Picocli 子命令树。顶层命令是 launcher `node tools/npm/bin/owl4agents.js <subcommand> [...]`;它下面挂着 50+ 个子命令,分为 8 大区:
+CLI 是一个 Picocli 子命令树。顶层命令是 launcher `node tools/npm/bin/owl4agents.js <subcommand> [...]`;它下面挂着 47 个子命令,分为 10 大区:
 
 1. **工作区与导入**(1.1):`init`、`import`、`imports`、`list`、`summary`
 2. **浏览与搜索**(1.2):`search`、`entity`、`scope`

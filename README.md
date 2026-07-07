@@ -39,7 +39,7 @@ OWL / RDF / Turtle files
         ▼
   owl4agents (Java 22 + OWL API + HermiT/ELK/Openllet + Jena ARQ)
         │
-        ├── CLI  (50+ commands: import, query, reason, verify-claim, …)
+        ├── CLI  (47 commands: import, query, reason, verify-claim, …)
         └── MCP  (56 readonly tools over stdio, HTTP, or SSE — no writes)
 ```
 
@@ -101,7 +101,7 @@ If you got bindings for `?s`, congratulations — the pipeline works end to end.
 +--------------------+                            |  ┌────────┐  ┌────────┐   |
         │                                         |  │ CLI    |  │ MCP    |   |
         │  $env:OWL4AGENTS_HOME = ...             |  │(Picocli|  │(JSON-  |   |
-        ▼                                         |  │ 50+    |  │ RPC +  |   |
+        ▼                                         |│  │ 47    │  │ RPC +  │   │|
 ~/.owl4agents/workspaces/                          |  │ cmds)  |  │ SSE)   |   |
 └── default/                                       |  └───┬────┘  └───┬────┘   |
     ├── catalog.json                                |      │           │       |

@@ -12,7 +12,8 @@
     "node": ">=18.0.0"
   },
   "scripts": {
-    "test": "node test/launcher.test.js"
+    "test": "node test/launcher.test.js",
+    "docs:check": "node ../../tools/scripts/check-md-anchors.js ../../README.md ../../README.zh-CN.md ../../FEATURES.md ../../FEATURES.zh-CN.md"
   },
   "files": [
     "bin/"

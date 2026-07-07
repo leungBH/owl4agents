@@ -201,7 +201,7 @@ owl4agents is built as 11 Gradle modules. The first six implement the core domai
 |                                                                     |
 |  +-----------------------------+   +-----------------------------+  |
 |  | CLI layer (Picocli)         |   | MCP server (JSON-RPC + SSE) |  |
-|  | 50+ subcommands             |   | 56 readonly tools           |  |
+|  | 47 subcommands              |   | 56 readonly tools           |  |
 |  +-------------+---------------+   +-------------+---------------+  |
 |                |                                 |                  |
 |                +-------------+-------------------+                  |
@@ -253,7 +253,7 @@ owl4agents is built as 11 Gradle modules. The first six implement the core domai
 | `ontology-retrieval` | Entity context, graph neighborhood, QA context builder | `EntityContextService`, `GraphNeighborhoodService`, `QaContextService` |
 | `ontology-validation` | Claim verification, literal validation, entailment, consistency analysis, evidence path, claim workflow, batch evidence context | `ClaimVerificationService`, `LiteralValidator`, `EntailmentChecker`, `ConsistencyAnalysisService`, `EvidenceGroundingService`, `ClaimWorkflowService`, `EvidenceContextBuilder`, `ClaimBatchValidator` |
 | `ontology-benchmark` | Benchmark runner, QA evaluator, batch context, question set validator | `BenchmarkService`, `QaEvaluationService`, `ContextBatchService`, `ExperimentConfigParser`, `BenchmarkQuestionSetValidator`, `BenchmarkReportGenerator` |
-| `ontology-cli` | Picocli command adapters (50+ subcommands), mcp-config generator | `Owl4AgentsCli`, `McpCommand`, `ImportCommand`, `VerifyClaimCommand`, `McpConfigCommand` |
+| `ontology-cli` | Picocli command adapters (47 subcommands), mcp-config generator | `Owl4AgentsCli`, `McpCommand`, `ImportCommand`, `VerifyClaimCommand`, `McpConfigCommand` |
 | `ontology-mcp` | MCP server (stdio / HTTP / SSE), tool registry, call logger, session manager | `HttpMcpServer`, `McpServerAdapter`, `McpToolRegistry`, `McpSessionManager`, `McpToolCallLogger` |
 | `ontology-distribution` | Cross-version end-to-end acceptance (V01..V08) | `V03AcceptanceSuite`, `V04AcceptanceSuite`, ... |
 
@@ -679,7 +679,7 @@ Every cell above is documented in detail below.
 
 ## 4. CLI reference — every command, with real input and real output
 
-The CLI is a Picocli sub-command tree. The top-level command is the launcher `node tools/npm/bin/owl4agents.js <subcommand> [...]`; under it sit 50+ subcommands. They group into 8 areas:
+The CLI is a Picocli sub-command tree. The top-level command is the launcher `node tools/npm/bin/owl4agents.js <subcommand> [...]`; under it sit 47 subcommands. They group into 10 areas:
 
 1. **Workspace & import** (1.1): `init`, `import`, `imports`, `list`, `summary`
 2. **Browse & search** (1.2): `search`, `entity`, `scope`
@@ -1502,7 +1502,7 @@ node tools/npm/bin/owl4agents.js --help       # → full command list
 
 ## 5. MCP tool reference — every tool, with real JSON-RPC request and response
 
-The MCP server exposes 56 readonly tools. They group into 8 areas (mirroring the FEATURES.md section in v0.7):
+The MCP server exposes 56 readonly tools. They group into 8 categories (mirroring the FEATURES.md section in v0.7):
 
 1. **Metadata & browsing** (7): `ontology_list`, `ontology_summary`, `ontology_get_metadata`, `ontology_get_profile`, `ontology_list_graphs`, `ontology_get_imports`, `ontology_get_scope`
 2. **Entity search & context** (7): `ontology_search_entities`, `ontology_get_entity_context`, `ontology_get_class_context`, `ontology_get_object_property_context`, `ontology_get_data_property_context`, `ontology_get_individual_context`, `ontology_get_graph_neighborhood`

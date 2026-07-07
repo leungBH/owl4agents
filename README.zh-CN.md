@@ -38,7 +38,7 @@ OWL / RDF / Turtle 文件
         ▼
   owl4agents (Java 22 + OWL API + HermiT/ELK/Openllet + Jena ARQ)
         │
-        ├── CLI  (50+ 命令: import、query、reason、verify-claim、……)
+        ├── CLI  (47 个命令: import、query、reason、verify-claim、……)
         └── MCP  (56 个只读工具,支持 stdio、HTTP 或 SSE —— 禁止写入)
 ```
 
@@ -100,7 +100,7 @@ node tools/npm/bin/owl4agents.js query v03_demo `
 +--------------------+                            |  ┌────────┐  ┌────────┐   |
         │                                         |  │ CLI    |  │ MCP    |   |
         │  $env:OWL4AGENTS_HOME = ...             |  │(Picocli|  │(JSON-  |   |
-        ▼                                         |  │ 50+    |  │ RPC +  |   |
+        ▼                                         |│  │ 47    │  │ RPC +  │   │|
 ~/.owl4agents/workspaces/                          |  │ cmds)  |  │ SSE)   |   |
 └── default/                                       |  └───┬────┘  └───┬────┘   |
     ├── catalog.json                                |      │           │       |
