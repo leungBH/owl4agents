@@ -5,6 +5,8 @@
 `owl4agents` turns a folder of OWL/RDF files into a queryable local knowledge base. It loads ontologies, runs OWL reasoners (HermiT / ELK / Openllet), executes SPARQL, and exposes the result as a 56-tool readonly MCP server that any LLM agent (Claude Desktop, Trae IDE, Cursor, ...) can plug into without ever leaving your machine.
 
 > **v0.8** adds the MCP Streamable HTTP transport (SSE on `GET /mcp`, `Mcp-Session-Id` round-trip, content negotiation). The v0.7 plain-JSON HTTP transport is preserved as the no-regression baseline; stdio and wire-format parity are unchanged.
+>
+> **v0.8.1** (recommended) fixes 5 claim-verification accuracy defects from v0.8.0 (ISSUE-01…ISSUE-05) — see [CHANGELOG.md](CHANGELOG.md) §"0.8.1" and `doc/retrospectives/`. The 80-curated-claim accuracy gate moved from 75/80 → 80/80. Two new claim types (`different_individuals`, `object_property_subproperty`) and an optional `expression` field on `subject` / `object` for complex class expressions are now supported.
 
 ---
 
@@ -89,6 +91,29 @@ If you got bindings for `?s`, congratulations — the pipeline works end to end.
 - **Want to verify a structured claim against the ontology?** See [FEATURES.md §6 "Claim verification"](FEATURES.md).
 - **Want to know what every CLI command does?** [FEATURES.md §4](FEATURES.md).
 - **Want to know what every MCP tool returns?** [FEATURES.md §5](FEATURES.md).
+
+---
+
+## Example packs
+
+The repository ships with four runnable example packs under `examples/`. Each
+pack contains an `example.yaml` manifest, a `README.md`, and a small ontology
+fixture so you can run it end-to-end without any extra setup:
+
+- [examples/claim-verification/](examples/claim-verification/) — verify structured
+  claims against a small ontology and see `supported` / `contradicted` /
+  `unknown` / `out_of_scope` verdicts in action. Workspace: `claim-demo`.
+- [examples/pizza-reasoning/](examples/pizza-reasoning/) — load the CO-ODE
+  `pizza.owl` and exercise HermiT classification, property chains, and
+  disjoint-class entailment. Workspace: `pizza-demo`.
+- [examples/agent-mcp/](examples/agent-mcp/) — start the readonly MCP server
+  over stdio or HTTP and connect a Trae IDE / Claude Desktop client to it.
+- [examples/biomedical-grounding/](examples/biomedical-grounding/) — ground
+  biomedical free-text claims against a BFO-style ontology and inspect the
+  evidence chain. Workspace: `bio-demo`.
+
+Each pack's `README.md` documents the exact `node tools/npm/bin/owl4agents.js
+init … --workspace <name>` and `import` commands to run it.
 
 ---
 
@@ -177,11 +202,11 @@ On Windows, prefer the npm launcher or `gradlew run --args="..."` over `java -ja
 .\gradlew.bat clean buildVerification
 .\gradlew.bat :modules:ontology-cli:shadowJar
 node tools/npm/test/launcher.test.js
-node tools/npm/bin/owl4agents.js --version    # → 0.8.0
+node tools/npm/bin/owl4agents.js --version    # → 0.8.1
 node tools/npm/bin/owl4agents.js --help
 ```
 
-A green run reports `BUILD SUCCESSFUL`, `Results: 29 passed, 0 failed` for the npm launcher, and `--version` prints `0.8.0`. The full Gradle suite has 767 unit tests (0 failures, 13 skipped) — see `build/reports/tests/test/index.html` after a run.
+A green run reports `BUILD SUCCESSFUL`, `Results: 29 passed, 0 failed` for the npm launcher, and `--version` prints `0.8.1`. The full Gradle suite has 800+ unit tests (0 failures) covering the 80 curated claim accuracy gate (80/80) — see `build/reports/tests/test/index.html` after a run.
 
 ---
 

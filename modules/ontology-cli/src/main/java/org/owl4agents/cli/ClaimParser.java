@@ -4,13 +4,16 @@ import java.util.Map;
 import java.util.Optional;
 
 import com.google.gson.Gson;
+import com.google.gson.JsonSyntaxException;
 import com.google.gson.reflect.TypeToken;
 
 import org.owl4agents.core.ErrorCode;
 import org.owl4agents.core.GraphScope;
+import org.owl4agents.core.model.ClassExpression;
 import org.owl4agents.core.model.Claim;
 import org.owl4agents.core.model.ClaimEntity;
 import org.owl4agents.core.model.ClaimType;
+import org.owl4agents.core.util.ClassExpressionAdapter;
 
 /**
  * Shared claim parsing utility for v0.3 CLI commands.
@@ -153,9 +156,33 @@ final class ClaimParser {
         if (entityObj == null) return null;
         if (entityObj instanceof Map) {
             @SuppressWarnings("unchecked")
-            Map<String, String> entityMap = (Map<String, String>) entityObj;
-            String kind = entityMap.get("kind");
-            String iri = entityMap.get("iri");
+            Map<String, Object> entityMap = (Map<String, Object>) entityObj;
+            String kind = (String) entityMap.get("kind");
+            String iri = (String) entityMap.get("iri");
+            Object expressionObj = entityMap.get("expression");
+            ClassExpression expression = null;
+            if (expressionObj != null) {
+                if (expressionObj instanceof Map) {
+                    @SuppressWarnings("unchecked")
+                    Map<String, Object> expressionMap = (Map<String, Object>) expressionObj;
+                    try {
+                        expression = ClassExpressionAdapter.fromMap(expressionMap);
+                    } catch (IllegalArgumentException e) {
+                        // Surface ClassExpression schema errors as INVALID_CLAIM_SCHEMA
+                        throw new JsonSyntaxException(e.getMessage());
+                    }
+                } else {
+                    throw new JsonSyntaxException(
+                        "ClaimEntity.expression must be a JSON object (got "
+                        + expressionObj.getClass().getSimpleName() + ")");
+                }
+            }
+            if (expression != null) {
+                if (kind == null || kind.isBlank()) {
+                    return new ClaimEntity("class", null, expression);
+                }
+                return new ClaimEntity(kind, iri, expression);
+            }
             if (kind != null && iri != null) {
                 return new ClaimEntity(kind, iri);
             }

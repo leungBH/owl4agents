@@ -82,7 +82,7 @@ jobs:
           echo "PASS: unknown client rejected with nonzero exit and diagnostic"
 
       - name: Verify --version
-        run: java -jar modules/ontology-cli/build/libs/owl4agents.jar --version | grep -q "0.8.0"
+        run: java -jar modules/ontology-cli/build/libs/owl4agents.jar --version | grep -q "0.8.1"
 
       - name: v0.4 Example validation — claim verification
         run: |

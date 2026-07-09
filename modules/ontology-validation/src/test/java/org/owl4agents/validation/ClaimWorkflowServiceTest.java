@@ -22,6 +22,14 @@ import org.owl4agents.reasoner.ReasonerLifecycleManager;
  */
 class ClaimWorkflowServiceTest {
 
+    private static final String PIZZA_NS = "http://www.co-ode.org/ontologies/pizza/pizza.owl#";
+    private static final String PIZZA = PIZZA_NS + "Pizza";
+    private static final String CHEESEY_PIZZA = PIZZA_NS + "CheeseyPizza";
+    private static final String ONTOLOGY_ID = "pizza";
+
+    private static final String WORKSPACE = System.getProperty("user.dir").contains("D:\\owl4agents")
+        ? "D:\\owl4agents\\data\\workspaces" : "data/workspaces";
+
     private StubReasonerService stubReasoner;
     private StubCatalogStore stubCatalog;
     private ClaimVerificationService claimVerificationService;
@@ -30,20 +38,24 @@ class ClaimWorkflowServiceTest {
 
     @BeforeEach
     void setUp() {
-        stubReasoner = new StubReasonerService();
+        // v0.8.1: use the real pizza.owl workspace so the v0.8.1 scope pre-check
+        // (which validates IRIs against the ontology signature) finds the
+        // entities. The StubReasonerService still controls the entailment
+        // verdict, so the test focus is preserved.
+        stubReasoner = new StubReasonerService().withRealOntology(WORKSPACE);
         stubCatalog = new StubCatalogStore();
 
         claimVerificationService = new ClaimVerificationService(
             stubReasoner,
-            new ConsistencyAnalysisService(new ReasonerLifecycleManager(), "dummy-path"),
-            new SemanticDeepeningService("dummy-path"),
+            new ConsistencyAnalysisService(new ReasonerLifecycleManager(), WORKSPACE),
+            new SemanticDeepeningService(WORKSPACE),
             stubCatalog,
             new WorkspaceId("default")
         );
 
         evidenceGroundingService = new EvidenceGroundingService(
             stubReasoner,
-            new ConsistencyAnalysisService(new ReasonerLifecycleManager(), "dummy-path")
+            new ConsistencyAnalysisService(new ReasonerLifecycleManager(), WORKSPACE)
         );
 
         workflowService = new ClaimWorkflowService(
@@ -67,19 +79,19 @@ class ClaimWorkflowServiceTest {
 
             ClaimBatchInput batch = new ClaimBatchInput(
                 "answer-001",
-                Optional.of("Is Dog a kind of Animal?"),
+                Optional.of("Is CheeseyPizza a kind of Pizza?"),
                 Optional.empty(),
                 List.of(new ClaimBatchInput.BatchClaim(
                     "c1", ClaimType.SUBCLASS, true,
-                    Optional.of(new ClaimEntity("class", "http://ex.org/Dog")),
+                    Optional.of(new ClaimEntity("class", CHEESEY_PIZZA)),
                     Optional.of("subClassOf"),
-                    Optional.of(new ClaimEntity("class", "http://ex.org/Animal")),
+                    Optional.of(new ClaimEntity("class", PIZZA)),
                     Optional.empty(), Optional.empty(), Optional.empty()
                 )),
                 Optional.empty()
             );
 
-            ServiceResult<AnswerVerificationReport> result = workflowService.verifyBatch(batch, "test-ontology");
+            ServiceResult<AnswerVerificationReport> result = workflowService.verifyBatch(batch, ONTOLOGY_ID);
             assertTrue(result.isSuccess(), "Batch verification should succeed");
 
             AnswerVerificationReport report = ((ServiceResult.Success<AnswerVerificationReport>) result).data();
@@ -112,7 +124,7 @@ class ClaimWorkflowServiceTest {
                 Optional.empty()
             );
 
-            ServiceResult<AnswerVerificationReport> result = workflowService.verifyBatch(batch, "test-ontology");
+            ServiceResult<AnswerVerificationReport> result = workflowService.verifyBatch(batch, ONTOLOGY_ID);
             assertTrue(result.isSuccess());
 
             AnswerVerificationReport report = ((ServiceResult.Success<AnswerVerificationReport>) result).data();
@@ -140,7 +152,7 @@ class ClaimWorkflowServiceTest {
                 Optional.empty()
             );
 
-            ServiceResult<AnswerVerificationReport> result = workflowService.verifyBatch(batch, "test-ontology");
+            ServiceResult<AnswerVerificationReport> result = workflowService.verifyBatch(batch, ONTOLOGY_ID);
             assertTrue(result.isSuccess());
 
             AnswerVerificationReport report = ((ServiceResult.Success<AnswerVerificationReport>) result).data();
@@ -303,13 +315,13 @@ class ClaimWorkflowServiceTest {
             // Simulate a v0.3 claim wrapped into v0.5 batch format
             ClaimBatchInput batch = new ClaimBatchInput(
                 "answer-v03-wrapped",
-                Optional.of("Is Dog a kind of Animal?"),
+                Optional.of("Is CheeseyPizza a kind of Pizza?"),
                 Optional.empty(),
                 List.of(new ClaimBatchInput.BatchClaim(
                     "wrapped-claim-001", ClaimType.SUBCLASS, true,
-                    Optional.of(new ClaimEntity("class", "http://example.org/v0.3#Dog")),
+                    Optional.of(new ClaimEntity("class", CHEESEY_PIZZA)),
                     Optional.of("subClassOf"),
-                    Optional.of(new ClaimEntity("class", "http://example.org/v0.3#Animal")),
+                    Optional.of(new ClaimEntity("class", PIZZA)),
                     Optional.of("auto"),
                     Optional.empty(),
                     Optional.of(Map.of("requireReasoning", true))
@@ -322,7 +334,7 @@ class ClaimWorkflowServiceTest {
                 ))
             );
 
-            ServiceResult<AnswerVerificationReport> result = workflowService.verifyBatch(batch, "test-ontology");
+            ServiceResult<AnswerVerificationReport> result = workflowService.verifyBatch(batch, ONTOLOGY_ID);
             assertTrue(result.isSuccess());
 
             AnswerVerificationReport report = ((ServiceResult.Success<AnswerVerificationReport>) result).data();

@@ -84,10 +84,35 @@ public class ConsistencyAnalysisService {
             // Use reasoner if available
             Optional<OWLReasonerAdapter> adapter = reasonerLifecycle.getActiveReasoner(ontologyId);
             if (adapter.isPresent() && adapter.get().isActive()) {
-                // Check if class1 is subclass of class2 or vice versa
+                // v0.8.1: use adapter.getUnderlyingReasoner() instead of the
+                // v0.8.0 null-casting bridge so the reasoner-driven path
+                // actually runs against a live OWLReasoner.
                 try {
-                    OWLReasoner owlReasoner = getOWLReasonerFromAdapter(adapter.get());
+                    org.semanticweb.owlapi.reasoner.OWLReasoner owlReasoner =
+                        adapter.get().getUnderlyingReasoner();
                     if (owlReasoner != null) {
+                        // v0.8.1: ensure classification has run before
+                        // asking the reasoner entailment questions.
+                        try {
+                            owlReasoner.precomputeInferences(
+                                org.semanticweb.owlapi.reasoner.InferenceType.CLASS_HIERARCHY);
+                        } catch (Exception ignore) { /* some reasoners refuse no-op */ }
+
+                        // v0.8.1 TC-14: if the reasoner explicitly entails
+                        // DisjointClasses(class1, class2), return DISJOINT.
+                        // This catches both asserted (covered above) and
+                        // inferred disjointness from AllDisjointClasses
+                        // groups, equivalent-class chains, etc.
+                        try {
+                            if (owlReasoner.isEntailed(
+                                    df.getOWLDisjointClassesAxiom(class1, class2))) {
+                                return ServiceResult.success(
+                                    new ClassCompatibilityResult(ontologyId.id(), class1IRI, class2IRI,
+                                        ClassCompatibilityResult.DISJOINT, adapter.get().getName()),
+                                    ResultMetadata.empty());
+                            }
+                        } catch (Exception ignore) { /* fall through */ }
+
                         if (owlReasoner.isEntailed(df.getOWLSubClassOfAxiom(class1, class2)) ||
                             owlReasoner.isEntailed(df.getOWLSubClassOfAxiom(class2, class1))) {
                             return ServiceResult.success(
@@ -96,15 +121,20 @@ public class ConsistencyAnalysisService {
                                 ResultMetadata.empty());
                         }
 
-                        // Check if intersection is unsatisfiable
-                        OWLClass intersection = df.getOWLClass(IRI.create("intersection:" + class1IRI + ":" + class2IRI));
-                        OWLObjectIntersectionOf intersectExpr = df.getOWLObjectIntersectionOf(class1, class2);
-
-                        // Check unsat together via reasoner
-                        boolean unsatTogether = !owlReasoner.isSatisfiable(df.getOWLClass(
-                            IRI.create("urn:temp:intersection_" + System.nanoTime())));
-                        // Simplified check: if both classes are unsat, they're unsat together
-                        // For a proper check, we'd create an intersection class
+                        // v0.8.1 TC-14: check unsatisfiability of the
+                        // intersection. If class1 ⊓ class2 is unsatisfiable,
+                        // the two classes are effectively disjoint.
+                        try {
+                            OWLObjectIntersectionOf intersectExpr =
+                                df.getOWLObjectIntersectionOf(class1, class2);
+                            if (!owlReasoner.isSatisfiable(intersectExpr)) {
+                                return ServiceResult.success(
+                                    new ClassCompatibilityResult(ontologyId.id(), class1IRI, class2IRI,
+                                        ClassCompatibilityResult.UNSATISFIABLE_TOGETHER,
+                                        adapter.get().getName()),
+                                    ResultMetadata.empty());
+                            }
+                        } catch (Exception ignore) { /* fall through */ }
 
                         return ServiceResult.success(
                             new ClassCompatibilityResult(ontologyId.id(), class1IRI, class2IRI,
@@ -364,7 +394,9 @@ public class ConsistencyAnalysisService {
         if (entityIRI == null || entityIRI.isBlank()) return false;
         try {
             OWLOntology ontology = loadOntology(ontologyId);
-            String k = kind == null ? "" : kind.toLowerCase();
+            // v0.8.1: normalize kind to drop underscores so callers using
+            // either "object_property" or "objectproperty" hit the right branch.
+            String k = kind == null ? "" : kind.toLowerCase().replace("_", "");
             IRI iri = IRI.create(entityIRI);
 
             if (k.equals("class") || k.isEmpty()) {

@@ -23,6 +23,7 @@ import org.owl4agents.query.*;
 import org.owl4agents.retrieval.*;
 import org.owl4agents.storage.*;
 
+import org.owl4agents.core.util.ClassExpressionAdapter;
 import org.owl4agents.core.util.GsonFactory;
 
 import com.google.gson.Gson;
@@ -184,11 +185,12 @@ public class McpServerAdapter {
  public static final String PROTOCOL_VERSION = "2025-06-18";
 
  /**
- * Server version. Bumped to `0.8.0` in the v0.8 release (Streamable HTTP /
- * SSE transport support). Single source of truth -> ?read by both stdio and
- * HTTP transports (including the new `GET /mcp` SSE path).
+ * Server version. Bumped to `0.8.1` in the v0.8.1 release (5 claim-verification
+ * accuracy fixes, 2 new claim types, complex class expression support). Single
+ * source of truth -> ?read by both stdio and HTTP transports (including the
+ * `GET /mcp` SSE path).
  */
- public static final String SERVER_VERSION = "0.8.0";
+ public static final String SERVER_VERSION = "0.8.1";
 
  /**
  * Public JSON-RPC 2.0 entry point used by both the stdio transport
@@ -2155,8 +2157,22 @@ public class McpServerAdapter {
  @SuppressWarnings("unchecked")
  Map<String, Object> entityMap = (Map<String, Object>) entityObj;
  String kind = (String) entityMap.getOrDefault("kind", "class");
- String iri = (String) entityMap.getOrDefault("iri", "");
+ Object iriObj = entityMap.get("iri");
+ String iri = iriObj == null ? null : iriObj.toString();
+ Object expressionObj = entityMap.get("expression");
+ if (expressionObj instanceof Map) {
+ @SuppressWarnings("unchecked")
+ Map<String, Object> expressionMap = (Map<String, Object>) expressionObj;
+ try {
+ ClassExpression expression = ClassExpressionAdapter.fromMap(expressionMap);
+ return new ClaimEntity(kind, iri, expression);
+ } catch (IllegalArgumentException e) {
+ return null;
+ }
+ }
+ if (kind != null && iri != null) {
  return new ClaimEntity(kind, iri);
+ }
  }
  return null;
  }

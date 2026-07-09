@@ -2,6 +2,7 @@ package org.owl4agents.reasoner;
 
 import org.owl4agents.core.model.*;
 import org.semanticweb.owlapi.model.OWLOntology;
+import org.semanticweb.owlapi.reasoner.OWLReasoner;
 
 import java.util.Set;
 
@@ -85,4 +86,16 @@ public interface OWLReasonerAdapter {
      * Check whether the adapter has been initialized and is still active.
      */
     boolean isActive();
+
+    /**
+     * v0.8.1 ISSUE-02: returns the raw underlying {@link OWLReasoner} instance
+     * for advanced operations like {@code isEntailed(axiom)} and
+     * {@code getSuperClasses(cls, true)}. Required by
+     * {@code ReasonerServiceImpl.checkAxiomEntailment} to replace the
+     * v0.8.0 private {@code getOWLReasonerFromAdapter(adapter)} bridge
+     * (which returned {@code null}) that caused the SubClassOf inferred path
+     * to silently fall through. v0.8.1 callers MUST ensure the adapter is
+     * {@link #isActive() active} before invoking this method.
+     */
+    OWLReasoner getUnderlyingReasoner();
 }

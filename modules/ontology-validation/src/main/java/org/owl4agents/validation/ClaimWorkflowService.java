@@ -148,9 +148,23 @@ public class ClaimWorkflowService {
                     // a claim previously judged UNKNOWN should become OUT_OF_SCOPE.
                     // This is required by the v0.5 aggregate status truth table
                     // so that out_of_scope and partially_verified are reachable.
+                    //
+                    // v0.8.1 ISSUE-01: the v0.8.1 scope pre-check now returns
+                    // OUT_OF_SCOPE + MISSING_ENTITY directly (rather than
+                    // letting the verdict be UNKNOWN and upgrading later).
+                    // The upgrade still runs in that case to normalize the
+                    // unknownReason to 'missing_or_out_of_scope_entities' (the
+                    // v0.5 workflow contract), so downstream consumers (CLI
+                    // parity tests, evidence context) see the same reason
+                    // regardless of which layer caught the missing entity.
                     boolean hasGenuineMissingEntities = outOfScopeEntities.size() > 0;
                     if (verdict == Verdict.UNKNOWN && hasGenuineMissingEntities) {
                         verdict = Verdict.OUT_OF_SCOPE;
+                        unknownReason = Optional.of("missing_or_out_of_scope_entities");
+                    } else if (verdict == Verdict.OUT_OF_SCOPE && hasGenuineMissingEntities
+                        && unknownReason.filter(r -> r.equals("missing_entity")).isPresent()) {
+                        // v0.8.1: normalize the pre-check reason to the v0.5
+                        // workflow contract reason.
                         unknownReason = Optional.of("missing_or_out_of_scope_entities");
                     }
                 }

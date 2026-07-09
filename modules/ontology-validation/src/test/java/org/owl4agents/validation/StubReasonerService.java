@@ -28,15 +28,33 @@ import org.owl4agents.reasoner.ReasonerService;
 class StubReasonerService implements ReasonerService {
 
     private String entailmentResult = EntailmentResult.NOT_ENTAILED;
+    private java.util.Map<String, String> entailmentResultsByType = new java.util.HashMap<>();
     private boolean consistent = true;
     private List<InferredFact> inferredFacts = List.of();
     private boolean hasReasoningReport = false;
     private List<String> unsatClasses = List.of();
+    private java.util.List<String> callLog = new java.util.ArrayList<>();
+    private String workspaceBasePath = null;
 
     /** Set the entailment result to return from checkEntailment(). */
     StubReasonerService withEntailmentResult(String result) {
         this.entailmentResult = result;
         return this;
+    }
+
+    /**
+     * Configure a per-axiom-type entailment result. Calls to {@code checkEntailment}
+     * with the given {@code axiomType} will return the configured result, regardless
+     * of the global {@link #withEntailmentResult default}.
+     */
+    StubReasonerService withEntailmentResult(String axiomType, String result) {
+        this.entailmentResultsByType.put(axiomType, result);
+        return this;
+    }
+
+    /** Returns the recorded call log (for spy tests). */
+    java.util.List<String> getCallLog() {
+        return java.util.Collections.unmodifiableList(callLog);
     }
 
     /** Set whether the ontology is consistent for checkConsistency(). */
@@ -63,15 +81,62 @@ class StubReasonerService implements ReasonerService {
         return this;
     }
 
+    /**
+     * Configure the stub to load the real ontology from the given workspace
+     * base path. Used by tests that exercise the complex-class-expression
+     * path (which calls {@code loadOntologyForClaim} → {@code ClassExpressionBuilder.build}).
+     */
+    StubReasonerService withRealOntology(String workspaceBasePath) {
+        this.workspaceBasePath = workspaceBasePath;
+        return this;
+    }
+
     @Override
     public ServiceResult<EntailmentResult> checkEntailment(OntologyId ontologyId, String axiomType,
                                                             Map<String, String> parameters,
                                                             Optional<String> reasonerName) {
+        callLog.add("checkEntailment:" + axiomType);
+        String result = entailmentResultsByType.getOrDefault(axiomType, entailmentResult);
         return ServiceResult.success(
-            new EntailmentResult(ontologyId.id(), axiomType, entailmentResult,
+            new EntailmentResult(ontologyId.id(), axiomType, result,
                 "reasoner", "HermiT", null),
             ResultMetadata.empty()
         );
+    }
+
+    @Override
+    public ServiceResult<EntailmentResult> checkEquivalentClassesEntailment(
+            OntologyId ontologyId,
+            org.semanticweb.owlapi.model.OWLClassExpression subject,
+            org.semanticweb.owlapi.model.OWLClassExpression object,
+            Optional<String> reasonerName) {
+        callLog.add("checkEquivalentClassesEntailment");
+        // Per-axiom-type for "EquivalentClasses" overrides the global default.
+        String result = entailmentResultsByType.getOrDefault("EquivalentClasses", entailmentResult);
+        return ServiceResult.success(
+            new EntailmentResult(ontologyId.id(), "EquivalentClasses", result,
+                "reasoner", "HermiT", null),
+            ResultMetadata.empty()
+        );
+    }
+
+    @Override
+    public org.semanticweb.owlapi.model.OWLOntology loadOntologyForClaim(OntologyId ontologyId)
+            throws org.semanticweb.owlapi.model.OWLOntologyCreationException {
+        if (workspaceBasePath != null) {
+            // Load the real ontology from the configured workspace path.
+            java.nio.file.Path path = java.nio.file.Path.of(
+                workspaceBasePath, "default", "ontologies",
+                ontologyId.id(), "canonical", "ontology.owl");
+            return org.semanticweb.owlapi.apibinding.OWLManager
+                .createOWLOntologyManager()
+                .loadOntologyFromOntologyDocument(path.toFile());
+        }
+        // Default: return a minimal empty ontology to keep the stub contract
+        // valid for paths that don't need real IRIs.
+        return org.semanticweb.owlapi.apibinding.OWLManager
+            .createOWLOntologyManager()
+            .createOntology(org.semanticweb.owlapi.model.IRI.create("urn:test-" + ontologyId.id()));
     }
 
     @Override

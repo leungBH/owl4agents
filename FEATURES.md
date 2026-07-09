@@ -1,6 +1,6 @@
 # owl4agents — Features and Tool Reference
 
-> **Version:** v0.8.0 (released 2026-06-29, re-tested 2026-07-03).
+> **Version:** v0.8.1 (released 2026-07-09, 5 claim-verification accuracy fixes from v0.8.0).
 > **Audience:** programmers who want to **use** owl4agents (CLI or MCP) and understand what each command / tool does, what it takes as input, and what it returns. We assume you're a CS graduate — comfortable with JSON, HTTP, regex, and reading API docs — but you may or may not have touched OWL or SPARQL before.
 > **Pair this with:** [README.md](README.md) for the elevator pitch and 5-minute quick start. This file is the deep reference.
 
@@ -174,8 +174,8 @@ Throughout this doc you will see JSON like this for "the claim that `Dog` is a s
 The fields are:
 
 - `claimId` — your own identifier. Echoed back in responses.
-- `type` — one of `subclass`, `class_compatibility`, `class_membership`, `relation_assertion`, `ontology_scope`, `equivalence`, `disjointness`, `entailment`.
-- `subject` / `object` — `{ "kind": "class" | "individual" | "property", "iri": "..." }`.
+- `type` — one of `subclass`, `equivalent_classes`, `disjoint_classes`, `individual_membership`, `class_compatibility`, `relation_assertion` (split into `object_property_assertion` / `data_property_assertion` in v0.8.1), `ontology_scope`, `ontology_consistency`, `literal_validity`, `object_property_domain`, `object_property_range`, `data_property_domain`, `data_property_range`, `different_individuals` (v0.8.1), `object_property_subproperty` (v0.8.1).
+- `subject` / `object` — `{ "kind": "class" | "individual" | "object_property" | "data_property", "iri": "..." }`. v0.8.1 adds an optional `expression` field on either side for complex class expressions (e.g. `Pizza ⊓ ∃hasTopping.CheeseTopping`); see §6.7 below.
 - `predicate` — the relationship being asserted.
 - `reasoner` — `"auto" | "hermit" | "elk" | "openllet"`, default `"auto"`.
 - `graphScope` — `"explicit" | "inferred" | "union"`, default `"explicit"`.
@@ -609,7 +609,7 @@ curl.exe -sS -X POST http://127.0.0.1:8091/mcp `
 {"jsonrpc":"2.0","id":1,"result":{"protocolVersion":"2025-06-18","capabilities":{"tools":{}},"serverInfo":{"name":"owl4agents","version":"0.8.0"}}}
 ```
 
-The `serverInfo.version` should be `"0.8.0"`. The session is anonymous (no `Mcp-Session-Id` returned for `initialize`); subsequent calls don't need a session id on the plain HTTP transport.
+The `serverInfo.version` should be `"0.8.1"`. The session is anonymous (no `Mcp-Session-Id` returned for `initialize`); subsequent calls don't need a session id on the plain HTTP transport.
 
 ```powershell
 curl.exe -sS -X POST http://127.0.0.1:8091/mcp `
@@ -1494,7 +1494,7 @@ node tools/npm/bin/owl4agents.js smoke
 ### 4.45 `--version` / `--help`
 
 ```powershell
-node tools/npm/bin/owl4agents.js --version    # → 0.8.0
+node tools/npm/bin/owl4agents.js --version    # → 0.8.1
 node tools/npm/bin/owl4agents.js --help       # → full command list
 ```
 
@@ -2390,6 +2390,62 @@ The agent now has grounded its answer in the same ontology the verifier is check
 | "Counterexamples is empty" | Counterexamples only apply to certain claim types and certain verdicts. For `class_compatibility` with a `disjoint` verdict, no individual is a counterexample (none can be in both). |
 | "I asked an `ASK` query and got a 400" | The SPARQL safety guard is fine; the parser error is probably a prefix issue. Use full IRIs or supply a `PREFIX` prologue. |
 
+### 6.6 v0.8.1 — new claim types and complex class expressions
+
+v0.8.1 added two claim types and an optional `expression` field on
+`subject` / `object` to support complex class expressions in
+`equivalent_classes` claims.
+
+**New claim types:**
+
+| `type` | What it asserts | Example |
+|---|---|---|
+| `different_individuals` | "two named individuals are pairwise distinct" | `France` differentFrom `Germany` → `supported` (asserted) |
+| `object_property_subproperty` | "object property A is a sub-property of object property B" | `hasBase` subPropertyOf `hasIngredient` → `supported` (asserted) |
+
+Both types share the asserted-first-then-`isEntailed`-fallback logic
+with the existing entailment claims; counter-evidence
+(`SameIndividual`, reverse `SubObjectPropertyOf`) is checked when the
+primary relation is not entailed.
+
+**Complex class expressions (`subject.expression` / `object.expression`)**:
+
+```json
+{
+  "claimId": "pizza-007",
+  "type": "equivalent_classes",
+  "ontologyId": "pizza",
+  "subject": { "kind": "class", "iri": "http://www.co-ode.org/ontologies/pizza/pizza.owl#CheeseyPizza" },
+  "object": {
+    "kind": "class",
+    "iri": null,
+    "expression": {
+      "type": "intersection",
+      "operands": [
+        { "type": "named", "iri": "http://www.co-ode.org/ontologies/pizza/pizza.owl#Pizza" },
+        { "type": "existential", "property": "http://www.co-ode.org/ontologies/pizza/pizza.owl#hasTopping", "filler": { "type": "named", "iri": "http://www.co-ode.org/ontologies/pizza/pizza.owl#CheeseTopping" } }
+      ]
+    }
+  }
+}
+```
+
+The 6 supported `expression.type` values are:
+
+| `type` | JSON shape | OWL 2 construct |
+|---|---|---|
+| `named` | `{ "type": "named", "iri": "..." }` | `owl:Class` |
+| `existential` | `{ "type": "existential", "property": "...", "filler": {...} }` | `ObjectSomeValuesFrom` |
+| `universal` | `{ "type": "universal", "property": "...", "filler": {...} }` | `ObjectAllValuesFrom` |
+| `intersection` | `{ "type": "intersection", "operands": [ {...}, ... ] }` | `ObjectIntersectionOf` |
+| `union` | `{ "type": "union", "operands": [ {...}, ... ] }` | `ObjectUnionOf` |
+| `complement` | `{ "type": "complement", "operand": {...} }` | `ObjectComplementOf` |
+
+Nesting depth is capped at 3. Unresolved IRIs raise `ENTITY_NOT_FOUND`.
+The deferred `data_existential`, `data_universal`, `cardinality_restriction`,
+and `data_intersection` expression types return `INVALID_CLAIM_SCHEMA`
+with a message listing the 6 supported types.
+
 ---
 
 ## 7. Deployment, environment, integration
@@ -2631,11 +2687,17 @@ Increase `--max-context-tokens`. In `jsonl` format, the per-line `truncated` fla
 
 | Layer | What | How many | Time |
 |---|---|---|---|
-| Unit (Gradle) | `modules/*/src/test/` | 767 | ~30s |
+| Unit (Gradle) | `modules/*/src/test/` | 800+ | ~30s |
 | Launcher smoke (npm) | `tools/npm/test/launcher.test.js` | 29 | ~10s |
 | MCP tool integration | v0.8 acceptance (`test/contracts/v08-acceptance/`) | 56 | ~30s |
+| v0.8.1 80-claim accuracy gate | `V081AcceptanceSuite` (pizza-50 + owl2bench-30) | 80 | ~10s |
 | Reasoner stress (tag `stress`) | 10 concurrent reasoner calls | 1 | ~60s |
 | End-to-end example packs | `examples/claim-verification/`, `examples/pizza-reasoning/`, `examples/biomedical-grounding/`, `examples/agent-mcp/` | 5 | ~5s each |
+
+The v0.8.1 row covers the 5 fix scenarios (`pizza-007`, `pizza-035`,
+`pizza-037`, `pizza-046`, `owl2bench-027`) plus the remaining 75 curated
+claims, asserting the 80/80 accuracy gate introduced to address the
+v0.8.0 ISSUE-01…ISSUE-05 defects (see `doc/retrospectives/`).
 
 Run them all:
 

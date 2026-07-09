@@ -478,7 +478,7 @@ class HttpMcpServerSseTest {
     class VersionAssertion {
 
         @Test
-        @DisplayName("The /info response reports McpServerAdapter.SERVER_VERSION (= 0.8.0)")
+        @DisplayName("The /info response reports McpServerAdapter.SERVER_VERSION (= 0.8.1)")
         void infoReportsServerVersion() throws Exception {
             HttpResponse<String> resp = client.send(
                 HttpRequest.newBuilder(URI.create(baseUrl + "/info")).GET()

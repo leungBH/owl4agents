@@ -209,6 +209,12 @@ public class HermiTAdapter implements OWLReasonerAdapter {
         return initialized && !shutdown;
     }
 
+    @Override
+    public OWLReasoner getUnderlyingReasoner() {
+        checkActive();
+        return reasoner;
+    }
+
     private void checkActive() {
         if (shutdown) {
             throw new IllegalStateException("Reasoner has been shut down");

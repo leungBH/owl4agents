@@ -21,6 +21,13 @@ dependencies {
     implementation("com.github.galigator.openllet:openllet-owlapi:2.6.5") {
         exclude(group = "net.sourceforge.owlapi")
     }
+
+    testImplementation("org.junit.jupiter:junit-jupiter:5.10.2")
+    testImplementation("net.sourceforge.owlapi:owlapi-distribution:5.1.20")
 }
 
 tasks.jar { archiveBaseName.set("ontology-reasoner") }
+
+tasks.test {
+    useJUnitPlatform()
+}

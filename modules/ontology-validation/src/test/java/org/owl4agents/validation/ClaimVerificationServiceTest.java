@@ -31,16 +31,31 @@ import org.owl4agents.reasoner.ReasonerLifecycleManager;
  */
 class ClaimVerificationServiceTest {
 
+    private static final String PIZZA_NS = "http://www.co-ode.org/ontologies/pizza/pizza.owl#";
+    private static final String PIZZA = PIZZA_NS + "Pizza";
+    private static final String CHEESEY_PIZZA = PIZZA_NS + "CheeseyPizza";
+    private static final String HAS_TOPPING = PIZZA_NS + "hasTopping";
+    private static final String HAS_BASE = PIZZA_NS + "hasBase";
+
+    private static final String WORKSPACE = System.getProperty("user.dir").contains("D:\\owl4agents")
+        ? "D:\\owl4agents\\data\\workspaces" : "data/workspaces";
+
+    private static final String ONTOLOGY_ID = "pizza";
+
     private StubReasonerService stubReasoner;
     private ClaimVerificationService service;
 
     @BeforeEach
     void setUp() {
-        stubReasoner = new StubReasonerService();
+        // v0.8.1: use the real pizza.owl workspace so the v0.8.1 scope pre-check
+        // (which validates IRIs against the ontology signature) finds the
+        // entities. The StubReasonerService still controls the entailment
+        // verdict, so the test focus is preserved.
+        stubReasoner = new StubReasonerService().withRealOntology(WORKSPACE);
         service = new ClaimVerificationService(
             stubReasoner,
-            new ConsistencyAnalysisService(new ReasonerLifecycleManager(), "dummy-path"),
-            new SemanticDeepeningService("dummy-path"),
+            new ConsistencyAnalysisService(new ReasonerLifecycleManager(), WORKSPACE),
+            new SemanticDeepeningService(WORKSPACE),
             new StubCatalogStore(),
             new WorkspaceId("default")
         );
@@ -60,9 +75,9 @@ class ClaimVerificationServiceTest {
         @DisplayName("SUBCLASS: NOT_ENTAILED → UNKNOWN, not CONTRADICTED")
         void subclassNotEntailedYieldsUnknown() {
             stubReasoner.withEntailmentResult(EntailmentResult.NOT_ENTAILED);
-            Claim claim = new Claim("c1", ClaimType.SUBCLASS, "test-ontology",
-                new ClaimEntity("class", "http://ex.org/A"), "http://ex.org/subClassOf",
-                new ClaimEntity("class", "http://ex.org/B"),
+            Claim claim = new Claim("c1", ClaimType.SUBCLASS, ONTOLOGY_ID,
+                new ClaimEntity("class", CHEESEY_PIZZA), "http://www.w3.org/2000/01/rdf-schema#subClassOf",
+                new ClaimEntity("class", PIZZA),
                 Optional.empty(), Optional.empty(), Optional.empty());
 
             ServiceResult<ClaimVerificationResult> result = service.verify(claim);
@@ -77,9 +92,9 @@ class ClaimVerificationServiceTest {
         @DisplayName("EQUIVALENT_CLASSES: NOT_ENTAILED → UNKNOWN, not CONTRADICTED")
         void equivalentClassesNotEntailedYieldsUnknown() {
             stubReasoner.withEntailmentResult(EntailmentResult.NOT_ENTAILED);
-            Claim claim = new Claim("c2", ClaimType.EQUIVALENT_CLASSES, "test-ontology",
-                new ClaimEntity("class", "http://ex.org/A"), null,
-                new ClaimEntity("class", "http://ex.org/B"),
+            Claim claim = new Claim("c2", ClaimType.EQUIVALENT_CLASSES, ONTOLOGY_ID,
+                new ClaimEntity("class", CHEESEY_PIZZA), null,
+                new ClaimEntity("class", PIZZA),
                 Optional.empty(), Optional.empty(), Optional.empty());
 
             ServiceResult<ClaimVerificationResult> result = service.verify(claim);
@@ -93,9 +108,9 @@ class ClaimVerificationServiceTest {
         @DisplayName("OBJECT_PROPERTY_DOMAIN: NOT_ENTAILED → UNKNOWN, not CONTRADICTED")
         void objectPropertyDomainNotEntailedYieldsUnknown() {
             stubReasoner.withEntailmentResult(EntailmentResult.NOT_ENTAILED);
-            Claim claim = new Claim("c3", ClaimType.OBJECT_PROPERTY_DOMAIN, "test-ontology",
-                new ClaimEntity("object_property", "http://ex.org/p"), null,
-                new ClaimEntity("class", "http://ex.org/C"),
+            Claim claim = new Claim("c3", ClaimType.OBJECT_PROPERTY_DOMAIN, ONTOLOGY_ID,
+                new ClaimEntity("object_property", HAS_TOPPING), null,
+                new ClaimEntity("class", CHEESEY_PIZZA),
                 Optional.empty(), Optional.empty(), Optional.empty());
 
             ServiceResult<ClaimVerificationResult> result = service.verify(claim);
@@ -109,9 +124,9 @@ class ClaimVerificationServiceTest {
         @DisplayName("OBJECT_PROPERTY_RANGE: NOT_ENTAILED → UNKNOWN, not CONTRADICTED")
         void objectPropertyRangeNotEntailedYieldsUnknown() {
             stubReasoner.withEntailmentResult(EntailmentResult.NOT_ENTAILED);
-            Claim claim = new Claim("c4", ClaimType.OBJECT_PROPERTY_RANGE, "test-ontology",
-                new ClaimEntity("object_property", "http://ex.org/p"), null,
-                new ClaimEntity("class", "http://ex.org/D"),
+            Claim claim = new Claim("c4", ClaimType.OBJECT_PROPERTY_RANGE, ONTOLOGY_ID,
+                new ClaimEntity("object_property", HAS_TOPPING), null,
+                new ClaimEntity("class", PIZZA),
                 Optional.empty(), Optional.empty(), Optional.empty());
 
             ServiceResult<ClaimVerificationResult> result = service.verify(claim);
@@ -125,9 +140,14 @@ class ClaimVerificationServiceTest {
         @DisplayName("DATA_PROPERTY_DOMAIN: NOT_ENTAILED → UNKNOWN, not CONTRADICTED")
         void dataPropertyDomainNotEntailedYieldsUnknown() {
             stubReasoner.withEntailmentResult(EntailmentResult.NOT_ENTAILED);
-            Claim claim = new Claim("c5", ClaimType.DATA_PROPERTY_DOMAIN, "test-ontology",
-                new ClaimEntity("data_property", "http://ex.org/dp"), null,
-                new ClaimEntity("class", "http://ex.org/E"),
+            // xsd:string is in the built-in namespace whitelist so it passes
+            // the v0.8.1 pre-check (Task 4.2). Pizza has no data properties, so
+            // we use the class kind for the subject IRI; the test focus is the
+            // verdict mapping (NOT_ENTAILED → UNKNOWN), not the data property
+            // declaration.
+            Claim claim = new Claim("c5", ClaimType.DATA_PROPERTY_DOMAIN, ONTOLOGY_ID,
+                new ClaimEntity("class", PIZZA), null,
+                new ClaimEntity("datatype", "http://www.w3.org/2001/XMLSchema#string"),
                 Optional.empty(), Optional.empty(), Optional.empty());
 
             ServiceResult<ClaimVerificationResult> result = service.verify(claim);
@@ -141,8 +161,8 @@ class ClaimVerificationServiceTest {
         @DisplayName("DATA_PROPERTY_ASSERTION: NOT_ENTAILED → UNKNOWN, not CONTRADICTED")
         void dataPropertyAssertionNotEntailedYieldsUnknown() {
             stubReasoner.withEntailmentResult(EntailmentResult.NOT_ENTAILED);
-            Claim claim = new Claim("c6", ClaimType.DATA_PROPERTY_ASSERTION, "test-ontology",
-                new ClaimEntity("individual", "http://ex.org/i"), "http://ex.org/age",
+            Claim claim = new Claim("c6", ClaimType.DATA_PROPERTY_ASSERTION, ONTOLOGY_ID,
+                new ClaimEntity("individual", PIZZA_NS + "America"), "http://ex.org/age",
                 new ClaimEntity("literal", "42"),
                 Optional.empty(), Optional.empty(), Optional.empty());
 
@@ -164,9 +184,9 @@ class ClaimVerificationServiceTest {
         @DisplayName("SUBCLASS: ENTAILED → SUPPORTED")
         void subclassEntailedYieldsSupported() {
             stubReasoner.withEntailmentResult(EntailmentResult.ENTAILED);
-            Claim claim = new Claim("c7", ClaimType.SUBCLASS, "test-ontology",
-                new ClaimEntity("class", "http://ex.org/A"), "http://ex.org/subClassOf",
-                new ClaimEntity("class", "http://ex.org/B"),
+            Claim claim = new Claim("c7", ClaimType.SUBCLASS, ONTOLOGY_ID,
+                new ClaimEntity("class", CHEESEY_PIZZA), "http://www.w3.org/2000/01/rdf-schema#subClassOf",
+                new ClaimEntity("class", PIZZA),
                 Optional.empty(), Optional.empty(), Optional.empty());
 
             ServiceResult<ClaimVerificationResult> result = service.verify(claim);
@@ -186,7 +206,7 @@ class ClaimVerificationServiceTest {
         @DisplayName("ONTOLOGY_CONSISTENCY: consistent → SUPPORTED")
         void ontologyConsistentYieldsSupported() {
             stubReasoner.withConsistent(true);
-            Claim claim = new Claim("c8", ClaimType.ONTOLOGY_CONSISTENCY, "test-ontology",
+            Claim claim = new Claim("c8", ClaimType.ONTOLOGY_CONSISTENCY, ONTOLOGY_ID,
                 null, null, null,
                 Optional.empty(), Optional.empty(), Optional.empty());
 
@@ -200,7 +220,7 @@ class ClaimVerificationServiceTest {
         @DisplayName("ONTOLOGY_CONSISTENCY: inconsistent → CONTRADICTED (explicit negative evidence)")
         void ontologyInconsistentYieldsContradicted() {
             stubReasoner.withConsistent(false);
-            Claim claim = new Claim("c9", ClaimType.ONTOLOGY_CONSISTENCY, "test-ontology",
+            Claim claim = new Claim("c9", ClaimType.ONTOLOGY_CONSISTENCY, ONTOLOGY_ID,
                 null, null, null,
                 Optional.empty(), Optional.empty(), Optional.empty());
 
@@ -223,9 +243,9 @@ class ClaimVerificationServiceTest {
         @DisplayName("SUBCLASS: UNSUPPORTED_AXIOM_TYPE → UNKNOWN with UNSUPPORTED_CLAIM_TYPE reason")
         void subclassUnsupportedAxiomYieldsUnknownWithReason() {
             stubReasoner.withEntailmentResult(EntailmentResult.UNSUPPORTED_AXIOM_TYPE);
-            Claim claim = new Claim("c10", ClaimType.SUBCLASS, "test-ontology",
-                new ClaimEntity("class", "http://ex.org/A"), "http://ex.org/subClassOf",
-                new ClaimEntity("class", "http://ex.org/B"),
+            Claim claim = new Claim("c10", ClaimType.SUBCLASS, ONTOLOGY_ID,
+                new ClaimEntity("class", CHEESEY_PIZZA), "http://www.w3.org/2000/01/rdf-schema#subClassOf",
+                new ClaimEntity("class", PIZZA),
                 Optional.empty(), Optional.empty(), Optional.empty());
 
             ServiceResult<ClaimVerificationResult> result = service.verify(claim);

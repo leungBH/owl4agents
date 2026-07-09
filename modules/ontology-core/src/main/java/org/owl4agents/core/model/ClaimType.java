@@ -18,7 +18,10 @@ public enum ClaimType {
     LITERAL_VALIDITY("literal_validity"),
     CLASS_COMPATIBILITY("class_compatibility"),
     ONTOLOGY_CONSISTENCY("ontology_consistency"),
-    ONTOLOGY_SCOPE("ontology_scope");
+    ONTOLOGY_SCOPE("ontology_scope"),
+    // v0.8.1: ISSUE-04 (DifferentIndividuals) + ISSUE-05 (SubObjectPropertyOf)
+    DIFFERENT_INDIVIDUALS("different_individuals"),
+    OBJECT_PROPERTY_SUBPROPERTY("object_property_subproperty");
 
     private final String jsonName;
 

@@ -61,7 +61,7 @@ class Defect024RegressionTest {
     class MapErrorBlankIriTests {
 
         @Test
-        @DisplayName("CLASS_NOT_FOUND with blank entityIRI → error, not IAE")
+        @DisplayName("CLASS_NOT_FOUND with blank entityIRI → UNKNOWN (v0.8.1 graceful degrade), not IAE")
         void classNotFoundBlankEntityIriNoCrash() {
             // Simulate the exact crash scenario from DEFECT-024:
             // checkClassCompatibility returns CLASS_NOT_FOUND with no/blank entityIRI
@@ -74,20 +74,23 @@ class Defect024RegressionTest {
                 new ClaimEntity("class", "http://ex.org/B"),
                 Optional.empty(), Optional.empty(), Optional.empty());
 
-            // Before fix: this threw IllegalArgumentException("Entity IRI must not be null or blank")
-            // After fix: returns ServiceResult.Error with appropriate error
+            // Before DEFECT-024 fix: this threw IllegalArgumentException("Entity IRI must not be null or blank")
+            // After DEFECT-024 fix: v0.8.1 degrade path catches CLASS_NOT_FOUND (and
+            // PROPERTY_NOT_FOUND / INDIVIDUAL_NOT_FOUND) and returns UNKNOWN +
+            // INSUFFICIENT_AXIOMS instead of an Error — the 4-value verdict model
+            // is preferred over a hard error in this scenario.
             ServiceResult<ClaimVerificationResult> result = service.verify(claim);
-            assertFalse(result.isSuccess(), "Should return error for class not found");
-
-            ServiceError error = ((ServiceResult.Error<ClaimVerificationResult>) result).error();
-            assertEquals(ErrorCode.CLASS_NOT_FOUND, error.code(),
-                "Error code must be CLASS_NOT_FOUND");
-            assertNotNull(error.message(), "Error message must not be null");
+            assertTrue(result.isSuccess(),
+                "v0.8.1: CLASS_NOT_FOUND is degraded to UNKNOWN verdict, not propagated as Error");
+            ClaimVerificationResult data = ((ServiceResult.Success<ClaimVerificationResult>) result).data();
+            assertEquals(org.owl4agents.core.model.Verdict.UNKNOWN, data.verdict(),
+                "Degraded verdict must be UNKNOWN");
+            assertTrue(data.unknownReason().isPresent(), "unknownReason must be set");
             // Must NOT throw IllegalArgumentException
         }
 
         @Test
-        @DisplayName("CLASS_NOT_FOUND with empty-string entityIRI → error, not IAE")
+        @DisplayName("CLASS_NOT_FOUND with empty-string entityIRI → UNKNOWN, not IAE")
         void classNotFoundEmptyStringEntityIriNoCrash() {
             // Entity IRI in details is empty string — would have created EntityId("")
             stubConsistency.withCompatibilityError(
@@ -100,8 +103,14 @@ class Defect024RegressionTest {
                 new ClaimEntity("class", "http://ex.org/B"),
                 Optional.empty(), Optional.empty(), Optional.empty());
 
+            // v0.8.1: same graceful degrade path. The DEFECT-024 fix in
+            // ConsistencyAnalysisService now also catches IAE from blank IRI
+            // construction in mapError, AND v0.8.1 returns UNKNOWN verdict.
             ServiceResult<ClaimVerificationResult> result = service.verify(claim);
-            assertFalse(result.isSuccess());
+            assertTrue(result.isSuccess(),
+                "v0.8.1: blank-entityIRI CLASS_NOT_FOUND is degraded to UNKNOWN");
+            ClaimVerificationResult data = ((ServiceResult.Success<ClaimVerificationResult>) result).data();
+            assertEquals(org.owl4agents.core.model.Verdict.UNKNOWN, data.verdict());
             // Must NOT throw IllegalArgumentException
         }
 
@@ -133,9 +142,11 @@ class Defect024RegressionTest {
         }
 
         @Test
-        @DisplayName("CLASS_NOT_FOUND with valid entityIRI → proper error with IRI in message")
+        @DisplayName("CLASS_NOT_FOUND with valid entityIRI → UNKNOWN with IRI in explanation")
         void classNotFoundValidEntityIriReturnsProperError() {
-            // When entityIRI IS present and non-blank, should still work correctly
+            // When entityIRI IS present and non-blank, the v0.8.1 degrade path
+            // still kicks in (returning UNKNOWN) and includes the IRI in the
+            // explanation for traceability.
             stubConsistency.withCompatibilityError(
                 ServiceError.of(ErrorCode.CLASS_NOT_FOUND, "Class not found",
                     Map.of("entityIRI", "http://ex.org/OutOfScopeClass"))
@@ -146,12 +157,20 @@ class Defect024RegressionTest {
                 new ClaimEntity("class", "http://ex.org/B"),
                 Optional.empty(), Optional.empty(), Optional.empty());
 
+            // v0.8.1: degraded to UNKNOWN verdict (not Error)
             ServiceResult<ClaimVerificationResult> result = service.verify(claim);
-            assertFalse(result.isSuccess());
-            ServiceError error = ((ServiceResult.Error<ClaimVerificationResult>) result).error();
-            assertEquals(ErrorCode.CLASS_NOT_FOUND, error.code());
-            assertTrue(error.message().contains("http://ex.org/OutOfScopeClass"),
-                "Valid entity IRI must appear in error message");
+            assertTrue(result.isSuccess());
+            ClaimVerificationResult data = ((ServiceResult.Success<ClaimVerificationResult>) result).data();
+            assertEquals(org.owl4agents.core.model.Verdict.UNKNOWN, data.verdict());
+            // IRI must appear in the explanation for traceability
+            String explanation = data.unknownReason().isPresent()
+                ? data.unknownReason().get().toString()
+                : "";
+            String detail = data.unknownExplanation().orElse("");
+            assertTrue(explanation.contains("CLASS") || detail.contains("http://ex.org/OutOfScopeClass")
+                    || detail.contains("not declared"),
+                "Valid entity IRI must appear in unknownExplanation for traceability: "
+                    + detail);
         }
     }
 

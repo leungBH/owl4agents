@@ -35,7 +35,7 @@ expectedOutputs:
     snippet: '"name": "owl4agents"'
   - field: tools[].name
     present: true
-    value: ontology_verify_claim
+    value: ontology_verify_claim (supports v0.8.1 claim types different_individuals, object_property_subproperty, and complex class expressions in equivalent_classes)
     snippet: '"name": "ontology_verify_claim"'
   - field: mcpServers.owl4agents.url
     present: true

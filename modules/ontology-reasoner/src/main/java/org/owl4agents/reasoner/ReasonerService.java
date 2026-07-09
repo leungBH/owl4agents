@@ -3,6 +3,9 @@ package org.owl4agents.reasoner;
 import org.owl4agents.core.OntologyId;
 import org.owl4agents.core.ServiceResult;
 import org.owl4agents.core.model.*;
+import org.semanticweb.owlapi.model.OWLClassExpression;
+import org.semanticweb.owlapi.model.OWLOntology;
+import org.semanticweb.owlapi.model.OWLOntologyCreationException;
 
 import java.util.Optional;
 
@@ -77,6 +80,26 @@ public interface ReasonerService {
     ServiceResult<EntailmentResult> checkEntailment(OntologyId ontologyId, String axiomType,
                                                      java.util.Map<String, String> parameters,
                                                      Optional<String> reasonerName);
+
+    /**
+     * v0.8.1 ISSUE-03: Check equivalent-classes entailment using OWL API
+     * {@link OWLClassExpression} operands (subject + object). The {@code Map<String, String>}
+     * overload above can only handle named classes; this overload supports complex
+     * expressions (intersection, union, complement, etc.) by delegating to
+     * {@code reasoner.isEntailed(OWLEquivalentClassesAxiom)} on the constructed axiom.
+     */
+    ServiceResult<EntailmentResult> checkEquivalentClassesEntailment(
+            OntologyId ontologyId,
+            OWLClassExpression subject,
+            OWLClassExpression object,
+            Optional<String> reasonerName);
+
+    /**
+     * v0.8.1 ISSUE-03: Load the canonical OWL ontology for the given ID.
+     * Used by {@code ClaimVerificationService} to resolve IRIs inside complex
+     * class expressions. Throws {@link OWLOntologyCreationException} on failure.
+     */
+    OWLOntology loadOntologyForClaim(OntologyId ontologyId) throws OWLOntologyCreationException;
 
     /**
      * Shut down the reasoner for the specified ontology session.

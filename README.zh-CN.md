@@ -5,6 +5,8 @@
 `owl4agents` 把一个装满 OWL/RDF 文件的目录变成可查询的本地知识库。它负责加载本体、运行 OWL 推理机(HermiT / ELK / Openllet)、执行 SPARQL,并把结果通过 56 个工具的只读 MCP 服务器暴露给任何 LLM 代理(Claude Desktop、Trae IDE、Cursor……),全程不离开本机。
 
 > **v0.8** 新增 MCP Streamable HTTP 传输(基于 `GET /mcp` 的 SSE、`Mcp-Session-Id` 往返、内容协商)。v0.7 的 plain-JSON HTTP 传输保留为无回归基线;stdio 和报文格式保持不变。
+>
+> **v0.8.1**(推荐)修复 v0.8.0 的 5 个 claim verification 准确率缺陷(ISSUE-01…ISSUE-05)—— 见 [CHANGELOG.md](CHANGELOG.md) §"0.8.1" 与 `doc/retrospectives/`。80 个策展 claim 的准确率门禁从 75/80 提升到 80/80。新增两个 claim 类型(`different_individuals`、`object_property_subproperty`),并支持在 `subject` / `object` 上使用可选的 `expression` 字段表达复杂类表达式。
 
 ---
 
@@ -176,11 +178,11 @@ Windows 上,优先使用 npm launcher 或 `gradlew run --args="..."`,避免直�
 .\gradlew.bat clean buildVerification
 .\gradlew.bat :modules:ontology-cli:shadowJar
 node tools/npm/test/launcher.test.js
-node tools/npm/bin/owl4agents.js --version    # → 0.8.0
+node tools/npm/bin/owl4agents.js --version    # → 0.8.1
 node tools/npm/bin/owl4agents.js --help
 ```
 
-绿色运行表示 `BUILD SUCCESSFUL`、npm launcher 输出 `Results: 29 passed, 0 failed`、`--version` 打印 `0.8.0`。完整的 Gradle 套件有 767 个单元测试(0 失败,13 跳过)—— 运行后可在 `build/reports/tests/test/index.html` 查看报告。
+绿色运行表示 `BUILD SUCCESSFUL`、npm launcher 输出 `Results: 29 passed, 0 failed`、`--version` 打印 `0.8.1`。完整的 Gradle 套件有 800+ 个单元测试(0 失败),覆盖 80 个策展 claim 的准确率门禁(80/80)—— 运行后可在 `build/reports/tests/test/index.html` 查看报告。
 
 ---
 

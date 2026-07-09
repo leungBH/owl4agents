@@ -1,6 +1,6 @@
 # owl4agents — 功能与工具参考手册
 
-> **版本:** v0.8.0(发布于 2026-06-29,2026-07-03 重新验证)
+> **版本:** v0.8.1(发布于 2026-07-09,修复 v0.8.0 的 5 个 claim verification 准确率问题)。
 > **目标读者:** 想要**使用** owl4agents(CLI 或 MCP)、并希望了解每个命令/工具做什么、需要什么入参、返回什么结果的程序员。我们假设你是 CS 毕业生 —— 熟悉 JSON、HTTP、正则、能读 API 文档 —— 但 OWL 或 SPARQL 接触不接触都可以。
 > **配套阅读:** [README.zh-CN.md](README.zh-CN.md) 用于电梯演讲和 5 分钟快速启动;本文是深度参考。
 
@@ -173,8 +173,8 @@ OWL 2 有四种可处理的 profile:**DL**(描述逻辑,表达力最强,推理�
 字段说明:
 
 - `claimId` —— 你自己的标识符,会原样回显在响应里。
-- `type` —— 下列之一:`subclass`、`class_compatibility`、`class_membership`、`relation_assertion`、`ontology_scope`、`equivalence`、`disjointness`、`entailment`。
-- `subject` / `object` —— `{ "kind": "class" | "individual" | "property", "iri": "..." }`。
+- `type` —— 下列之一:`subclass`、`equivalent_classes`、`disjoint_classes`、`individual_membership`、`class_compatibility`、`relation_assertion`(在 v0.8.1 拆分为 `object_property_assertion` / `data_property_assertion`)、`ontology_scope`、`ontology_consistency`、`literal_validity`、`object_property_domain`、`object_property_range`、`data_property_domain`、`data_property_range`、`different_individuals`(v0.8.1)、`object_property_subproperty`(v0.8.1)。
+- `subject` / `object` —— `{ "kind": "class" | "individual" | "object_property" | "data_property", "iri": "..." }`。v0.8.1 在任意一侧加了可选的 `expression` 字段,支持复杂类表达式(例如 `Pizza ⊓ ∃hasTopping.CheeseTopping`);见 §6.7。
 - `predicate` —— 所断言的关系。
 - `reasoner` —— `"auto" | "hermit" | "elk" | "openllet"`,默认 `"auto"`。
 - `graphScope` —— `"explicit" | "inferred" | "union"`,默认 `"explicit"`。
@@ -605,10 +605,10 @@ curl.exe -sS -X POST http://127.0.0.1:8091/mcp `
 ```
 
 ```json
-{"jsonrpc":"2.0","id":1,"result":{"protocolVersion":"2025-06-18","capabilities":{"tools":{}},"serverInfo":{"name":"owl4agents","version":"0.8.0"}}}
+{"jsonrpc":"2.0","id":1,"result":{"protocolVersion":"2025-06-18","capabilities":{"tools":{}},"serverInfo":{"name":"owl4agents","version":"0.8.1"}}}
 ```
 
-`serverInfo.version` 应该是 `"0.8.0"`。会话是匿名的(`initialize` 不返回 `Mcp-Session-Id`);后续调用在 plain HTTP 传输上不需要 session id。
+`serverInfo.version` 应该是 `"0.8.1"`。会话是匿名的(`initialize` 不返回 `Mcp-Session-Id`);后续调用在 plain HTTP 传输上不需要 session id。
 
 ```powershell
 curl.exe -sS -X POST http://127.0.0.1:8091/mcp `
@@ -1493,7 +1493,7 @@ node tools/npm/bin/owl4agents.js smoke
 ### 4.45 `--version` / `--help`
 
 ```powershell
-node tools/npm/bin/owl4agents.js --version    # → 0.8.0
+node tools/npm/bin/owl4agents.js --version    # → 0.8.1
 node tools/npm/bin/owl4agents.js --help       # → 完整命令列表
 ```
 
@@ -2389,6 +2389,54 @@ or omit them.
 | "counterexamples 是空的" | counterexamples 只对特定 claim 类型和 verdict 适用。`class_compatibility` 配 `disjoint` verdict 时,没有反例个体(不可能同时是两者)。 |
 | "我发 `ASK` 查询拿到 400" | SPARQL safety guard 没问题;解析错误多半是前缀问题。用完整 IRI 或提供 `PREFIX` prologue。 |
 
+### 6.6 v0.8.1 —— 新 claim 类型与复杂类表达式
+
+v0.8.1 新增了两个 claim 类型,并在 `subject` / `object` 上加了可选的 `expression` 字段,以便在 `equivalent_classes` claim 里支持复杂类表达式。
+
+**新增 claim 类型:**
+
+| `type` | 断言 | 示例 |
+|---|---|---|
+| `different_individuals` | "两个命名个体互不相同" | `France` differentFrom `Germany` → `supported`(asserted) |
+| `object_property_subproperty` | "对象属性 A 是对象属性 B 的子属性" | `hasBase` subPropertyOf `hasIngredient` → `supported`(asserted) |
+
+两个类型都沿用现有 entailment claim 的 "先查 asserted,再 `isEntailed` fallback" 逻辑;主关系未 entail 时,会查反证(`SameIndividual`、反向 `SubObjectPropertyOf`)。
+
+**复杂类表达式(`subject.expression` / `object.expression`)**:
+
+```json
+{
+  "claimId": "pizza-007",
+  "type": "equivalent_classes",
+  "ontologyId": "pizza",
+  "subject": { "kind": "class", "iri": "http://www.co-ode.org/ontologies/pizza/pizza.owl#CheeseyPizza" },
+  "object": {
+    "kind": "class",
+    "iri": null,
+    "expression": {
+      "type": "intersection",
+      "operands": [
+        { "type": "named", "iri": "http://www.co-ode.org/ontologies/pizza/pizza.owl#Pizza" },
+        { "type": "existential", "property": "http://www.co-ode.org/ontologies/pizza/pizza.owl#hasTopping", "filler": { "type": "named", "iri": "http://www.co-ode.org/ontologies/pizza/pizza.owl#CheeseTopping" } }
+      ]
+    }
+  }
+}
+```
+
+6 种支持的 `expression.type`:
+
+| `type` | JSON 形态 | OWL 2 构造子 |
+|---|---|---|
+| `named` | `{ "type": "named", "iri": "..." }` | `owl:Class` |
+| `existential` | `{ "type": "existential", "property": "...", "filler": {...} }` | `ObjectSomeValuesFrom` |
+| `universal` | `{ "type": "universal", "property": "...", "filler": {...} }` | `ObjectAllValuesFrom` |
+| `intersection` | `{ "type": "intersection", "operands": [ {...}, ... ] }` | `ObjectIntersectionOf` |
+| `union` | `{ "type": "union", "operands": [ {...}, ... ] }` | `ObjectUnionOf` |
+| `complement` | `{ "type": "complement", "operand": {...} }` | `ObjectComplementOf` |
+
+嵌套深度上限 3。无法解析的 IRI 抛 `ENTITY_NOT_FOUND`。延后支持的 `data_existential`、`data_universal`、`cardinality_restriction`、`data_intersection` 表达式类型返回 `INVALID_CLAIM_SCHEMA`,错误消息列出 6 种支持类型。
+
 ---
 
 ## 7. 部署、环境与集成
@@ -2630,11 +2678,14 @@ SELECT ?s WHERE { ?s <http://www.w3.org/2000/01/rdf-schema#subClassOf> <http://e
 
 | 层 | 内容 | 数量 | 时间 |
 |---|---|---|---|
-| 单元测试(Gradle) | `modules/*/src/test/` | 767 | ~30s |
+| 单元测试(Gradle) | `modules/*/src/test/` | 800+ | ~30s |
 | Launcher 冒烟(npm) | `tools/npm/test/launcher.test.js` | 29 | ~10s |
 | MCP 工具集成 | v0.8 验收(`test/contracts/v08-acceptance/`) | 56 | ~30s |
+| v0.8.1 80-claim 准确率门禁 | `V081AcceptanceSuite`(pizza-50 + owl2bench-30) | 80 | ~10s |
 | 推理机压测(tag `stress`) | 10 个并发推理机调用 | 1 | ~60s |
 | 端到端示例包 | `examples/claim-verification/`、`examples/pizza-reasoning/`、`examples/biomedical-grounding/`、`examples/agent-mcp/` | 5 | 每个 ~5s |
+
+v0.8.1 这行覆盖 5 个修复场景(`pizza-007`、`pizza-035`、`pizza-037`、`pizza-046`、`owl2bench-027`)和剩余 75 个策展 claim,断言 80/80 准确率门禁,用于修复 v0.8.0 的 ISSUE-01…ISSUE-05 缺陷(见 `doc/retrospectives/`)。
 
 全跑一遍:
 

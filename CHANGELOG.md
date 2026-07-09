@@ -1,5 +1,38 @@
 # Changelog
 
+## 0.8.1 - 2026-07-09
+
+### Fixed
+
+- **ISSUE-01: Global scope pre-check for external IRIs** — `ClaimVerificationService.verify` now performs a global scope pre-check before dispatching to type-specific verification. Previously, claims whose subject or object IRI was external to the loaded ontology (e.g. `http://example.org/external#Foo`) returned `UNKNOWN` from the type-specific verifier; they now return `OUT_OF_SCOPE` with `unknownReason = missing_or_out_of_scope_entities`. The pre-check honours the `isExemptFromScopePrecheck` exemption list (`ontology_scope`, `ontology_consistency`, `literal_validity`) and the built-in namespace whitelist (`xsd:`, `rdf:`, `rdfs:`, `owl:`).
+- **ISSUE-02: Reasoner-driven entailment for object/data property domain and range** — `ReasonerServiceImpl.checkAxiomEntailment` now implements `ObjectPropertyDomain`, `ObjectPropertyRange`, `DataPropertyDomain`, and `DataPropertyRange` cases. Each case follows the asserted-first-then-`isEntailed`-fallback order, with IRIs resolved via the new `OntologyIriResolver` and a `precomputeInferences(CLASS_HIERARCHY)` precondition. `OWLReasonerAdapter.getUnderlyingReasoner()` was added to expose the raw reasoner; the legacy private bridge returning `null` is no longer used.
+- **ISSUE-03: Complex class expressions in equivalent-class claims** — Added the `ClassExpression` sealed interface (6 permits: `NamedClass`, `ObjectSomeValuesFrom`, `ObjectAllValuesFrom`, `ObjectIntersectionOf`, `ObjectUnionOf`, `ObjectComplementOf`), `ClassExpressionBuilder` for converting records to OWL API objects, and `ReasonerServiceImpl.checkEquivalentClassesEntailment(OWLClassExpression, OWLClassExpression)` for the reasoner-driven entailment check. Nesting depth is capped at 3; unresolved IRIs raise `ENTITY_NOT_FOUND`; the deferred `data_existential`, `data_universal`, `cardinality_restriction`, and `data_intersection` types return `INVALID_CLAIM_SCHEMA` with an error message listing the 6 supported types.
+- **ISSUE-04: `DifferentIndividuals` verification** — `ClaimVerificationService.verify` now routes `different_individuals` claims to `verifyDifferentIndividuals`, which delegates to `ReasonerServiceImpl.checkEntailment` (asserted-first-then-`isEntailed`-fallback). Counter-evidence `SameIndividual` is checked via the new `SameIndividual` axiom type, returning `CONTRADICTED` with `EvidenceItem(ROLE_COUNTER, kind=INFERRED_AXIOM, source="inferred_same_individual")`. 80-curated-claim accuracy impact: `pizza-035` (France/Germany, asserted) is now `SUPPORTED`.
+- **ISSUE-05: `SubObjectPropertyOf` verification** — `ClaimVerificationService.verify` now routes `object_property_subproperty` claims to `verifySubPropertyOf`, which delegates to `ReasonerServiceImpl.checkEntailment` (asserted-first-then-`isEntailed`-fallback). A reverse-direction check returns `CONTRADICTED` when the super-property is entailed as a sub-property of the claimed sub-property. 80-curated-claim accuracy impact: `pizza-037` (hasBase/hasIngredient, asserted) is now `SUPPORTED`.
+
+### Added
+
+- Two new claim types: `DIFFERENT_INDIVIDUALS` and `OBJECT_PROPERTY_SUBPROPERTY`.
+- Optional `object.expression` field on `ClaimEntity`, accepting the 6 supported `ClassExpression` types. Backward-compatible two-arg constructor preserved.
+- `OWLReasonerAdapter.getUnderlyingReasoner()` — exposes the raw `OWLReasoner` to service-layer code.
+- `OntologyIriResolver` — shared utility (in `ontology-owlapi`) that resolves full IRIs, prefixed names, and bare IRIs against the ontology's prefix format and signature.
+- `ClassExpressionBuilder` — converts `ClassExpression` records to OWL API `OWLClassExpression` objects with IRI resolution and nesting-depth enforcement.
+- `checkEquivalentClassesEntailment(OWLClassExpression, OWLClassExpression)` on `ReasonerService` — reasoner-driven entailment for complex expressions.
+- `ObjectPropertyDomain` / `ObjectPropertyRange` / `DataPropertyDomain` / `DataPropertyRange` / `DifferentIndividuals` / `SameIndividual` cases in `checkAxiomEntailment`.
+- `JVM` system property `OWL4AGENTS_HOME` is now consulted as a fallback for the inferred-class-hierarchy lookup (needed for `Process`-less JUnit runs of `V03AcceptanceSuite`).
+
+### Changed
+
+- Version bump 0.8.0 → 0.8.1 across `McpServerAdapter.SERVER_VERSION`, CLI banner, `build.gradle.kts`, npm package, CI assertion, examples README, and this CHANGELOG.
+- `ReasonerServiceImpl.determineSource` now returns `"asserted"` (not `"explicit"`) for the `SubClassOf` branch to align with the v0.8.1 evidence-source naming.
+
+### Notes
+
+- v0.8.1 is **backward-compatible** with v0.8.0 clients. The `object.expression` field is optional; claims without it parse unchanged.
+- 80-curated-claim accuracy improved from **75/80** to **80/80** (5 fix scenarios: `pizza-007`, `pizza-035`, `pizza-037`, `pizza-046`, `owl2bench-027`).
+- Readonly tool count remains 56; no new external dependencies.
+- The pre-check upgrade from `unknown` to `out_of_scope` for external IRIs is a contract change. v0.8.0 clients that relied on `unknown` for these claims must update to handle `out_of_scope`. The `unknownReason` is normalized to `missing_or_out_of_scope_entities` to remain compatible with the v0.5 workflow contract.
+
 ## 0.8.0 - 2026-06-29
 
 ### Fixed (v0.8.0 post-release retest 2026-07-03)

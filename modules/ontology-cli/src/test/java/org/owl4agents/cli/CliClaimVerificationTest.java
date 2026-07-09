@@ -532,9 +532,11 @@ class CliClaimVerificationTest {
         }
 
         @Test
-        @DisplayName("All 14 claim types are defined")
+        @DisplayName("All 16 claim types are defined (v0.8.1: 14 baseline + 2 new)")
         void allClaimTypesDefined() {
-            assertEquals(14, ClaimType.values().length);
+            // v0.8.1: 14 baseline claim types (v0.6 had 14) + DIFFERENT_INDIVIDUALS (ISSUE-04) +
+            // OBJECT_PROPERTY_SUBPROPERTY (ISSUE-05) = 16
+            assertEquals(16, ClaimType.values().length);
         }
 
         @Test

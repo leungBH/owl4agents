@@ -38,30 +38,42 @@ import org.owl4agents.owlapi.SemanticDeepeningService;
 @DisplayName("CLI/MCP parity tests for v0.3 claim verification")
 class CliMcpParityTest {
 
+    private static final String PIZZA_NS = "http://www.co-ode.org/ontologies/pizza/pizza.owl#";
+    private static final String PIZZA = PIZZA_NS + "Pizza";
+    private static final String CHEESEY_PIZZA = PIZZA_NS + "CheeseyPizza";
+    private static final String ONTOLOGY_ID = "pizza";
+
+    private static final String WORKSPACE = System.getProperty("user.dir").contains("D:\\owl4agents")
+        ? "D:\\owl4agents\\data\\workspaces" : "data/workspaces";
+
     private StubReasonerService stubReasoner;
     private ClaimVerificationService verificationService;
     private EvidenceGroundingService groundingService;
 
     @BeforeEach
     void setUp() {
-        stubReasoner = new StubReasonerService();
+        // v0.8.1: use the real pizza.owl workspace so the v0.8.1 scope pre-check
+        // (which validates IRIs against the ontology signature) finds the
+        // entities. The StubReasonerService still controls the entailment
+        // verdict, so the test focus is preserved.
+        stubReasoner = new StubReasonerService().withRealOntology(WORKSPACE);
         verificationService = new ClaimVerificationService(
             stubReasoner,
-            new ConsistencyAnalysisService(new ReasonerLifecycleManager(), "dummy-path"),
-            new SemanticDeepeningService("dummy-path"),
+            new ConsistencyAnalysisService(new ReasonerLifecycleManager(), WORKSPACE),
+            new SemanticDeepeningService(WORKSPACE),
             new StubCatalogStore(),
             new WorkspaceId("default")
         );
         groundingService = new EvidenceGroundingService(
             stubReasoner,
-            new ConsistencyAnalysisService(new ReasonerLifecycleManager(), "dummy-path")
+            new ConsistencyAnalysisService(new ReasonerLifecycleManager(), WORKSPACE)
         );
     }
 
     private Claim subclassClaim(String claimId) {
-        return new Claim(claimId, ClaimType.SUBCLASS, "test-ontology",
-            new ClaimEntity("class", "http://ex.org/A"), "http://ex.org/subClassOf",
-            new ClaimEntity("class", "http://ex.org/B"),
+        return new Claim(claimId, ClaimType.SUBCLASS, ONTOLOGY_ID,
+            new ClaimEntity("class", CHEESEY_PIZZA), "http://www.w3.org/2000/01/rdf-schema#subClassOf",
+            new ClaimEntity("class", PIZZA),
             Optional.empty(), Optional.empty(), Optional.empty());
     }
 
@@ -82,7 +94,7 @@ class CliMcpParityTest {
             ClaimVerificationResult data = ((ServiceResult.Success<ClaimVerificationResult>) result).data();
 
             assertEquals("parity-supported", data.claimId());
-            assertEquals("test-ontology", data.ontologyId());
+            assertEquals(ONTOLOGY_ID, data.ontologyId());
             assertEquals(ClaimType.SUBCLASS, data.claimType());
             assertEquals(Verdict.SUPPORTED, data.verdict());
             assertFalse(data.evidence().isEmpty());
@@ -107,7 +119,7 @@ class CliMcpParityTest {
         @DisplayName("CONTRADICTED verdict: ontology inconsistency yields CONTRADICTED with counter evidence")
         void contradictedVerdictParity() {
             stubReasoner.withConsistent(false);
-            Claim claim = new Claim("parity-contradicted", ClaimType.ONTOLOGY_CONSISTENCY, "test-ontology",
+            Claim claim = new Claim("parity-contradicted", ClaimType.ONTOLOGY_CONSISTENCY, ONTOLOGY_ID,
                 null, null, null,
                 Optional.empty(), Optional.empty(), Optional.empty());
 
@@ -159,7 +171,7 @@ class CliMcpParityTest {
             EvidencePath path = ((ServiceResult.Success<EvidencePath>) pathResult).data();
 
             assertEquals("parity-evidence", path.claimId());
-            assertEquals("test-ontology", path.ontologyId());
+            assertEquals(ONTOLOGY_ID, path.ontologyId());
             assertFalse(path.items().isEmpty());
         }
 
@@ -167,7 +179,7 @@ class CliMcpParityTest {
         @DisplayName("Counterexamples: all items have counter role")
         void counterexamplesParity() {
             stubReasoner.withConsistent(false);
-            Claim claim = new Claim("parity-counter", ClaimType.ONTOLOGY_CONSISTENCY, "test-ontology",
+            Claim claim = new Claim("parity-counter", ClaimType.ONTOLOGY_CONSISTENCY, ONTOLOGY_ID,
                 null, null, null,
                 Optional.empty(), Optional.empty(), Optional.empty());
 
@@ -199,7 +211,7 @@ class CliMcpParityTest {
             UnknownExplanation explanation = ((ServiceResult.Success<UnknownExplanation>) explainResult).data();
 
             assertEquals("parity-explain", explanation.claimId());
-            assertEquals("test-ontology", explanation.ontologyId());
+            assertEquals(ONTOLOGY_ID, explanation.ontologyId());
             assertTrue(explanation.explanation().isPresent());
             assertTrue(explanation.suggestedAction().isPresent());
         }
@@ -208,8 +220,8 @@ class CliMcpParityTest {
         @DisplayName("Missing entities: deterministic ontologyId")
         void missingEntitiesParity() {
             stubReasoner.withInferredFacts(List.of(
-                new InferredFact("test-ontology", "http://ex.org/A",
-                    "http://ex.org/subClassOf", "http://ex.org/B",
+                new InferredFact(ONTOLOGY_ID, CHEESEY_PIZZA,
+                    "http://www.w3.org/2000/01/rdf-schema#subClassOf", PIZZA,
                     null, "SubClassOf", "inferred", "HermiT")
             ));
             Claim claim = subclassClaim("parity-missing");
@@ -218,7 +230,7 @@ class CliMcpParityTest {
             assertTrue(result.isSuccess());
             MissingEntityResult data = ((ServiceResult.Success<MissingEntityResult>) result).data();
 
-            assertEquals("test-ontology", data.ontologyId());
+            assertEquals(ONTOLOGY_ID, data.ontologyId());
         }
     }
 }

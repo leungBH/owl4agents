@@ -12,6 +12,12 @@ reports/
 temp/
 local/
 
+# Internal retrospective documents (root-cause analyses for release defects).
+# These reference local paths and design rationale; they are local-only and
+# MUST NOT be committed alongside the public v0.8.x changelog entries. The
+# corresponding high-level ISSUE entries are summarized in CHANGELOG.md.
+doc/
+
 # Generated example outputs (runtime logs, transcripts, screenshots)
 temp/examples/
 

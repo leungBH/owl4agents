@@ -77,7 +77,7 @@ When the MCP server starts, it responds to the `initialize` request with:
   "capabilities": { "tools": {} },
   "serverInfo": {
     "name": "owl4agents",
-    "version": "0.8.0"
+    "version": "0.8.1"
   }
 }
 ```
@@ -168,7 +168,29 @@ into the JSON config. The IDE will open a long-lived `GET /mcp` SSE
 stream, send `initialize` to receive a `Mcp-Session-Id`, and use that
 id on every subsequent `POST /mcp` request. If the server is older
 than v0.8.0, Trae IDE will fail to connect with `SSE error: Non-200
-status code (405)` — upgrade to v0.8.0 or later to fix it.
+status code (405)` — upgrade to v0.8.0 or later to fix it (v0.8.1 is
+recommended for the latest claim-verification accuracy improvements).
+
+### v0.8.1 Claim Types
+
+The `ontology_verify_claim` tool in v0.8.1 supports the following
+additional claim types beyond the v0.8.0 baseline:
+
+- `different_individuals` — verify that two named individuals are
+  explicitly or inferably distinct (counter-evidence: an
+  `OWLSameIndividualAxiom` linking them).
+- `object_property_subproperty` — verify sub-property relationships
+  between two object properties, including transitive closure and
+  reverse-direction entailment (for contradiction detection).
+- Complex class expressions in `equivalent_classes` claims — the
+  `subject.expression` and `object.expression` fields accept a
+  nested structure with 6 supported types: `named`, `object_intersection`,
+  `object_union`, `object_existential` (∃), `object_universal` (∀),
+  and `object_complement` (¬). Up to 4 levels of nesting are allowed.
+
+For example, the v0.8.1 sample `example.yaml` shows a
+`different_individuals` claim against the pizza ontology, and an
+`object_property_subproperty` claim against the same corpus.
 
 ### Probe commands
 

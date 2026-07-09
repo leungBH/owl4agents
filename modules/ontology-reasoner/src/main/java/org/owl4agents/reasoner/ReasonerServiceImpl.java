@@ -3,6 +3,7 @@ package org.owl4agents.reasoner;
 import org.owl4agents.core.*;
 import org.owl4agents.core.model.*;
 import org.owl4agents.owlapi.OntologyImporter;
+import org.owl4agents.owlapi.OntologyIriResolver;
 import org.owl4agents.storage.CatalogStore;
 import org.semanticweb.owlapi.apibinding.OWLManager;
 import org.semanticweb.owlapi.model.*;
@@ -300,13 +301,96 @@ public class ReasonerServiceImpl implements ReasonerService {
         }
     }
 
+    /**
+     * v0.8.1 ISSUE-03: Equivalent-classes entailment using OWL API
+     * {@link org.semanticweb.owlapi.model.OWLClassExpression} operands (subject + object).
+     * The v0.8.0 overload that takes a {@code Map<String, String>} can only handle
+     * named classes; this overload supports complex expressions (intersection,
+     * union, complement, etc.) by delegating to
+     * {@code ClassExpressionBuilder.build} on the caller's side and
+     * running {@code reasoner.isEntailed(OWLEquivalentClassesAxiom)} on
+     * the constructed axiom.
+     */
+    public ServiceResult<EntailmentResult> checkEquivalentClassesEntailment(
+            OntologyId ontologyId,
+            org.semanticweb.owlapi.model.OWLClassExpression subject,
+            org.semanticweb.owlapi.model.OWLClassExpression object,
+            Optional<String> reasonerName) {
+        try {
+            OWLOntology ontology = loadOntology(ontologyId);
+            String detectedProfile = detectProfile(ontology);
+            String effectiveReasonerName = resolveReasonerName(reasonerName, detectedProfile, false);
+
+            OWLReasonerAdapter adapter = lifecycleManager.getOrCreateReasoner(
+                ontologyId, effectiveReasonerName, ontology, detectedProfile, false);
+
+            if (!adapter.isActive()) {
+                return ServiceResult.error(ErrorCode.REASONING_NOT_RUN,
+                    "Reasoner is not active after initialization for ontology: " + ontologyId.id());
+            }
+
+            // v0.8.1 Task 5.5: classify precondition before isEntailed
+            try {
+                adapter.getUnderlyingReasoner().precomputeInferences(InferenceType.CLASS_HIERARCHY);
+            } catch (Exception ignored) {
+                // safe to ignore; precompute is best-effort
+            }
+
+            OWLDataFactory df = ontology.getOWLOntologyManager().getOWLDataFactory();
+            org.semanticweb.owlapi.model.OWLEquivalentClassesAxiom axiom =
+                df.getOWLEquivalentClassesAxiom(subject, object);
+
+            // Asserted check (rare for complex expressions but possible)
+            boolean asserted = ontology.getAxioms(AxiomType.EQUIVALENT_CLASSES, Imports.INCLUDED).stream()
+                .anyMatch(ax -> ax.getClassExpressions().size() == 2
+                    && ax.getClassExpressions().contains(subject)
+                    && ax.getClassExpressions().contains(object));
+            if (asserted) {
+                return ServiceResult.success(
+                    new EntailmentResult(ontologyId.id(), "EquivalentClasses",
+                        EntailmentResult.ENTAILED, "asserted", effectiveReasonerName, null),
+                    ResultMetadata.empty());
+            }
+
+            boolean entailed;
+            try {
+                entailed = adapter.getUnderlyingReasoner().isEntailed(axiom);
+            } catch (Exception e) {
+                return ServiceResult.error(ErrorCode.CLASSIFICATION_FAILED,
+                    "isEntailed failed for EquivalentClasses: " + e.getMessage());
+            }
+
+            return ServiceResult.success(
+                new EntailmentResult(ontologyId.id(), "EquivalentClasses",
+                    entailed ? EntailmentResult.ENTAILED : EntailmentResult.NOT_ENTAILED,
+                    entailed ? "inferred" : null, effectiveReasonerName, null),
+                ResultMetadata.empty());
+
+        } catch (OWLOntologyCreationException e) {
+            return ServiceResult.error(ErrorCode.CLASSIFICATION_FAILED, e.getMessage());
+        } catch (Exception e) {
+            return ServiceResult.error(ErrorCode.CLASSIFICATION_FAILED,
+                "Failed to check EquivalentClasses entailment: " + e.getMessage());
+        }
+    }
+
     @Override
     public ServiceResult<EntailmentResult> checkEntailment(OntologyId ontologyId, String axiomType,
                                                              Map<String, String> parameters, Optional<String> reasonerName) {
         // Validate axiom type support
         Set<String> supportedTypes = Set.of(
             "SubClassOf", "EquivalentClasses", "DisjointClasses", "ClassAssertion",
-            "ObjectPropertyAssertion", "DataPropertyAssertion", "ObjectPropertyDomain", "ObjectPropertyRange");
+            "ObjectPropertyAssertion", "DataPropertyAssertion", "ObjectPropertyDomain", "ObjectPropertyRange",
+            // v0.8.1 ISSUE-02: add DataPropertyDomain / DataPropertyRange so
+            // DATA_PROPERTY_DOMAIN / DATA_PROPERTY_RANGE claims reach
+            // checkAxiomEntailment instead of returning UNSUPPORTED_AXIOM_TYPE.
+            "DataPropertyDomain", "DataPropertyRange",
+            // v0.8.1 ISSUE-04 / ISSUE-05: DifferentIndividuals + SubObjectPropertyOf
+            "DifferentIndividuals", "SubObjectPropertyOf",
+            // v0.8.1 ISSUE-04 counter-evidence: SameIndividual is consulted by
+            // verifyDifferentIndividuals to detect a CONTRADICTED outcome (i.e.
+            // two named individuals that the reasoner proves are the same).
+            "SameIndividual");
 
         if (!supportedTypes.contains(axiomType)) {
             return ServiceResult.success(
@@ -374,6 +458,16 @@ public class ReasonerServiceImpl implements ReasonerService {
     }
 
     // ── Private helpers ──
+
+    /**
+     * v0.8.1 ISSUE-03: public accessor for the loaded OWL ontology, used by
+     * {@code ClaimVerificationService.verifyEquivalentClassesWithExpressions}
+     * to resolve IRIs inside complex class expressions. Returns the
+     * canonical {@code ontology.owl} for the given ontology ID.
+     */
+    public OWLOntology loadOntologyForClaim(OntologyId ontologyId) throws OWLOntologyCreationException {
+        return loadOntology(ontologyId);
+    }
 
     private OWLOntology loadOntology(OntologyId ontologyId) throws OWLOntologyCreationException {
         Path ontologyPath = resolveOntologyPath(ontologyId);
@@ -601,26 +695,49 @@ public class ReasonerServiceImpl implements ReasonerService {
                                            String axiomType, Map<String, String> parameters) {
         OWLDataFactory df = ontology.getOWLOntologyManager().getOWLDataFactory();
 
+        // v0.8.1 ISSUE-02: classify precondition. Ensure the reasoner has
+        // classified before any isEntailed() call. We trigger
+        // precomputeInferences synchronously; for batch flows this is fine
+        // because ReasonerServiceImpl.checkEntailment is single-threaded per
+        // ontology (lifecycleManager hands out a per-ontology adapter).
+        if (adapter.isActive()) {
+            try {
+                adapter.getUnderlyingReasoner().precomputeInferences(InferenceType.CLASS_HIERARCHY);
+            } catch (Exception ignored) {
+                // Some reasoners (e.g. ELK) refuse precomputeInferences when
+                // nothing has changed; this is safe to ignore.
+            }
+        }
+
         switch (axiomType) {
             case "SubClassOf": {
                 String subclassIRI = parameters.get("subclass");
                 String superclassIRI = parameters.get("superclass");
                 if (subclassIRI == null || superclassIRI == null) return false;
-                OWLClass subClass = df.getOWLClass(IRI.create(subclassIRI));
-                OWLClass superClass = df.getOWLClass(IRI.create(superclassIRI));
+                IRI subIri = OntologyIriResolver.resolveOntologyIRI(ontology, subclassIRI, "class");
+                IRI supIri = OntologyIriResolver.resolveOntologyIRI(ontology, superclassIRI, "class");
+                if (subIri == null || supIri == null) return false;
+                OWLClass subClass = df.getOWLClass(subIri);
+                OWLClass superClass = df.getOWLClass(supIri);
 
-                // Check if explicitly asserted first
-                boolean explicit = ontology.getAxioms(AxiomType.SUBCLASS_OF, Imports.INCLUDED).stream()
+                // Check if asserted first
+                boolean asserted = ontology.getAxioms(AxiomType.SUBCLASS_OF, Imports.INCLUDED).stream()
                     .anyMatch(ax -> ax.getSubClass().equals(subClass) && ax.getSuperClass().equals(superClass));
-                if (explicit) return true;
+                if (asserted) return true;
 
-                // Check inferred via reasoner
+                // Check inferred via reasoner (v0.8.1: use getUnderlyingReasoner
+                // instead of the v0.8.0 private getOWLReasonerFromAdapter bridge
+                // which returned null and silently fell through).
                 try {
-                    NodeSet<OWLClass> inferredSupers = adapter.isActive() ?
-                        ((org.semanticweb.owlapi.reasoner.OWLReasoner) getOWLReasonerFromAdapter(adapter)).getSuperClasses(subClass, true) :
-                        null;
-                    if (inferredSupers != null) {
-                        return inferredSupers.getFlattened().contains(superClass);
+                    if (adapter.isActive()) {
+                        // v0.8.1 DEFECT-1 fix: false = transitive closure of all
+                        // superclasses, NOT direct only. True would miss grand-parent
+                        // classes (e.g. Dog -> Animal when only Dog->Mammal is direct).
+                        NodeSet<OWLClass> inferredSupers =
+                            adapter.getUnderlyingReasoner().getSuperClasses(subClass, false);
+                        if (inferredSupers != null) {
+                            return inferredSupers.getFlattened().contains(superClass);
+                        }
                     }
                 } catch (Exception e) {
                     // Fall back to checking stored inferred data
@@ -635,14 +752,232 @@ public class ReasonerServiceImpl implements ReasonerService {
                 String classIRI = parameters.get("class");
                 if (individualIRI == null || classIRI == null) return false;
 
-                boolean explicit = ontology.getAxioms(AxiomType.CLASS_ASSERTION, Imports.INCLUDED).stream()
+                IRI indIri = OntologyIriResolver.resolveOntologyIRI(ontology, individualIRI, "individual");
+                IRI clsIri = OntologyIriResolver.resolveOntologyIRI(ontology, classIRI, "class");
+                if (indIri == null || clsIri == null) return false;
+
+                boolean asserted = ontology.getAxioms(AxiomType.CLASS_ASSERTION, Imports.INCLUDED).stream()
                     .anyMatch(ax -> ax.getIndividual().isNamed() &&
-                        ax.getIndividual().asOWLNamedIndividual().getIRI().toString().equals(individualIRI) &&
+                        ax.getIndividual().asOWLNamedIndividual().getIRI().equals(indIri) &&
                         ax.getClassExpression().isNamed() &&
-                        ax.getClassExpression().asOWLClass().getIRI().toString().equals(classIRI));
-                if (explicit) return true;
+                        ax.getClassExpression().asOWLClass().getIRI().equals(clsIri));
+                if (asserted) return true;
 
                 return checkStoredEntailment(ontology, "Type", individualIRI, classIRI);
+            }
+
+            // v0.8.1 ISSUE-02: ObjectPropertyDomain (asserted-first then isEntailed)
+            case "ObjectPropertyDomain": {
+                String propertyIRI = parameters.get("propertyIRI");
+                String domainIRI = parameters.get("domainIRI");
+                if (propertyIRI == null || domainIRI == null) return false;
+                IRI propIri = OntologyIriResolver.resolveOntologyIRI(ontology, propertyIRI, "object_property");
+                IRI domIri = OntologyIriResolver.resolveOntologyIRI(ontology, domainIRI, "class");
+                if (propIri == null || domIri == null) return false;
+                OWLObjectProperty prop = df.getOWLObjectProperty(propIri);
+                OWLClass domain = df.getOWLClass(domIri);
+
+                boolean asserted = ontology.getObjectPropertyDomainAxioms(prop).stream()
+                    .anyMatch(ax -> ax.getDomain().equals(domain));
+                if (asserted) return true;
+
+                try {
+                    if (adapter.isActive()) {
+                        return adapter.getUnderlyingReasoner().isEntailed(
+                            df.getOWLObjectPropertyDomainAxiom(prop, domain));
+                    }
+                } catch (Exception ignored) {
+                    // fall through to false
+                }
+                return false;
+            }
+
+            // v0.8.1 ISSUE-02: ObjectPropertyRange (asserted-first then isEntailed)
+            case "ObjectPropertyRange": {
+                String propertyIRI = parameters.get("propertyIRI");
+                String rangeIRI = parameters.get("rangeIRI");
+                if (propertyIRI == null || rangeIRI == null) return false;
+                IRI propIri = OntologyIriResolver.resolveOntologyIRI(ontology, propertyIRI, "object_property");
+                IRI rngIri = OntologyIriResolver.resolveOntologyIRI(ontology, rangeIRI, "class");
+                if (propIri == null || rngIri == null) return false;
+                OWLObjectProperty prop = df.getOWLObjectProperty(propIri);
+                OWLClass range = df.getOWLClass(rngIri);
+
+                boolean asserted = ontology.getObjectPropertyRangeAxioms(prop).stream()
+                    .anyMatch(ax -> ax.getRange().equals(range));
+                if (asserted) return true;
+
+                try {
+                    if (adapter.isActive()) {
+                        return adapter.getUnderlyingReasoner().isEntailed(
+                            df.getOWLObjectPropertyRangeAxiom(prop, range));
+                    }
+                } catch (Exception ignored) {
+                    // fall through to false
+                }
+                return false;
+            }
+
+            // v0.8.1 ISSUE-02: DataPropertyDomain (asserted-first then isEntailed)
+            case "DataPropertyDomain": {
+                String propertyIRI = parameters.get("propertyIRI");
+                String domainIRI = parameters.get("domainIRI");
+                if (propertyIRI == null || domainIRI == null) return false;
+                IRI propIri = OntologyIriResolver.resolveOntologyIRI(ontology, propertyIRI, "data_property");
+                IRI domIri = OntologyIriResolver.resolveOntologyIRI(ontology, domainIRI, "class");
+                if (propIri == null || domIri == null) return false;
+                OWLDataProperty prop = df.getOWLDataProperty(propIri);
+                OWLClass domain = df.getOWLClass(domIri);
+
+                boolean asserted = ontology.getDataPropertyDomainAxioms(prop).stream()
+                    .anyMatch(ax -> ax.getDomain().equals(domain));
+                if (asserted) return true;
+
+                try {
+                    if (adapter.isActive()) {
+                        return adapter.getUnderlyingReasoner().isEntailed(
+                            df.getOWLDataPropertyDomainAxiom(prop, domain));
+                    }
+                } catch (Exception ignored) {
+                    // fall through to false
+                }
+                return false;
+            }
+
+            // v0.8.1 ISSUE-02: DataPropertyRange (asserted-first then isEntailed)
+            case "DataPropertyRange": {
+                String propertyIRI = parameters.get("propertyIRI");
+                String rangeIRI = parameters.get("rangeIRI");
+                if (propertyIRI == null || rangeIRI == null) return false;
+                IRI propIri = OntologyIriResolver.resolveOntologyIRI(ontology, propertyIRI, "data_property");
+                IRI rngIri = OntologyIriResolver.resolveOntologyIRI(ontology, rangeIRI, "datatype");
+                if (propIri == null || rngIri == null) return false;
+                OWLDataProperty prop = df.getOWLDataProperty(propIri);
+                OWLDatatype range = df.getOWLDatatype(rngIri);
+
+                boolean asserted = ontology.getDataPropertyRangeAxioms(prop).stream()
+                    .anyMatch(ax -> ax.getRange().equals(range));
+                if (asserted) return true;
+
+                try {
+                    if (adapter.isActive()) {
+                        return adapter.getUnderlyingReasoner().isEntailed(
+                            df.getOWLDataPropertyRangeAxiom(prop, range));
+                    }
+                } catch (Exception ignored) {
+                    // fall through to false
+                }
+                return false;
+            }
+
+            // v0.8.1 ISSUE-04: DifferentIndividuals
+            case "DifferentIndividuals": {
+                String ind1IRI = parameters.get("individual1IRI");
+                String ind2IRI = parameters.get("individual2IRI");
+                if (ind1IRI == null || ind2IRI == null) return false;
+                IRI i1 = OntologyIriResolver.resolveOntologyIRI(ontology, ind1IRI, "individual");
+                IRI i2 = OntologyIriResolver.resolveOntologyIRI(ontology, ind2IRI, "individual");
+                if (i1 == null || i2 == null) return false;
+                OWLNamedIndividual ind1 = df.getOWLNamedIndividual(i1);
+                OWLNamedIndividual ind2 = df.getOWLNamedIndividual(i2);
+
+                // Asserted: DifferentIndividuals axiom containing ind1
+                boolean asserted = ontology.getDifferentIndividualAxioms(ind1).stream()
+                    .flatMap(ax -> ax.getIndividuals().stream())
+                    .anyMatch(other -> other.equals(ind2));
+                if (asserted) return true;
+
+                try {
+                    if (adapter.isActive()) {
+                        OWLAxiom axiom = df.getOWLDifferentIndividualsAxiom(ind1, ind2);
+                        return adapter.getUnderlyingReasoner().isEntailed(axiom);
+                    }
+                } catch (Exception ignored) {
+                    // fall through to false
+                }
+                return false;
+            }
+
+            // v0.8.1 ISSUE-04 counter-evidence: SameIndividual
+            case "SameIndividual": {
+                String ind1IRI = parameters.get("individual1IRI");
+                String ind2IRI = parameters.get("individual2IRI");
+                if (ind1IRI == null || ind2IRI == null) return false;
+                IRI i1 = OntologyIriResolver.resolveOntologyIRI(ontology, ind1IRI, "individual");
+                IRI i2 = OntologyIriResolver.resolveOntologyIRI(ontology, ind2IRI, "individual");
+                if (i1 == null || i2 == null) return false;
+                OWLNamedIndividual ind1 = df.getOWLNamedIndividual(i1);
+                OWLNamedIndividual ind2 = df.getOWLNamedIndividual(i2);
+
+                // Asserted: SameIndividual axiom containing ind1
+                boolean asserted = ontology.getSameIndividualAxioms(ind1).stream()
+                    .flatMap(ax -> ax.getIndividuals().stream())
+                    .anyMatch(other -> other.equals(ind2));
+                if (asserted) return true;
+
+                try {
+                    if (adapter.isActive()) {
+                        OWLAxiom axiom = df.getOWLSameIndividualAxiom(ind1, ind2);
+                        return adapter.getUnderlyingReasoner().isEntailed(axiom);
+                    }
+                } catch (Exception ignored) {
+                    // fall through to false
+                }
+                return false;
+            }
+
+            // v0.8.1 ISSUE-05: SubObjectPropertyOf
+            case "SubObjectPropertyOf": {
+                String subPropIRI = parameters.get("subPropertyIRI");
+                String superPropIRI = parameters.get("superPropertyIRI");
+                if (subPropIRI == null || superPropIRI == null) return false;
+                IRI subIri = OntologyIriResolver.resolveOntologyIRI(ontology, subPropIRI, "object_property");
+                IRI supIri = OntologyIriResolver.resolveOntologyIRI(ontology, superPropIRI, "object_property");
+                if (subIri == null || supIri == null) return false;
+                OWLObjectProperty subProp = df.getOWLObjectProperty(subIri);
+                OWLObjectProperty superProp = df.getOWLObjectProperty(supIri);
+
+                // Asserted: SubObjectPropertyOf axiom whose sub is subProp and super equals superProp
+                boolean asserted = ontology.getObjectSubPropertyAxiomsForSubProperty(subProp).stream()
+                    .anyMatch(ax -> ax.getSuperProperty().equals(superProp));
+                if (asserted) return true;
+
+                try {
+                    if (adapter.isActive()) {
+                        OWLAxiom axiom = df.getOWLSubObjectPropertyOfAxiom(subProp, superProp);
+                        return adapter.getUnderlyingReasoner().isEntailed(axiom);
+                    }
+                } catch (Exception ignored) {
+                    // fall through to false
+                }
+                return false;
+            }
+
+            // v0.8.1 ISSUE-03: EquivalentClasses (asserted-first then isEntailed)
+            case "EquivalentClasses": {
+                String c1 = parameters.get("class1");
+                String c2 = parameters.get("class2");
+                if (c1 == null || c2 == null) return false;
+                IRI c1Iri = OntologyIriResolver.resolveOntologyIRI(ontology, c1, "class");
+                IRI c2Iri = OntologyIriResolver.resolveOntologyIRI(ontology, c2, "class");
+                if (c1Iri == null || c2Iri == null) return false;
+                OWLClass cls1 = df.getOWLClass(c1Iri);
+                OWLClass cls2 = df.getOWLClass(c2Iri);
+
+                boolean asserted = ontology.getEquivalentClassesAxioms(cls1).stream()
+                    .flatMap(ax -> ax.getNamedClasses().stream())
+                    .anyMatch(other -> other.equals(cls2));
+                if (asserted) return true;
+
+                try {
+                    if (adapter.isActive()) {
+                        OWLAxiom axiom = df.getOWLEquivalentClassesAxiom(cls1, cls2);
+                        return adapter.getUnderlyingReasoner().isEntailed(axiom);
+                    }
+                } catch (Exception ignored) {
+                    // fall through to false
+                }
+                return false;
             }
 
             default:
@@ -727,7 +1062,14 @@ public class ReasonerServiceImpl implements ReasonerService {
     }
 
     private String determineSource(OWLOntology ontology, String axiomType, Map<String, String> parameters) {
-        // Determine whether the axiom is explicitly asserted in the ontology.
+        // Determine whether the axiom is asserted in the ontology.
+        // v0.8.1: returns "asserted" (not v0.8.0's "explicit") to align with the
+        // claim-verification spec — the `ClaimVerificationService.buildEntailmentEvidence`
+        // method checks `entailment.source().contains("inferred")` to pick between
+        // `EvidenceKind.INFERRED_AXIOM` and `EvidenceKind.EXPLICIT_AXIOM`; the
+        // "inferred" substring check still works, but the asserted branch is now
+        // spelled "asserted" so test assertions and evidence `source` fields
+        // match the public spec.
         try {
             OWLDataFactory df = ontology.getOWLOntologyManager().getOWLDataFactory();
             switch (axiomType) {
@@ -737,9 +1079,81 @@ public class ReasonerServiceImpl implements ReasonerService {
                     if (subclassIRI == null || superclassIRI == null) return "unknown";
                     OWLClass subClass = df.getOWLClass(IRI.create(subclassIRI));
                     OWLClass superClass = df.getOWLClass(IRI.create(superclassIRI));
-                    boolean explicit = ontology.getAxioms(AxiomType.SUBCLASS_OF, Imports.INCLUDED).stream()
+                    boolean asserted = ontology.getAxioms(AxiomType.SUBCLASS_OF, Imports.INCLUDED).stream()
                         .anyMatch(ax -> ax.getSubClass().equals(subClass) && ax.getSuperClass().equals(superClass));
-                    return explicit ? "explicit" : "inferred";
+                    return asserted ? "asserted" : "inferred";
+                }
+                case "ObjectPropertyDomain": {
+                    String propertyIRI = parameters.get("propertyIRI");
+                    String domainIRI = parameters.get("domainIRI");
+                    if (propertyIRI == null || domainIRI == null) return "unknown";
+                    OWLObjectProperty prop = df.getOWLObjectProperty(IRI.create(propertyIRI));
+                    OWLClass domain = df.getOWLClass(IRI.create(domainIRI));
+                    boolean asserted = ontology.getObjectPropertyDomainAxioms(prop).stream()
+                        .anyMatch(ax -> ax.getDomain().equals(domain));
+                    return asserted ? "asserted" : "inferred";
+                }
+                case "ObjectPropertyRange": {
+                    String propertyIRI = parameters.get("propertyIRI");
+                    String rangeIRI = parameters.get("rangeIRI");
+                    if (propertyIRI == null || rangeIRI == null) return "unknown";
+                    OWLObjectProperty prop = df.getOWLObjectProperty(IRI.create(propertyIRI));
+                    OWLClass range = df.getOWLClass(IRI.create(rangeIRI));
+                    boolean asserted = ontology.getObjectPropertyRangeAxioms(prop).stream()
+                        .anyMatch(ax -> ax.getRange().equals(range));
+                    return asserted ? "asserted" : "inferred";
+                }
+                case "DataPropertyDomain": {
+                    String propertyIRI = parameters.get("propertyIRI");
+                    String domainIRI = parameters.get("domainIRI");
+                    if (propertyIRI == null || domainIRI == null) return "unknown";
+                    OWLDataProperty prop = df.getOWLDataProperty(IRI.create(propertyIRI));
+                    OWLClass domain = df.getOWLClass(IRI.create(domainIRI));
+                    boolean asserted = ontology.getDataPropertyDomainAxioms(prop).stream()
+                        .anyMatch(ax -> ax.getDomain().equals(domain));
+                    return asserted ? "asserted" : "inferred";
+                }
+                case "DataPropertyRange": {
+                    String propertyIRI = parameters.get("propertyIRI");
+                    String rangeIRI = parameters.get("rangeIRI");
+                    if (propertyIRI == null || rangeIRI == null) return "unknown";
+                    OWLDataProperty prop = df.getOWLDataProperty(IRI.create(propertyIRI));
+                    OWLDatatype range = df.getOWLDatatype(IRI.create(rangeIRI));
+                    boolean asserted = ontology.getDataPropertyRangeAxioms(prop).stream()
+                        .anyMatch(ax -> ax.getRange().equals(range));
+                    return asserted ? "asserted" : "inferred";
+                }
+                case "DifferentIndividuals": {
+                    String ind1IRI = parameters.get("individual1IRI");
+                    String ind2IRI = parameters.get("individual2IRI");
+                    if (ind1IRI == null || ind2IRI == null) return "unknown";
+                    OWLNamedIndividual ind1 = df.getOWLNamedIndividual(IRI.create(ind1IRI));
+                    OWLNamedIndividual ind2 = df.getOWLNamedIndividual(IRI.create(ind2IRI));
+                    boolean asserted = ontology.getDifferentIndividualAxioms(ind1).stream()
+                        .flatMap(ax -> ax.getIndividuals().stream())
+                        .anyMatch(other -> other.equals(ind2));
+                    return asserted ? "asserted" : "inferred";
+                }
+                case "SubObjectPropertyOf": {
+                    String subPropIRI = parameters.get("subPropertyIRI");
+                    String superPropIRI = parameters.get("superPropertyIRI");
+                    if (subPropIRI == null || superPropIRI == null) return "unknown";
+                    OWLObjectProperty subProp = df.getOWLObjectProperty(IRI.create(subPropIRI));
+                    OWLObjectProperty superProp = df.getOWLObjectProperty(IRI.create(superPropIRI));
+                    boolean asserted = ontology.getObjectSubPropertyAxiomsForSubProperty(subProp).stream()
+                        .anyMatch(ax -> ax.getSuperProperty().equals(superProp));
+                    return asserted ? "asserted" : "inferred";
+                }
+                case "EquivalentClasses": {
+                    String c1 = parameters.get("class1");
+                    String c2 = parameters.get("class2");
+                    if (c1 == null || c2 == null) return "unknown";
+                    OWLClass cls1 = df.getOWLClass(IRI.create(c1));
+                    OWLClass cls2 = df.getOWLClass(IRI.create(c2));
+                    boolean asserted = ontology.getEquivalentClassesAxioms(cls1).stream()
+                        .flatMap(ax -> ax.getNamedClasses().stream())
+                        .anyMatch(other -> other.equals(cls2));
+                    return asserted ? "asserted" : "inferred";
                 }
                 default:
                     return "unknown";
@@ -750,9 +1164,10 @@ public class ReasonerServiceImpl implements ReasonerService {
     }
 
     private Object getOWLReasonerFromAdapter(OWLReasonerAdapter adapter) {
-        // Access to internal OWLReasoner for advanced operations
-        // This is a temporary bridge; the full implementation will use adapter methods
-        return null;
+        // v0.8.1: removed/deprecated. The v0.8.0 private bridge that returned
+        // null caused the SubClassOf inferred path to silently fall through.
+        // v0.8.1 callers should use adapter.getUnderlyingReasoner() instead.
+        return adapter.getUnderlyingReasoner();
     }
 
     /**

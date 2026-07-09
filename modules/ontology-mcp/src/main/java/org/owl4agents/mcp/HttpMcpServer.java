@@ -41,7 +41,7 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.ReentrantLock;
 
 /**
- * HTTP transport for the MCP server (v0.8.0 — Streamable HTTP).
+ * HTTP transport for the MCP server (v0.8.1 — Streamable HTTP).
  *
  * <p>Exposes a {@code com.sun.net.httpserver.HttpServer} on a configurable
  * host:port. Endpoints:</p>
