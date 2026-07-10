@@ -6,7 +6,7 @@
 
 > **v0.8** 新增 MCP Streamable HTTP 传输(基于 `GET /mcp` 的 SSE、`Mcp-Session-Id` 往返、内容协商)。v0.7 的 plain-JSON HTTP 传输保留为无回归基线;stdio 和报文格式保持不变。
 >
-> **v0.8.2**(推荐)新增工作区级 `OntologyCache`,被 `ReasonerServiceImpl`、`ConsistencyAnalysisService`、`SemanticDeepeningService` 三个服务共享 —— 消除大型本体(Mondo 236MB、HPO 74MB)的重复 36-211s 加载。见 [CHANGELOG.md](CHANGELOG.md) §"0.8.2"。
+> **v0.8.3**(推荐)修复 claim 验证中的 9 个语义准确度错误(R1-R7:OOS 预检查、矛盾代理、EquivalentClasses 复杂表达式、个体级不相交、属性层次、ObjectPropertyDomain 复杂 domain、ClaimType 反序列化加固)。见 [CHANGELOG.md](CHANGELOG.md) §"0.8.3"。
 >
 > **v0.8.1**修复 v0.8.0 的 5 个 claim verification 准确率缺陷(ISSUE-01…ISSUE-05)—— 见 [CHANGELOG.md](CHANGELOG.md) §"0.8.1" 与 `doc/retrospectives/`。80 个策展 claim 的准确率门禁从 75/80 提升到 80/80。新增两个 claim 类型(`different_individuals`、`object_property_subproperty`),并支持在 `subject` / `object` 上使用可选的 `expression` 字段表达复杂类表达式。
 
@@ -180,11 +180,11 @@ Windows 上,优先使用 npm launcher 或 `gradlew run --args="..."`,避免直�
 .\gradlew.bat clean buildVerification
 .\gradlew.bat :modules:ontology-cli:shadowJar
 node tools/npm/test/launcher.test.js
-node tools/npm/bin/owl4agents.js --version    # → 0.8.2
+node tools/npm/bin/owl4agents.js --version    # → 0.8.3
 node tools/npm/bin/owl4agents.js --help
 ```
 
-绿色运行表示 `BUILD SUCCESSFUL`、npm launcher 输出 `Results: 29 passed, 0 failed`、`--version` 打印 `0.8.2`。完整的 Gradle 套件有 800+ 个单元测试(0 失败),覆盖 80 个策展 claim 的准确率门禁(80/80)—— 运行后可在 `build/reports/tests/test/index.html` 查看报告。
+绿色运行表示 `BUILD SUCCESSFUL`、npm launcher 输出 `Results: 29 passed, 0 failed`、`--version` 打印 `0.8.3`。完整的 Gradle 套件有 800+ 个单元测试(0 失败),覆盖 80 个策展 claim 的准确率门禁(80/80)—— 运行后可在 `build/reports/tests/test/index.html` 查看报告。
 
 ---
 

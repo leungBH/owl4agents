@@ -1,6 +1,6 @@
 # owl4agents — Features and Tool Reference
 
-> **Version:** v0.8.2 (released 2026-07-10, workspace-level OntologyCache shared across reasoner, consistency, and semantic-deepening services).
+> **Version:** v0.8.3 (released 2026-07-10, semantic accuracy fixes R1-R7 + ClaimType deserialization hardening).
 > **Audience:** programmers who want to **use** owl4agents (CLI or MCP) and understand what each command / tool does, what it takes as input, and what it returns. We assume you're a CS graduate — comfortable with JSON, HTTP, regex, and reading API docs — but you may or may not have touched OWL or SPARQL before.
 > **Pair this with:** [README.md](README.md) for the elevator pitch and 5-minute quick start. This file is the deep reference.
 
@@ -1494,7 +1494,7 @@ node tools/npm/bin/owl4agents.js smoke
 ### 4.45 `--version` / `--help`
 
 ```powershell
-node tools/npm/bin/owl4agents.js --version    # → 0.8.2
+node tools/npm/bin/owl4agents.js --version    # → 0.8.3
 node tools/npm/bin/owl4agents.js --help       # → full command list
 ```
 

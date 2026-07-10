@@ -77,7 +77,7 @@ When the MCP server starts, it responds to the `initialize` request with:
   "capabilities": { "tools": {} },
   "serverInfo": {
     "name": "owl4agents",
-    "version": "0.8.2"
+    "version": "0.8.3"
   }
 }
 ```

@@ -154,6 +154,17 @@ public class ClaimVerificationService {
      */
     private ServiceResult<ClaimVerificationResult> checkDisjointCounterEvidence(
             Claim claim, OntologyId ontId, EntailmentResult originalEntailment) {
+        // v0.8.3 R2: skip proxy when subject or object entity is not in the ontology's
+        // direct signature. This prevents false contradicted verdicts on cross-ontology
+        // claims where suffix matching could falsely associate entities.
+        if (claim.subject() != null && claim.subject().iri() != null
+            && !isEntityInOntology(claim.subject(), ontId)) {
+            return null;
+        }
+        if (claim.object() != null && claim.object().iri() != null
+            && !isEntityInOntology(claim.object(), ontId)) {
+            return null;
+        }
         ServiceResult<ClassCompatibilityResult> compatResult =
             consistencyService.checkClassCompatibility(
                 ontId, claim.subject().iri(), claim.object().iri());
@@ -416,6 +427,35 @@ public class ClaimVerificationService {
                 Optional.of("disjoint_classes requires two class IRIs"));
         }
 
+        // v0.8.3 R5: individual-level disjointness dispatch. When both subject
+        // and object have kind=individual, delegate to DifferentIndividuals
+        // entailment check instead of class-level compatibility. The existing
+        // verifyDifferentIndividuals() method implements the full logic
+        // (asserted DifferentIndividuals → reasoner isEntailed → SameIndividual
+        // counter-evidence → UNKNOWN) and does not depend on claim.type().
+        String subjectKind = claim.subject().kind();
+        String objectKind = claim.object().kind();
+        if ("individual".equals(subjectKind) && "individual".equals(objectKind)) {
+            // Same-individual pre-check: a claim that an individual is different
+            // from itself is trivially contradicted.
+            if (claim.subject().iri().equals(claim.object().iri())) {
+                EvidenceItem counter = new EvidenceItem(
+                    evidenceId("same-individual-self", claim.claimId()),
+                    EvidenceItem.ROLE_COUNTER,
+                    EvidenceKind.EXPLICIT_AXIOM,
+                    "Same individual: " + claim.subject().iri(),
+                    "self-identity",
+                    "default",
+                    "EXPLICIT",
+                    List.of(claim.subject().iri()),
+                    EvidenceItem.CONFIDENCE_EXPLICIT
+                );
+                return buildResult(claim, ontId, Verdict.CONTRADICTED, List.of(counter),
+                    Optional.empty(), Optional.empty());
+            }
+            return verifyDifferentIndividuals(claim, ontId);
+        }
+
         ServiceResult<ClassCompatibilityResult> result =
             consistencyService.checkClassCompatibility(ontId, claim.subject().iri(), claim.object().iri());
 
@@ -585,6 +625,20 @@ public class ClaimVerificationService {
             return buildResult(claim, ontId, Verdict.UNKNOWN, List.of(),
                 Optional.of(UnknownReason.INSUFFICIENT_AXIOMS),
                 Optional.of("object_property_assertion requires individual IRIs and a property IRI"));
+        }
+
+        // v0.8.3 R6: property hierarchy dispatch. When both subject and object
+        // have kind=object_property and predicate=="subPropertyOf", delegate to
+        // SubObjectPropertyOf entailment check instead of individual-level
+        // relation assertion. The existing verifySubPropertyOf() method
+        // implements the full logic (asserted SubObjectPropertyOf → reasoner
+        // isEntailed → reverse direction counter-evidence → UNKNOWN) and does
+        // not depend on claim.type().
+        String subjectKind = claim.subject().kind();
+        String objectKind = claim.object().kind();
+        if ("object_property".equals(subjectKind) && "object_property".equals(objectKind)
+            && "subPropertyOf".equals(claim.predicate())) {
+            return verifySubPropertyOf(claim, ontId);
         }
 
         String propertyIRI = claim.predicate();

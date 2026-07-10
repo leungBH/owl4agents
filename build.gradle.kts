@@ -3,7 +3,7 @@ plugins {
 }
 
 group = "org.owl4agents"
-version = "0.8.2"
+version = "0.8.3"
 description = "Local OWL ontology reasoning and MCP server for LLM agents"
 
 allprojects {

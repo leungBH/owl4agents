@@ -4,6 +4,7 @@ import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 import java.util.Arrays;
 
@@ -28,32 +29,36 @@ public class ClaimValidator {
     /** Entity-kind requirements per claim type. */
     private static final Map<ClaimType, EntityKindRequirement> KIND_REQUIREMENTS = buildKindRequirements();
 
-    private record EntityKindRequirement(String subjectKind, String objectKind, boolean subjectRequired, boolean objectRequired) {}
+    private record EntityKindRequirement(Set<String> subjectKinds, Set<String> objectKinds, boolean subjectRequired, boolean objectRequired) {}
 
     private static Map<ClaimType, EntityKindRequirement> buildKindRequirements() {
         EnumMap<ClaimType, EntityKindRequirement> map = new EnumMap<>(ClaimType.class);
         // Class-class claims
-        map.put(ClaimType.SUBCLASS,              new EntityKindRequirement("class", "class", true, true));
-        map.put(ClaimType.EQUIVALENT_CLASSES,    new EntityKindRequirement("class", "class", true, true));
-        map.put(ClaimType.DISJOINT_CLASSES,      new EntityKindRequirement("class", "class", true, true));
-        map.put(ClaimType.CLASS_COMPATIBILITY,   new EntityKindRequirement("class", "class", true, true));
+        map.put(ClaimType.SUBCLASS,              new EntityKindRequirement(Set.of("class"), Set.of("class"), true, true));
+        map.put(ClaimType.EQUIVALENT_CLASSES,    new EntityKindRequirement(Set.of("class"), Set.of("class"), true, true));
+        map.put(ClaimType.DISJOINT_CLASSES,      new EntityKindRequirement(Set.of("class", "individual"), Set.of("class", "individual"), true, true));
+        map.put(ClaimType.CLASS_COMPATIBILITY,   new EntityKindRequirement(Set.of("class"), Set.of("class"), true, true));
         // Individual-class claims
-        map.put(ClaimType.INDIVIDUAL_MEMBERSHIP, new EntityKindRequirement("individual", "class", true, true));
+        map.put(ClaimType.INDIVIDUAL_MEMBERSHIP, new EntityKindRequirement(Set.of("individual"), Set.of("class"), true, true));
         // Individual-individual claims
-        map.put(ClaimType.OBJECT_PROPERTY_ASSERTION, new EntityKindRequirement("individual", "individual", true, true));
+        map.put(ClaimType.OBJECT_PROPERTY_ASSERTION, new EntityKindRequirement(Set.of("individual", "object_property"), Set.of("individual", "object_property"), true, true));
         // Individual-literal claims
-        map.put(ClaimType.DATA_PROPERTY_ASSERTION,   new EntityKindRequirement("individual", "literal", true, true));
+        map.put(ClaimType.DATA_PROPERTY_ASSERTION,   new EntityKindRequirement(Set.of("individual"), Set.of("literal"), true, true));
         // Property-class claims
-        map.put(ClaimType.OBJECT_PROPERTY_DOMAIN, new EntityKindRequirement("object_property", "class", true, true));
-        map.put(ClaimType.OBJECT_PROPERTY_RANGE,  new EntityKindRequirement("object_property", "class", true, true));
-        map.put(ClaimType.DATA_PROPERTY_DOMAIN,   new EntityKindRequirement("data_property", "class", true, true));
+        map.put(ClaimType.OBJECT_PROPERTY_DOMAIN, new EntityKindRequirement(Set.of("object_property"), Set.of("class"), true, true));
+        map.put(ClaimType.OBJECT_PROPERTY_RANGE,  new EntityKindRequirement(Set.of("object_property"), Set.of("class"), true, true));
+        map.put(ClaimType.DATA_PROPERTY_DOMAIN,   new EntityKindRequirement(Set.of("data_property"), Set.of("class"), true, true));
         // Property-datatype claims
-        map.put(ClaimType.DATA_PROPERTY_RANGE,    new EntityKindRequirement("data_property", "datatype", true, true));
+        map.put(ClaimType.DATA_PROPERTY_RANGE,    new EntityKindRequirement(Set.of("data_property"), Set.of("datatype"), true, true));
         // Datatype-literal claims
-        map.put(ClaimType.LITERAL_VALIDITY,       new EntityKindRequirement("datatype", "literal", true, true));
+        map.put(ClaimType.LITERAL_VALIDITY,       new EntityKindRequirement(Set.of("datatype"), Set.of("literal"), true, true));
+        // Individual-individual (different_individuals) — v0.8.3 R5
+        map.put(ClaimType.DIFFERENT_INDIVIDUALS,  new EntityKindRequirement(Set.of("individual"), Set.of("individual"), true, true));
+        // Property-property (object_property_subproperty) — v0.8.3 R6
+        map.put(ClaimType.OBJECT_PROPERTY_SUBPROPERTY, new EntityKindRequirement(Set.of("object_property"), Set.of("object_property"), true, true));
         // Ontology-level claims — no entity requirements
-        map.put(ClaimType.ONTOLOGY_CONSISTENCY,   new EntityKindRequirement(null, null, false, false));
-        map.put(ClaimType.ONTOLOGY_SCOPE,         new EntityKindRequirement(null, null, false, false));
+        map.put(ClaimType.ONTOLOGY_CONSISTENCY,   new EntityKindRequirement(Set.of(), Set.of(), false, false));
+        map.put(ClaimType.ONTOLOGY_SCOPE,         new EntityKindRequirement(Set.of(), Set.of(), false, false));
         return map;
     }
 
@@ -108,9 +113,9 @@ public class ClaimValidator {
                 return ServiceResult.error(ServiceError.invalidClaimSchema(
                     "subject is required for claim type '" + claim.type().jsonName() + "'."));
             }
-            if (!req.subjectKind().equals(claim.subject().kind())) {
+            if (!req.subjectKinds().contains(claim.subject().kind())) {
                 return ServiceResult.error(ServiceError.invalidClaimSchema(
-                    "subject.kind must be '" + req.subjectKind() + "' for claim type '" + claim.type().jsonName()
+                    "subject.kind must be one of " + req.subjectKinds() + " for claim type '" + claim.type().jsonName()
                     + "', but got '" + claim.subject().kind() + "'."));
             }
         }
@@ -120,9 +125,10 @@ public class ClaimValidator {
                 return ServiceResult.error(ServiceError.invalidClaimSchema(
                     "object is required for claim type '" + claim.type().jsonName() + "'."));
             }
-            if (!req.objectKind().equals(claim.object().kind())) {
+            if (!req.objectKinds().contains(claim.object().kind())
+                && !"literal".equals(claim.object().kind())) {
                 return ServiceResult.error(ServiceError.invalidClaimSchema(
-                    "object.kind must be '" + req.objectKind() + "' for claim type '" + claim.type().jsonName()
+                    "object.kind must be one of " + req.objectKinds() + " for claim type '" + claim.type().jsonName()
                     + "', but got '" + claim.object().kind() + "'."));
             }
         }

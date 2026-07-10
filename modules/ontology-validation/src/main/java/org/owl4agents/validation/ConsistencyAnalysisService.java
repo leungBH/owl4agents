@@ -412,30 +412,80 @@ public class ConsistencyAnalysisService {
         if (entityIRI == null || entityIRI.isBlank()) return false;
         try {
             OWLOntology ontology = loadOntology(ontologyId);
+
+            // v0.8.4 R1 fix: OBO namespace check.
+            // OBO ontologies (HPO, Mondo, etc.) reference cross-ontology entities
+            // in their axioms AND declare them as <owl:Class rdf:about="...">,
+            // which creates Declaration axioms in the OWL API model. This makes
+            // the Declaration axiom check insufficient for distinguishing
+            // in-scope from cross-ontology entities. For OBO ontologies, verify
+            // that the entity's IRI matches the ontology's expected ID prefix
+            // (e.g., HP_ for HPO, MONDO_ for Mondo) before accepting it.
+            Optional<IRI> ontIriOpt = ontology.getOntologyID().getOntologyIRI();
+            if (ontIriOpt.isPresent()) {
+                String ontIriStr = ontIriOpt.get().toString();
+                if (ontIriStr.startsWith("http://purl.obolibrary.org/obo/") && ontIriStr.endsWith(".owl")) {
+                    String fileName = ontIriStr.substring(ontIriStr.lastIndexOf('/') + 1);
+                    String expectedPrefix = fileName.substring(0, fileName.length() - ".owl".length()).toUpperCase();
+                    if (!entityIRI.contains("/" + expectedPrefix + "_")) {
+                        return false;
+                    }
+                }
+            }
+
             // v0.8.1: normalize kind to drop underscores so callers using
             // either "object_property" or "objectproperty" hit the right branch.
             String k = kind == null ? "" : kind.toLowerCase().replace("_", "");
             IRI iri = IRI.create(entityIRI);
+            OWLDataFactory df = ontology.getOWLOntologyManager().getOWLDataFactory();
 
+            // v0.8.3 R1: dual check — direct signature (Imports.EXCLUDED) + Declaration axiom.
+            // Imports.EXCLUDED ensures cross-ontology entities (e.g., UBERON in HPO,
+            // HP in Mondo) are not found via the import closure. The Declaration axiom
+            // check is the reliable indicator of "declared in this ontology" because
+            // biomedical ontologies reference cross-ontology entities in their own
+            // axioms (e.g., Mondo's SubClassOf references HP entities), causing them
+            // to appear in getClassesInSignature(Imports.EXCLUDED) despite not being
+            // declared in the target ontology.
             if (k.equals("class") || k.isEmpty()) {
-                boolean isClass = ontology.getClassesInSignature(Imports.INCLUDED)
+                boolean inSignature = ontology.getClassesInSignature(Imports.EXCLUDED)
                     .stream().anyMatch(c -> c.getIRI().equals(iri));
-                if (isClass) return true;
+                if (inSignature) {
+                    OWLClass entity = df.getOWLClass(iri);
+                    boolean hasDeclaration = ontology.getAxioms(AxiomType.DECLARATION, Imports.EXCLUDED)
+                        .stream().anyMatch(ax -> ax.getEntity().equals(entity));
+                    if (hasDeclaration) return true;
+                }
             }
             if (k.equals("objectproperty") || k.equals("property") || k.isEmpty()) {
-                boolean isObj = ontology.getObjectPropertiesInSignature(Imports.INCLUDED)
+                boolean inSignature = ontology.getObjectPropertiesInSignature(Imports.EXCLUDED)
                     .stream().anyMatch(p -> p.getIRI().equals(iri));
-                if (isObj) return true;
+                if (inSignature) {
+                    OWLObjectProperty entity = df.getOWLObjectProperty(iri);
+                    boolean hasDeclaration = ontology.getAxioms(AxiomType.DECLARATION, Imports.EXCLUDED)
+                        .stream().anyMatch(ax -> ax.getEntity().equals(entity));
+                    if (hasDeclaration) return true;
+                }
             }
             if (k.equals("dataproperty") || k.equals("property") || k.isEmpty()) {
-                boolean isData = ontology.getDataPropertiesInSignature(Imports.INCLUDED)
+                boolean inSignature = ontology.getDataPropertiesInSignature(Imports.EXCLUDED)
                     .stream().anyMatch(p -> p.getIRI().equals(iri));
-                if (isData) return true;
+                if (inSignature) {
+                    OWLDataProperty entity = df.getOWLDataProperty(iri);
+                    boolean hasDeclaration = ontology.getAxioms(AxiomType.DECLARATION, Imports.EXCLUDED)
+                        .stream().anyMatch(ax -> ax.getEntity().equals(entity));
+                    if (hasDeclaration) return true;
+                }
             }
             if (k.equals("individual") || k.isEmpty()) {
-                boolean isInd = ontology.getIndividualsInSignature(Imports.INCLUDED)
+                boolean inSignature = ontology.getIndividualsInSignature(Imports.EXCLUDED)
                     .stream().anyMatch(i -> i.getIRI().equals(iri));
-                if (isInd) return true;
+                if (inSignature) {
+                    OWLNamedIndividual entity = df.getOWLNamedIndividual(iri);
+                    boolean hasDeclaration = ontology.getAxioms(AxiomType.DECLARATION, Imports.EXCLUDED)
+                        .stream().anyMatch(ax -> ax.getEntity().equals(entity));
+                    if (hasDeclaration) return true;
+                }
             }
             return false;
         } catch (Exception e) {

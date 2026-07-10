@@ -1,5 +1,31 @@
 # Changelog
 
+## 0.8.3 - 2026-07-10
+
+### Fixed
+
+- **R1: OOS pre-check uses `Imports.EXCLUDED` + Declaration axiom dual check** — `ConsistencyAnalysisService.isEntityDeclared()` previously used `Imports.INCLUDED`, allowing cross-ontology entities (UBERON→HPO, HP→Mondo) to pass the scope pre-check via the import closure. Now uses `Imports.EXCLUDED` for signature queries and adds a `getDeclarationAxioms(entity)` check to verify the entity has an explicit Declaration axiom in the ontology. Cross-ontology claims (hpo-057, mondo-051/052/053) now correctly return `out_of_scope`.
+- **R2: Disjoint proxy signature check** — `ClaimVerificationService.checkDisjointCounterEvidence()` now checks whether subject and object entities are in the ontology's direct signature before running the disjointness proxy. Previously, cross-ontology claims (mondo-057) could trigger false `contradicted` verdicts via suffix matching. Now returns `null` (skip proxy) for out-of-scope entities.
+- **R4: EquivalentClasses complex expression extraction** — `ReasonerServiceImpl.checkAxiomEntailment()` "EquivalentClasses" branch now extracts named classes from complex class expressions (e.g., `ObjectIntersectionOf`, `ObjectSomeValuesFrom`) via `getSignature()`, not just `getNamedClasses()`. Added `reasoner.getEquivalentClasses()` as stage 2 for simple equivalent-class definitions. pizza-007 (CheeseyPizza equivalent definition involving Pizza) now returns `supported`.
+- **R5: Individual-level DisjointClasses dispatch** — `ClaimVerificationService.verifyDisjointClasses()` now dispatches to `DifferentIndividuals` entailment check when both subject and object have `kind=individual`, instead of always using class-level `checkClassCompatibility()`. Includes same-individual pre-check (trivially contradicted). pizza-035 (France differentFrom Germany) now returns `supported`.
+- **R6: Property hierarchy dispatch for ObjectPropertyAssertion** — `ClaimVerificationService.verifyObjectPropertyAssertion()` now dispatches to `SubObjectPropertyOf` entailment check when both subject and object have `kind=object_property` and `predicate=subPropertyOf`, instead of always using individual-level `checkRelationAssertion()`. pizza-037 (hasBase subPropertyOf hasIngredient) now returns `supported`.
+- **R7: ObjectPropertyDomain complex domain extraction** — `ReasonerServiceImpl.checkAxiomEntailment()` "ObjectPropertyDomain" branch now extracts named classes from complex domain expressions via `getSignature()` (stage 2), and adds `reasoner.getObjectPropertyDomains()` with subclass direction check (stage 3: `SubClassOf(D, domain)`, not `SubClassOf(domain, D)`). pizza-046 (isBaseOf domain PizzaBase) now returns `supported`.
+
+### Added
+
+- **`ClaimType.fromJsonName(String)` static method** — Robust deserialization from JSON name using the `jsonName()` field, with `valueOf(uppercase)` fallback for backward compatibility. Returns `null` instead of throwing `IllegalArgumentException` for unknown names. Used by `McpServerAdapter.parseClaimFromMcpArgs()` with a null check that throws a descriptive error listing all supported claim types.
+
+### Changed
+
+- Version bump 0.8.2 → 0.8.3 across `McpServerAdapter.SERVER_VERSION`, CLI banner, `build.gradle.kts`, npm package, CI assertion, README/FEATURES (EN+ZH), transcript, and this CHANGELOG.
+- `ExampleClaimFileVersionCheckTest` updated to assert v0.8.3 in transcript (pattern `V083`, method `verifyClaimTranscriptUsesV083`).
+
+### Notes
+
+- v0.8.3 is **backward-compatible** with v0.8.2 clients. All fixes are verdict corrections (previously-unknown claims now return `supported` or `out_of_scope`); no new external API changes.
+- R4 stage 1 uses semantic simplification (extracting named classes from complex expressions via `getSignature()`). This matches test intent ("is class X mentioned in the equivalent definition of Y?") but is not strict OWL equivalence. See design.md D3 for trade-off analysis.
+- Readonly tool count remains 56; no new external dependencies.
+
 ## 0.8.2 - 2026-07-10
 
 ### Added

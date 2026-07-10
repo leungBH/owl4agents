@@ -32,4 +32,23 @@ public enum ClaimType {
     public String jsonName() {
         return jsonName;
     }
+
+    /**
+     * v0.8.3 D7: Robust deserialization from JSON name.
+     * Iterates all enum values matching the {@link #jsonName()} field, with a
+     * fallback to {@link Enum#valueOf(String)} (uppercase) for backward
+     * compatibility. Returns {@code null} if no match is found, so callers can
+     * produce a structured error instead of propagating an exception.
+     */
+    public static ClaimType fromJsonName(String jsonName) {
+        if (jsonName == null) return null;
+        for (ClaimType t : values()) {
+            if (t.jsonName.equals(jsonName)) return t;
+        }
+        try {
+            return ClaimType.valueOf(jsonName.toUpperCase());
+        } catch (IllegalArgumentException ignored) {
+            return null;
+        }
+    }
 }

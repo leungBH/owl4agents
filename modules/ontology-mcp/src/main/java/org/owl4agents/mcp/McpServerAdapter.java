@@ -193,13 +193,12 @@ public class McpServerAdapter {
  public static final String PROTOCOL_VERSION = "2025-06-18";
 
  /**
- * Server version. Bumped to `0.8.2` in the v0.8.2 release (workspace-level
- * OntologyCache shared across reasoner, consistency, and semantic-deepening
- * services; eliminates redundant 36-211s reloads of large ontologies).
+ * Server version. Bumped to `0.8.3` in the v0.8.3 release (semantic accuracy
+ * fixes: R1-R7 + ClaimType deserialization hardening).
  * Single source of truth -> ?read by both stdio and HTTP transports
  * (including the `GET /mcp` SSE path).
  */
- public static final String SERVER_VERSION = "0.8.2";
+ public static final String SERVER_VERSION = "0.8.3";
 
  /**
  * Public JSON-RPC 2.0 entry point used by both the stdio transport
@@ -2103,7 +2102,16 @@ public class McpServerAdapter {
  ClaimEntity subject = parseEntityFromMap(claimMap.get("subject"));
  ClaimEntity object = parseEntityFromMap(claimMap.get("object"));
 
- ClaimType type = ClaimType.valueOf(typeStr.toUpperCase().replace("_", "_"));
+ ClaimType type = ClaimType.fromJsonName(typeStr);
+ if (type == null) {
+ StringBuilder supported = new StringBuilder();
+ for (ClaimType t : ClaimType.values()) {
+ if (supported.length() > 0) supported.append(", ");
+ supported.append(t.jsonName());
+ }
+ throw new IllegalArgumentException(
+ "Unsupported claim type: '" + typeStr + "'. Supported: " + supported);
+ }
 
  Optional<String> reasoner = reasonerOverride != null && !"auto".equals(reasonerOverride)
  ? Optional.of(reasonerOverride)

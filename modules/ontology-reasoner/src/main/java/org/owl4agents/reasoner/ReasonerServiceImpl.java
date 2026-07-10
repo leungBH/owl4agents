@@ -793,7 +793,11 @@ public class ReasonerServiceImpl implements ReasonerService {
                 return checkStoredEntailment(ontology, "Type", individualIRI, classIRI);
             }
 
-            // v0.8.1 ISSUE-02: ObjectPropertyDomain (asserted-first then isEntailed)
+            // v0.8.1 ISSUE-02 / v0.8.3 R7: ObjectPropertyDomain
+            //   stage 1: exact match on asserted domain (existing)
+            //   stage 2: extract named classes from complex domain expressions (new)
+            //   stage 3: reasoner.getObjectPropertyDomains() + subclass check (new)
+            //   stage 4: isEntailed fallback (existing)
             case "ObjectPropertyDomain": {
                 String propertyIRI = parameters.get("propertyIRI");
                 String domainIRI = parameters.get("domainIRI");
@@ -804,10 +808,101 @@ public class ReasonerServiceImpl implements ReasonerService {
                 OWLObjectProperty prop = df.getOWLObjectProperty(propIri);
                 OWLClass domain = df.getOWLClass(domIri);
 
+                // v0.8.3 R7 stage 1: exact match on asserted domain
                 boolean asserted = ontology.getObjectPropertyDomainAxioms(prop).stream()
                     .anyMatch(ax -> ax.getDomain().equals(domain));
                 if (asserted) return true;
 
+                // v0.8.3 R7 stage 2: extract named classes from complex domain
+                // expressions (e.g., ObjectIntersectionOf(PizzaBase, ...)) via
+                // getSignature(). ax.getDomain().equals(domain) only matches the
+                // exact complex expression, missing named classes nested inside.
+                boolean assertedInComplex = ontology.getObjectPropertyDomainAxioms(prop).stream()
+                    .map(ax -> ax.getDomain())
+                    .flatMap(ce -> ce.getSignature().stream())
+                    .filter(OWLClass.class::isInstance)
+                    .map(OWLClass.class::cast)
+                    .anyMatch(other -> other.equals(domain));
+                if (assertedInComplex) return true;
+
+                // v0.8.3 R7 stage 3: reasoner.getObjectPropertyDomains() query.
+                // Check if domain is in the inferred domain set, or if any inferred
+                // domain D is a subclass of domain (SubClassOf(D, domain)) — because
+                // ObjectPropertyDomain(prop, D) + SubClassOf(D, domain) entails
+                // ObjectPropertyDomain(prop, domain).
+                // Direction is critical: SubClassOf(D, domain), NOT SubClassOf(domain, D).
+                // The latter would cause false positives (e.g., ontology domain=Animal,
+                // claim domain=Dog: SubClassOf(Dog,Animal)=true → wrong supported).
+                try {
+                    if (adapter.isActive()) {
+                        NodeSet<OWLClass> domainSet =
+                            adapter.getUnderlyingReasoner().getObjectPropertyDomains(prop, false);
+                        Set<OWLClass> flattened = domainSet.getFlattened();
+                        if (flattened.contains(domain)) {
+                            return true;
+                        }
+                        for (OWLClass inferredDomain : flattened) {
+                            if (adapter.getUnderlyingReasoner().isEntailed(
+                                    df.getOWLSubClassOfAxiom(inferredDomain, domain))) {
+                                return true;
+                            }
+                        }
+                    }
+                } catch (Exception ignored) {
+                    // fall through to stage 3b
+                }
+
+                // v0.8.3 R7 stage 3b: inverse property range inference.
+                // If prop has an inverse property inv, and inv has range R,
+                // then prop has domain R (OWL inverse property semantics).
+                // This is needed because ELK (OWL 2 EL) cannot infer domains
+                // from inverse property ranges. e.g., isBaseOf has no explicit
+                // domain, but its inverse hasBase has range PizzaBase, so
+                // isBaseOf's domain is PizzaBase.
+                try {
+                    for (org.semanticweb.owlapi.model.OWLInverseObjectPropertiesAxiom invAx :
+                            ontology.getAxioms(AxiomType.INVERSE_OBJECT_PROPERTIES)) {
+                        if (!invAx.getFirstProperty().equals(prop)
+                            && !invAx.getSecondProperty().equals(prop)) {
+                            continue;
+                        }
+                        org.semanticweb.owlapi.model.OWLObjectPropertyExpression inversePropExpr =
+                            invAx.getFirstProperty().equals(prop)
+                                ? invAx.getSecondProperty()
+                                : invAx.getFirstProperty();
+                        if (!inversePropExpr.isNamed()) {
+                            continue;
+                        }
+                        OWLObjectProperty inverseProp = (OWLObjectProperty) inversePropExpr;
+                        // Check if inverse property's range includes domain
+                        boolean rangeMatches = ontology.getObjectPropertyRangeAxioms(inverseProp).stream()
+                            .flatMap(ax -> ax.getRange().getSignature().stream())
+                            .filter(OWLClass.class::isInstance)
+                            .map(OWLClass.class::cast)
+                            .anyMatch(rangeClass -> rangeClass.equals(domain));
+                        if (rangeMatches) return true;
+                        // Also check if domain is a subclass of any range class
+                        if (adapter.isActive()) {
+                            boolean subclassOfRange = ontology.getObjectPropertyRangeAxioms(inverseProp).stream()
+                                .flatMap(ax -> ax.getRange().getSignature().stream())
+                                .filter(OWLClass.class::isInstance)
+                                .map(OWLClass.class::cast)
+                                .anyMatch(rangeClass -> {
+                                    try {
+                                        return adapter.getUnderlyingReasoner().isEntailed(
+                                            df.getOWLSubClassOfAxiom(domain, rangeClass));
+                                    } catch (Exception e) {
+                                        return false;
+                                    }
+                                });
+                            if (subclassOfRange) return true;
+                        }
+                    }
+                } catch (Exception ignored) {
+                    // fall through to stage 4
+                }
+
+                // v0.8.3 R7 stage 4: isEntailed fallback (existing)
                 try {
                     if (adapter.isActive()) {
                         return adapter.getUnderlyingReasoner().isEntailed(
@@ -980,7 +1075,10 @@ public class ReasonerServiceImpl implements ReasonerService {
                 return false;
             }
 
-            // v0.8.1 ISSUE-03: EquivalentClasses (asserted-first then isEntailed)
+            // v0.8.1 ISSUE-03 / v0.8.3 R4: EquivalentClasses
+            //   stage 1: extract named classes from complex expressions via getSignature()
+            //   stage 2: reasoner.getEquivalentClasses(cls1) query
+            //   stage 3: isEntailed fallback
             case "EquivalentClasses": {
                 String c1 = parameters.get("class1");
                 String c2 = parameters.get("class2");
@@ -991,11 +1089,37 @@ public class ReasonerServiceImpl implements ReasonerService {
                 OWLClass cls1 = df.getOWLClass(c1Iri);
                 OWLClass cls2 = df.getOWLClass(c2Iri);
 
+                // v0.8.3 R4 stage 1: semantic simplification — extract all named
+                // classes from complex class expressions (ObjectIntersectionOf,
+                // ObjectSomeValuesFrom, etc.) via getSignature(). getNamedClasses()
+                // only returns direct operands that are themselves named classes,
+                // missing classes nested inside complex expressions.
                 boolean asserted = ontology.getEquivalentClassesAxioms(cls1).stream()
-                    .flatMap(ax -> ax.getNamedClasses().stream())
+                    .flatMap(ax -> ax.getClassExpressionsAsList().stream())
+                    .flatMap(ce -> ce.getSignature().stream())
+                    .filter(OWLClass.class::isInstance)
+                    .map(OWLClass.class::cast)
                     .anyMatch(other -> other.equals(cls2));
                 if (asserted) return true;
 
+                // v0.8.3 R4 stage 2: reasoner.getEquivalentClasses() query.
+                // For simple equivalent-class definitions, the reasoner can directly
+                // return the equivalent class set. (For complex expressions like
+                // EquivalentClasses(A, B AND C), A is NOT equivalent to B in strict
+                // OWL semantics — stage 1 handles that case via semantic simplification.)
+                try {
+                    if (adapter.isActive()) {
+                        Node<OWLClass> equivNode =
+                            adapter.getUnderlyingReasoner().getEquivalentClasses(cls1);
+                        if (equivNode.contains(cls2)) {
+                            return true;
+                        }
+                    }
+                } catch (Exception ignored) {
+                    // fall through to stage 3
+                }
+
+                // v0.8.3 R4 stage 3: isEntailed fallback (existing logic)
                 try {
                     if (adapter.isActive()) {
                         OWLAxiom axiom = df.getOWLEquivalentClassesAxiom(cls1, cls2);

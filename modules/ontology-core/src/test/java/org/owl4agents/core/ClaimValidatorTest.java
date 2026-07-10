@@ -104,7 +104,7 @@ class ClaimValidatorTest {
                 new ClaimEntity("individual", "http://ex.org#a"), null,
                 new ClaimEntity("class", "http://ex.org#B"));
             ServiceResult<Claim> result = validator.validate(claim);
-            assertSchemaError(result, "subject.kind must be 'class'");
+            assertSchemaError(result, "subject.kind must be one of [class]");
         }
 
         @Test
@@ -114,7 +114,7 @@ class ClaimValidatorTest {
                 new ClaimEntity("class", "http://ex.org#A"), null,
                 new ClaimEntity("individual", "http://ex.org#a"));
             ServiceResult<Claim> result = validator.validate(claim);
-            assertSchemaError(result, "object.kind must be 'class'");
+            assertSchemaError(result, "object.kind must be one of [class]");
         }
 
         @Test
@@ -124,7 +124,7 @@ class ClaimValidatorTest {
                 new ClaimEntity("class", "http://ex.org#A"), null,
                 new ClaimEntity("class", "http://ex.org#B"));
             ServiceResult<Claim> result = validator.validate(claim);
-            assertSchemaError(result, "subject.kind must be 'individual'");
+            assertSchemaError(result, "subject.kind must be one of [individual]");
         }
 
         @Test
@@ -134,7 +134,7 @@ class ClaimValidatorTest {
                 new ClaimEntity("individual", "http://ex.org#a"), null,
                 new ClaimEntity("class", "http://ex.org#B"));
             ServiceResult<Claim> result = validator.validate(claim);
-            assertSchemaError(result, "object.kind must be 'individual'");
+            assertSchemaError(result, "object.kind must be one of");
         }
 
         @Test
@@ -144,7 +144,7 @@ class ClaimValidatorTest {
                 new ClaimEntity("individual", "http://ex.org#a"), null,
                 new ClaimEntity("class", "http://ex.org#B"));
             ServiceResult<Claim> result = validator.validate(claim);
-            assertSchemaError(result, "object.kind must be 'literal'");
+            assertSchemaError(result, "object.kind must be one of [literal]");
         }
 
         @Test
@@ -154,7 +154,7 @@ class ClaimValidatorTest {
                 new ClaimEntity("individual", "http://ex.org#a"), null,
                 new ClaimEntity("class", "http://ex.org#B"));
             ServiceResult<Claim> result = validator.validate(claim);
-            assertSchemaError(result, "subject.kind must be 'object_property'");
+            assertSchemaError(result, "subject.kind must be one of [object_property]");
         }
 
         @Test
@@ -164,7 +164,7 @@ class ClaimValidatorTest {
                 new ClaimEntity("data_property", "http://ex.org#p"), null,
                 new ClaimEntity("class", "http://ex.org#B"));
             ServiceResult<Claim> result = validator.validate(claim);
-            assertSchemaError(result, "object.kind must be 'datatype'");
+            assertSchemaError(result, "object.kind must be one of [datatype]");
         }
     }
 
