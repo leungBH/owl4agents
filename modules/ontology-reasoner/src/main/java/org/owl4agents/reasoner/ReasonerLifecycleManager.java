@@ -2,6 +2,7 @@ package org.owl4agents.reasoner;
 
 import org.owl4agents.core.OntologyId;
 import org.owl4agents.core.model.*;
+import org.owl4agents.owlapi.OntologyReloadListener;
 import org.semanticweb.owlapi.model.OWLOntology;
 
 import java.util.*;
@@ -13,8 +14,14 @@ import java.util.concurrent.ConcurrentHashMap;
  * - Reused for subsequent calls on same ontology
  * - Shut down on ontology re-import or session end
  * - New instance when reasoner type changes within same session
+ *
+ * <p>Implements {@link OntologyReloadListener} to receive callbacks from
+ * {@link org.owl4agents.owlapi.OntologyCache} when an ontology file changes.
+ * On reload, the reasoner adapter bound to the old {@link OWLOntology} is
+ * shut down (releasing HermiT/ELK/Openllet native resources) so the next
+ * reasoning call builds a fresh adapter bound to the new ontology.</p>
  */
-public class ReasonerLifecycleManager {
+public class ReasonerLifecycleManager implements OntologyReloadListener {
 
     private final Map<String, OWLReasonerAdapter> activeReasoners = new ConcurrentHashMap<>();
     private final Map<String, String> activeReasonerNames = new ConcurrentHashMap<>();
@@ -175,5 +182,36 @@ public class ReasonerLifecycleManager {
         }
         activeReasoners.clear();
         activeReasonerNames.clear();
+    }
+
+    // ── OntologyReloadListener implementation ──────────────────────────
+
+    /**
+     * Called by {@link org.owl4agents.owlapi.OntologyCache} when a single
+     * ontology file has changed (mtime/size mismatch detected). Delegates
+     * to {@link #shutdownReasoner(OntologyId)} which removes the adapter
+     * from the cache first, then calls {@code adapter.shutdown()} to
+     * release HermiT/ELK/Openllet native resources (thread pools, memory).
+     *
+     * <p>The next {@link #getOrCreateReasoner} call will build a fresh
+     * adapter bound to the new {@link OWLOntology} instance.</p>
+     */
+    @Override
+    public void onOntologyReloaded(OntologyId ontologyId) {
+        shutdownReasoner(ontologyId);
+    }
+
+    /**
+     * Called by {@link org.owl4agents.owlapi.OntologyCache} when all
+     * ontologies are invalidated. Iterates all cached ontologyIds and
+     * shuts down each reasoner adapter.
+     */
+    @Override
+    public void onAllOntologiesReloaded() {
+        // Take a snapshot of keys to avoid ConcurrentModificationException
+        Set<String> keys = new HashSet<>(activeReasoners.keySet());
+        for (String key : keys) {
+            shutdownReasoner(new OntologyId(key));
+        }
     }
 }

@@ -74,6 +74,40 @@ v0.4 uses a small project-owned biomedical golden ontology plus structured claim
 | `../fixtures/v0.4/claim-bio-unknown.json` | Unknown claim — Arthritis subClassOf InfectiousDisease (no direct axiom, contradicting disjointness exists) |
 | `../fixtures/v0.4/claim-bio-out-of-scope.json` | Out_of_scope claim — CancerStage entity not in ontology |
 
+## Large Ontology Sources (v0.8.2 Benchmark)
+
+The following large ontologies are used in the v0.8.2 240-claim benchmark. They are **not committed** to the repository due to their size. Download manually before running benchmarks.
+
+| Ontology | Source URL | Expected Filename | Approx Size | Benchmark Config |
+| --- | --- | --- | --- | --- |
+| HPO (Human Phenotype Ontology) | http://purl.obolibrary.org/obo/hp.owl | `hp.owl` | ~74 MB | `test/fixtures/v0.6/benchmark-configs/hpo-60.yaml` |
+| Mondo Disease Ontology | http://purl.obolibrary.org/obo/mondo.owl | `mondo.owl` | ~236 MB | `test/fixtures/v0.6/benchmark-configs/mondo-60.yaml` |
+| Pizza (smoke) | https://protege.stanford.edu/ontologies/pizza/pizza.owl | `pizza.owl` | <1 MB | `test/fixtures/v0.6/benchmark-configs/pizza-80.yaml` |
+| SOSA (Sensor/Observation) | http://www.w3.org/ns/sosa/sosa.ttl | `sosa.ttl` | <1 MB | `test/fixtures/v0.6/benchmark-configs/sosa-40.yaml` |
+
+### Download
+
+```powershell
+# HPO (~74MB)
+Invoke-WebRequest -Uri "http://purl.obolibrary.org/obo/hp.owl" -OutFile "large/hp.owl"
+
+# Mondo (~236MB)
+Invoke-WebRequest -Uri "http://purl.obolibrary.org/obo/mondo.owl" -OutFile "large/mondo.owl"
+```
+
+### Import for Benchmark
+
+After downloading, import each ontology into the owl4agents workspace:
+
+```powershell
+java -jar modules/ontology-cli/build/libs/owl4agents.jar import --ontology-id hpo --source-path test/corpus/large/hp.owl
+java -jar modules/ontology-cli/build/libs/owl4agents.jar import --ontology-id mondo --source-path test/corpus/large/mondo.owl
+```
+
+### Cache Warm-up
+
+v0.8.2 `OntologyCache` eliminates repeated 36-211s load times for HPO/Mondo. The benchmark runner warms up the cache by calling `getOrCreate()` for each ontology before processing the first claim. See `CliServiceFactory.getSharedOntologyCache()`.
+
 ## Recommended Golden Ontologies
 
 Create these small deterministic fixtures by hand. Each file should have a matching `.expected.json`.

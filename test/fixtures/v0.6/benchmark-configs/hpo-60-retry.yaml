@@ -1,0 +1,9 @@
+name: hpo-60-retry
+description: HPO ontology benchmark retry with higher timeout (timed-out claims only)
+ontologyIds:
+  - hpo
+questionSetPath: test/fixtures/v0.6/question-sets/hpo-60-retry.jsonl
+reasoners:
+  - elk
+outputPath: results/hpo-60-retry-output.jsonl
+timeoutPerQuestion: 60

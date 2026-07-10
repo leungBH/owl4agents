@@ -1,0 +1,9 @@
+name: sosa-40
+description: SOSA ontology benchmark with 40 claims
+ontologyIds:
+  - sosa
+questionSetPath: test/fixtures/v0.6/question-sets/sosa-40.jsonl
+reasoners:
+  - hermit
+outputPath: results/sosa-40-output.jsonl
+timeoutPerQuestion: 60

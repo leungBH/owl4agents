@@ -21,9 +21,23 @@ import java.nio.file.*;
 public class SemanticDeepeningService {
 
     private final String workspaceBasePath;
+    private final OntologyCache ontologyCache;
 
+    /**
+     * @deprecated Use the 2-arg constructor with shared {@link OntologyCache}
+     *             for cross-service cache sharing and workspaceName fix.
+     *             This constructor creates a standalone cache with hardcoded
+     *             {@code "default"} workspace (original buggy behavior).
+     */
+    @Deprecated
     public SemanticDeepeningService(String workspaceBasePath) {
         this.workspaceBasePath = workspaceBasePath;
+        this.ontologyCache = new OntologyCache(workspaceBasePath, "default");
+    }
+
+    public SemanticDeepeningService(String workspaceBasePath, OntologyCache ontologyCache) {
+        this.workspaceBasePath = workspaceBasePath;
+        this.ontologyCache = ontologyCache;
     }
 
     // ── Import Closure ──
@@ -658,9 +672,7 @@ public class SemanticDeepeningService {
     // ── Private Helpers ──
 
     private OWLOntology loadOntology(OntologyId ontologyId) throws OWLOntologyCreationException {
-        Path ontologyPath = Path.of(workspaceBasePath, "default", "ontologies", ontologyId.id(), "canonical", "ontology.owl");
-        OWLOntologyManager manager = OWLManager.createOWLOntologyManager();
-        return manager.loadOntologyFromOntologyDocument(ontologyPath.toFile());
+        return ontologyCache.getOrCreate(ontologyId);
     }
 
     private String detectProfileFromIRI(IRI iri) {

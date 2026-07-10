@@ -2,6 +2,7 @@ package org.owl4agents.validation;
 
 import org.owl4agents.core.*;
 import org.owl4agents.core.model.*;
+import org.owl4agents.owlapi.OntologyCache;
 import org.owl4agents.reasoner.*;
 import org.semanticweb.owlapi.apibinding.OWLManager;
 import org.semanticweb.owlapi.model.*;
@@ -23,10 +24,27 @@ public class ConsistencyAnalysisService {
 
     private final ReasonerLifecycleManager reasonerLifecycle;
     private final String workspaceBasePath;
+    private final OntologyCache ontologyCache;
 
+    /**
+     * @deprecated Use the 3-arg constructor with shared {@link OntologyCache}
+     *             for cross-service cache sharing and workspaceName fix.
+     *             This constructor creates a standalone cache with hardcoded
+     *             {@code "default"} workspace (original buggy behavior).
+     */
+    @Deprecated
     public ConsistencyAnalysisService(ReasonerLifecycleManager reasonerLifecycle, String workspaceBasePath) {
         this.reasonerLifecycle = reasonerLifecycle;
         this.workspaceBasePath = workspaceBasePath;
+        this.ontologyCache = new OntologyCache(workspaceBasePath, "default");
+    }
+
+    public ConsistencyAnalysisService(ReasonerLifecycleManager reasonerLifecycle,
+                                       String workspaceBasePath,
+                                       OntologyCache ontologyCache) {
+        this.reasonerLifecycle = reasonerLifecycle;
+        this.workspaceBasePath = workspaceBasePath;
+        this.ontologyCache = ontologyCache;
     }
 
     // ── Class Compatibility ──
@@ -428,9 +446,7 @@ public class ConsistencyAnalysisService {
     // ── Private Helpers ──
 
     private OWLOntology loadOntology(OntologyId ontologyId) throws OWLOntologyCreationException {
-        Path ontologyPath = Path.of(workspaceBasePath, "default", "ontologies", ontologyId.id(), "canonical", "ontology.owl");
-        OWLOntologyManager manager = OWLManager.createOWLOntologyManager();
-        return manager.loadOntologyFromOntologyDocument(ontologyPath.toFile());
+        return ontologyCache.getOrCreate(ontologyId);
     }
 
     private String detectProfile(OWLOntology ontology) {

@@ -6,7 +6,9 @@
 
 > **v0.8** adds the MCP Streamable HTTP transport (SSE on `GET /mcp`, `Mcp-Session-Id` round-trip, content negotiation). The v0.7 plain-JSON HTTP transport is preserved as the no-regression baseline; stdio and wire-format parity are unchanged.
 >
-> **v0.8.1** (recommended) fixes 5 claim-verification accuracy defects from v0.8.0 (ISSUE-01…ISSUE-05) — see [CHANGELOG.md](CHANGELOG.md) §"0.8.1" and `doc/retrospectives/`. The 80-curated-claim accuracy gate moved from 75/80 → 80/80. Two new claim types (`different_individuals`, `object_property_subproperty`) and an optional `expression` field on `subject` / `object` for complex class expressions are now supported.
+> **v0.8.2** (recommended) adds workspace-level `OntologyCache` shared across `ReasonerServiceImpl`, `ConsistencyAnalysisService`, and `SemanticDeepeningService` — eliminates redundant 36-211s reloads of large ontologies (Mondo 236MB, HPO 74MB). See [CHANGELOG.md](CHANGELOG.md) §"0.8.2".
+>
+> **v0.8.1** fixes 5 claim-verification accuracy defects from v0.8.0 (ISSUE-01…ISSUE-05) — see [CHANGELOG.md](CHANGELOG.md) §"0.8.1" and `doc/retrospectives/`. The 80-curated-claim accuracy gate moved from 75/80 → 80/80. Two new claim types (`different_individuals`, `object_property_subproperty`) and an optional `expression` field on `subject` / `object` for complex class expressions are now supported.
 
 ---
 
@@ -202,11 +204,11 @@ On Windows, prefer the npm launcher or `gradlew run --args="..."` over `java -ja
 .\gradlew.bat clean buildVerification
 .\gradlew.bat :modules:ontology-cli:shadowJar
 node tools/npm/test/launcher.test.js
-node tools/npm/bin/owl4agents.js --version    # → 0.8.1
+node tools/npm/bin/owl4agents.js --version    # → 0.8.2
 node tools/npm/bin/owl4agents.js --help
 ```
 
-A green run reports `BUILD SUCCESSFUL`, `Results: 29 passed, 0 failed` for the npm launcher, and `--version` prints `0.8.1`. The full Gradle suite has 800+ unit tests (0 failures) covering the 80 curated claim accuracy gate (80/80) — see `build/reports/tests/test/index.html` after a run.
+A green run reports `BUILD SUCCESSFUL`, `Results: 29 passed, 0 failed` for the npm launcher, and `--version` prints `0.8.2`. The full Gradle suite has 800+ unit tests (0 failures) covering the 80 curated claim accuracy gate (80/80) — see `build/reports/tests/test/index.html` after a run.
 
 ---
 

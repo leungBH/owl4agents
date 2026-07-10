@@ -1,0 +1,9 @@
+name: mondo-60
+description: Mondo ontology benchmark with 60 claims
+ontologyIds:
+  - mondo
+questionSetPath: test/fixtures/v0.6/question-sets/mondo-60.jsonl
+reasoners:
+  - elk
+outputPath: results/mondo-60-output.jsonl
+timeoutPerQuestion: 60

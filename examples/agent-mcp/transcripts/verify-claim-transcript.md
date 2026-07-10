@@ -31,7 +31,7 @@ This is a sanitized transcript showing a real MCP tool call to `ontology_verify_
     "capabilities": { "tools": {} },
     "serverInfo": {
       "name": "owl4agents",
-      "version": "0.8.1"
+      "version": "0.8.2"
     }
   }
 }

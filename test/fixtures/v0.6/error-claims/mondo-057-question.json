@@ -1,0 +1,32 @@
+{
+  "claims": [
+    {
+      "id": "mondo-057-c1",
+      "predicate": "subClassOf",
+      "subject": {
+        "kind": "class",
+        "iri": "http://purl.obolibrary.org/obo/UBERON_0000948"
+      },
+      "type": "subclass",
+      "required": true,
+      "object": {
+        "kind": "class",
+        "iri": "http://purl.obolibrary.org/obo/MONDO_0000001"
+      }
+    }
+  ],
+  "questionId": "mondo-057",
+  "expectedVerdict": "out_of_scope",
+  "sourceYear": "2026",
+  "source": "owl4agents",
+  "question": "Can Mondo verify whether heart is a subclass of ",
+  "reviewStatus": "approved",
+  "answerType": "yesno",
+  "expectedAnswer": "out_of_scope",
+  "edgeCase": true,
+  "sourceLicense": "Apache-2.0",
+  "domain": "biomedical",
+  "ontologyIds": [
+    "mondo"
+  ]
+}

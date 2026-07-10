@@ -1,5 +1,32 @@
 # Changelog
 
+## 0.8.2 - 2026-07-10
+
+### Added
+
+- **Ontology caching (`OntologyCache`)** — New `OntologyCache` class in `ontology-owlapi` with `ConcurrentHashMap<String, CompletableFuture<CacheEntry>>` for thread-safe ontology caching. Uses mtime+size dual detection for cache invalidation. `CompletableFuture` ensures at most one thread loads a given ontology (Mondo: 36-211s) while other threads wait on the same future. Failed loads remove the failed future so next call retries.
+- **`OntologyReloadListener` interface** — Placed in `ontology-owlapi` to break circular dependency. `onOntologyReloaded(OntologyId)` is called BEFORE new cache entry becomes visible (TOCTOU prevention). `ReasonerLifecycleManager` implements this interface to delegate to `shutdownReasoner()`, releasing native HermiT/ELK/Openllet resources on cache reload.
+- **Shared `OntologyCache` injection** — `ReasonerServiceImpl` (4-arg constructor), `ConsistencyAnalysisService` (3-arg), and `SemanticDeepeningService` (2-arg) now accept a shared `OntologyCache`, enabling cross-service ontology reuse. Old constructors marked `@Deprecated` for backward compatibility.
+- **`CliServiceFactory.getSharedOntologyCache()`** — Public accessor for benchmark warm-up; independent of `getReasonerService()` to avoid initialization order coupling.
+- **Cache sharing integration tests** — 7 integration tests verifying cross-service ontology instance sharing, cache reload triggers adapter invalidation, no resource leak across multiple reloads.
+- **Benchmark fixture setup** — 240-claim benchmark configs (pizza-80, hpo-60, mondo-60, sosa-40) with cache warm-up step and `-Xmx4g` JVM heap configuration.
+
+### Fixed
+
+- **workspaceName hardcode bug** — `ConsistencyAnalysisService` and `SemanticDeepeningService` previously hardcoded `"default"` workspace in `loadOntology()`, causing path resolution failures for non-default workspaces. Now uses the `workspaceName` from the injected `OntologyCache`.
+
+### Changed
+
+- Version bump 0.8.1 → 0.8.2 across `McpServerAdapter.SERVER_VERSION`, CLI banner, `build.gradle.kts`, npm package, CI assertion, examples README, and this CHANGELOG.
+- `McpServerAdapter` constructor now creates a shared `OntologyCache` and injects it into all three services.
+- `CliServiceFactory` uses lazy `getOntologyCache()` initializer shared across all services.
+
+### Notes
+
+- v0.8.2 is **backward-compatible** with v0.8.1 clients. `@Deprecated` constructors preserve original behavior for legacy callers.
+- Cache warm-up strategy: call `getOrCreate()` for each ontology before processing the first claim, eliminating 36-211s first-load delays during benchmark execution.
+- Readonly tool count remains 56; no new external dependencies.
+
 ## 0.8.1 - 2026-07-09
 
 ### Fixed

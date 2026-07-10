@@ -1,0 +1,32 @@
+{
+  "questionId": "pizza-007",
+  "source": "owl4agents",
+  "sourceYear": "2026",
+  "domain": "food",
+  "ontologyIds": [
+    "pizza"
+  ],
+  "question": "Is CheeseyPizza equivalent to Pizza with some CheeseTopping?",
+  "answerType": "yesno",
+  "expectedAnswer": "yes",
+  "expectedVerdict": "supported",
+  "claims": [
+    {
+      "id": "pizza-007-c1",
+      "type": "equivalent_classes",
+      "required": true,
+      "subject": {
+        "kind": "class",
+        "iri": "http://www.co-ode.org/ontologies/pizza/pizza.owl#CheeseyPizza"
+      },
+      "predicate": "equivalentTo",
+      "object": {
+        "kind": "class",
+        "iri": "http://www.co-ode.org/ontologies/pizza/pizza.owl#Pizza"
+      }
+    }
+  ],
+  "reviewStatus": "approved",
+  "sourceLicense": "Apache-2.0",
+  "edgeCase": false
+}

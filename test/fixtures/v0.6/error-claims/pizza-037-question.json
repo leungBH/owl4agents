@@ -1,0 +1,32 @@
+{
+  "questionId": "pizza-037",
+  "source": "owl4agents",
+  "sourceYear": "2026",
+  "domain": "food",
+  "ontologyIds": [
+    "pizza"
+  ],
+  "question": "Is hasBase a subproperty of hasIngredient?",
+  "answerType": "yesno",
+  "expectedAnswer": "yes",
+  "expectedVerdict": "supported",
+  "claims": [
+    {
+      "id": "pizza-037-c1",
+      "type": "object_property_assertion",
+      "required": true,
+      "subject": {
+        "kind": "object_property",
+        "iri": "http://www.co-ode.org/ontologies/pizza/pizza.owl#hasBase"
+      },
+      "predicate": "subPropertyOf",
+      "object": {
+        "kind": "object_property",
+        "iri": "http://www.co-ode.org/ontologies/pizza/pizza.owl#hasIngredient"
+      }
+    }
+  ],
+  "reviewStatus": "approved",
+  "sourceLicense": "Apache-2.0",
+  "edgeCase": false
+}

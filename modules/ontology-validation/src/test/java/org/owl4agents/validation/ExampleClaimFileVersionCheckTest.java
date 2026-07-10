@@ -23,6 +23,7 @@ import static org.junit.jupiter.api.Assertions.*;
 class ExampleClaimFileVersionCheckTest {
 
     private static final Pattern V081 = Pattern.compile("0\\.8\\.1");
+    private static final Pattern V082 = Pattern.compile("0\\.8\\.2");
     private static final Pattern DIFFERENT_INDIVIDUALS = Pattern.compile(
         "different_individuals|DIFFERENT_INDIVIDUALS|individual.+differentFrom|individual.+different",
         Pattern.CASE_INSENSITIVE);
@@ -71,17 +72,17 @@ class ExampleClaimFileVersionCheckTest {
     }
 
     @Test
-    @DisplayName("verify-claim-transcript.md uses v0.8.1 server version")
-    void verifyClaimTranscriptUsesV081() throws Exception {
+    @DisplayName("verify-claim-transcript.md uses v0.8.2 server version")
+    void verifyClaimTranscriptUsesV082() throws Exception {
         Path transcript = resolveTranscript();
         if (!Files.exists(transcript)) {
             // Transcript may not exist in all configurations; skip
             return;
         }
         String content = Files.readString(transcript);
-        assertTrue(content.contains("0.8.1"),
-            "verify-claim-transcript.md must use server version 0.8.1 (got: "
-                + firstMatch(content, V081) + ")");
+        assertTrue(content.contains("0.8.2"),
+            "verify-claim-transcript.md must use server version 0.8.2 (got: "
+                + firstMatch(content, V082) + ")");
     }
 
     private Path resolveExample() {

@@ -15,6 +15,7 @@ import org.semanticweb.owlapi.model.OWLOntologyCreationException;
 import org.semanticweb.owlapi.model.OWLOntologyManager;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Instant;
@@ -51,11 +52,14 @@ public class OntologyImporter {
         // 2. Try to load the ontology through OWL API
         OWLOntologyManager manager = OWLManager.createOWLOntologyManager();
         OWLOntology ontology;
-        try {
-            ontology = manager.loadOntologyFromOntologyDocument(sourceFilePath.toFile());
+        try (InputStream is = Files.newInputStream(sourceFilePath)) {
+            ontology = manager.loadOntologyFromOntologyDocument(is);
         } catch (OWLOntologyCreationException e) {
             return ServiceResult.error(ServiceError.importFailed(
                 sourceFilePath.toString(), "OWL API could not parse the file: " + e.getMessage()));
+        } catch (IOException e) {
+            return ServiceResult.error(ServiceError.importFailed(
+                sourceFilePath.toString(), "Failed to read source file: " + e.getMessage()));
         }
 
         // 3. Create workspace directory structure for this ontology

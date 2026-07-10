@@ -1,0 +1,32 @@
+{
+  "questionId": "pizza-035",
+  "source": "owl4agents",
+  "sourceYear": "2026",
+  "domain": "food",
+  "ontologyIds": [
+    "pizza"
+  ],
+  "question": "Is France disjoint with Germany?",
+  "answerType": "yesno",
+  "expectedAnswer": "yes",
+  "expectedVerdict": "supported",
+  "claims": [
+    {
+      "id": "pizza-035-c1",
+      "type": "disjoint_classes",
+      "required": true,
+      "subject": {
+        "kind": "individual",
+        "iri": "http://www.co-ode.org/ontologies/pizza/pizza.owl#France"
+      },
+      "predicate": "differentFrom",
+      "object": {
+        "kind": "individual",
+        "iri": "http://www.co-ode.org/ontologies/pizza/pizza.owl#Germany"
+      }
+    }
+  ],
+  "reviewStatus": "approved",
+  "sourceLicense": "Apache-2.0",
+  "edgeCase": false
+}

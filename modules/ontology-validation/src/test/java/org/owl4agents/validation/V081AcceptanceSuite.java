@@ -17,6 +17,7 @@ import org.owl4agents.core.model.ClaimType;
 import org.owl4agents.core.model.ClaimVerificationResult;
 import org.owl4agents.core.model.Verdict;
 import org.owl4agents.core.util.ClassExpressionAdapter;
+import org.owl4agents.owlapi.OntologyCache;
 import org.owl4agents.owlapi.OntologyImporter;
 import org.owl4agents.owlapi.SemanticDeepeningService;
 import org.owl4agents.reasoner.ReasonerServiceImpl;
@@ -93,13 +94,15 @@ class V081AcceptanceSuite {
     }
 
     private ClaimVerificationService buildService(String reasonerName, String ontologyId) {
-        ReasonerServiceImpl reasonerService = new ReasonerServiceImpl(catalogStore, workspaceBasePath());
+        String basePath = workspaceBasePath();
+        OntologyCache ontologyCache = new OntologyCache(basePath, "default");
+        ReasonerServiceImpl reasonerService = new ReasonerServiceImpl(catalogStore, basePath, "default", ontologyCache);
         // Pre-run the reasoner so the inferred-class-hierarchy.jsonl is on
         // disk; checkStoredEntailment reads it from there.
         reasonerService.runReasoner(new OntologyId(ontologyId), Optional.of(reasonerName));
         ConsistencyAnalysisService consistencyService =
-            new ConsistencyAnalysisService(reasonerService.getLifecycleManager(), workspaceBasePath());
-        SemanticDeepeningService deepeningService = new SemanticDeepeningService(workspaceBasePath());
+            new ConsistencyAnalysisService(reasonerService.getLifecycleManager(), basePath, ontologyCache);
+        SemanticDeepeningService deepeningService = new SemanticDeepeningService(basePath, ontologyCache);
         return new ClaimVerificationService(
             reasonerService, consistencyService, deepeningService, catalogStore, WorkspaceId.DEFAULT);
     }

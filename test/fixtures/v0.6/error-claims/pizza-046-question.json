@@ -1,0 +1,32 @@
+{
+  "questionId": "pizza-046",
+  "source": "owl4agents",
+  "sourceYear": "2026",
+  "domain": "food",
+  "ontologyIds": [
+    "pizza"
+  ],
+  "question": "Is isBaseOf an object property with domain PizzaBase?",
+  "answerType": "yesno",
+  "expectedAnswer": "yes",
+  "expectedVerdict": "supported",
+  "claims": [
+    {
+      "id": "pizza-046-c1",
+      "type": "object_property_domain",
+      "required": true,
+      "subject": {
+        "kind": "object_property",
+        "iri": "http://www.co-ode.org/ontologies/pizza/pizza.owl#isBaseOf"
+      },
+      "predicate": "domain",
+      "object": {
+        "kind": "class",
+        "iri": "http://www.co-ode.org/ontologies/pizza/pizza.owl#PizzaBase"
+      }
+    }
+  ],
+  "reviewStatus": "approved",
+  "sourceLicense": "Apache-2.0",
+  "edgeCase": false
+}

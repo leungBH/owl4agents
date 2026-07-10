@@ -1,0 +1,9 @@
+name: mondo-60-retry
+description: Mondo ontology benchmark retry with higher timeout
+ontologyIds:
+  - mondo
+questionSetPath: test/fixtures/v0.6/question-sets/mondo-60-retry.jsonl
+reasoners:
+  - elk
+outputPath: results/mondo-60-retry-output.jsonl
+timeoutPerQuestion: 60

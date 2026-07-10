@@ -1,0 +1,32 @@
+{
+  "claims": [
+    {
+      "id": "mondo-053-c1",
+      "predicate": "subClassOf",
+      "subject": {
+        "kind": "class",
+        "iri": "http://purl.obolibrary.org/obo/HP_0001626"
+      },
+      "type": "subclass",
+      "required": true,
+      "object": {
+        "kind": "class",
+        "iri": "http://purl.obolibrary.org/obo/MONDO_0005148"
+      }
+    }
+  ],
+  "questionId": "mondo-053",
+  "expectedVerdict": "out_of_scope",
+  "sourceYear": "2026",
+  "source": "owl4agents",
+  "question": "Can Mondo verify whether Abnormality of the cardiovascular system is a subclass of ",
+  "reviewStatus": "approved",
+  "answerType": "yesno",
+  "expectedAnswer": "out_of_scope",
+  "edgeCase": true,
+  "sourceLicense": "Apache-2.0",
+  "domain": "biomedical",
+  "ontologyIds": [
+    "mondo"
+  ]
+}

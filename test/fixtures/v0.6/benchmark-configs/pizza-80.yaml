@@ -1,0 +1,9 @@
+name: pizza-80
+description: Pizza ontology benchmark with 80 claims
+ontologyIds:
+  - pizza
+questionSetPath: test/fixtures/v0.6/question-sets/pizza-80.jsonl
+reasoners:
+  - hermit
+outputPath: results/pizza-80-output.jsonl
+timeoutPerQuestion: 60

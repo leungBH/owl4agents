@@ -4,6 +4,7 @@ import org.owl4agents.core.OntologyId;
 import org.owl4agents.core.ServiceResult;
 import org.owl4agents.core.WorkspaceId;
 import org.owl4agents.core.model.*;
+import org.owl4agents.owlapi.OntologyCache;
 import org.owl4agents.owlapi.OntologyImporter;
 import org.owl4agents.owlapi.OntologySummaryExtractor;
 import org.owl4agents.owlapi.SemanticDeepeningService;
@@ -47,6 +48,7 @@ public class CliServiceFactory {
     private ReasonerServiceImpl reasonerService;
     private SemanticDeepeningService semanticDeepeningService;
     private ConsistencyAnalysisService consistencyAnalysisService;
+    private OntologyCache ontologyCache;
     private ClaimVerificationService claimVerificationService;
     private EvidenceGroundingService evidenceGroundingService;
     private ClaimWorkflowService claimWorkflowService;
@@ -182,38 +184,57 @@ public class CliServiceFactory {
      * The importer stores ontologies at homeDir/workspaces/{workspaceName}/ontologies/{id}/...
      * So we pass homeDir/workspaces as the base path and the workspace name.
      */
-    public ReasonerServiceImpl getReasonerService() {
-        if (reasonerService == null) {
+    /**
+     * Get the shared OntologyCache instance (lazy-initialized).
+     * Independent of getReasonerService() to avoid initialization order coupling.
+     */
+    private OntologyCache getOntologyCache() {
+        if (ontologyCache == null) {
             String workspaceBasePath = getHomeResolver().resolveHomeDirectory()
                 .resolve("workspaces").toString();
-            reasonerService = new ReasonerServiceImpl(getCatalogStore(), workspaceBasePath, workspaceName);
+            ontologyCache = new OntologyCache(workspaceBasePath, workspaceName);
+        }
+        return ontologyCache;
+    }
+
+    /**
+     * Public accessor for benchmark warm-up.
+     */
+    public OntologyCache getSharedOntologyCache() {
+        return getOntologyCache();
+    }
+
+    public ReasonerServiceImpl getReasonerService() {
+        if (reasonerService == null) {
+            String workspaceBasePath = getOntologyCache().getWorkspaceBasePath();
+            reasonerService = new ReasonerServiceImpl(
+                getCatalogStore(), workspaceBasePath, workspaceName, getOntologyCache());
         }
         return reasonerService;
     }
 
     /**
      * Get the semantic deepening service instance.
-     * Same path resolution logic as ReasonerServiceImpl.
+     * Calls getOntologyCache() directly (NOT getReasonerService()) to
+     * avoid implicit initialization order coupling.
      */
     public SemanticDeepeningService getSemanticDeepeningService() {
         if (semanticDeepeningService == null) {
-            String workspaceBasePath = getHomeResolver().resolveHomeDirectory()
-                .resolve("workspaces").toString();
-            semanticDeepeningService = new SemanticDeepeningService(workspaceBasePath);
+            String workspaceBasePath = getOntologyCache().getWorkspaceBasePath();
+            semanticDeepeningService = new SemanticDeepeningService(workspaceBasePath, getOntologyCache());
         }
         return semanticDeepeningService;
     }
 
     /**
      * Get the consistency analysis service instance.
-     * Same path resolution logic as ReasonerServiceImpl.
      */
     public ConsistencyAnalysisService getConsistencyAnalysisService() {
         if (consistencyAnalysisService == null) {
-            String workspaceBasePath = getHomeResolver().resolveHomeDirectory()
-                .resolve("workspaces").toString();
+            String workspaceBasePath = getOntologyCache().getWorkspaceBasePath();
             ReasonerLifecycleManager lifecycleManager = getReasonerService().getLifecycleManager();
-            consistencyAnalysisService = new ConsistencyAnalysisService(lifecycleManager, workspaceBasePath);
+            consistencyAnalysisService = new ConsistencyAnalysisService(
+                lifecycleManager, workspaceBasePath, getOntologyCache());
         }
         return consistencyAnalysisService;
     }

@@ -1,0 +1,13 @@
+{
+  "questionId": "pizza-046",
+  "ontologyId": "pizza",
+  "reasoner": "hermit",
+  "claimsVerified": 1,
+  "actualVerdict": "unknown",
+  "expectedVerdict": "supported",
+  "verdictMatch": false,
+  "elapsedMs": 574,
+  "reviewStatus": "approved",
+  "error": null,
+  "edgeCase": false
+}

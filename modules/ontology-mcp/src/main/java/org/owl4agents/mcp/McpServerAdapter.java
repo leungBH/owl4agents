@@ -113,12 +113,20 @@ public class McpServerAdapter {
  // v0.7.0: Eagerly initialize 7 services in dependency order so that
  // concurrent HTTP requests cannot race on lazy initialization.
  // The order matches spec.md §"Service initialization order".
+ // v0.8.2: Inject shared OntologyCache into all three services for
+ // cross-service ontology reuse (avoiding redundant 36-211s loads
+ // of large ontologies like Mondo).
  String workspaceBasePath = homeResolver.resolveHomeDirectory()
  .resolve("workspaces").toString();
- this.reasonerService = new org.owl4agents.reasoner.ReasonerServiceImpl(catalogStore, workspaceBasePath);
+ String workspaceName = "default";
+ org.owl4agents.owlapi.OntologyCache ontologyCache =
+ new org.owl4agents.owlapi.OntologyCache(workspaceBasePath, workspaceName);
+ this.reasonerService = new org.owl4agents.reasoner.ReasonerServiceImpl(
+ catalogStore, workspaceBasePath, workspaceName, ontologyCache);
  this.consistencyAnalysisService = new org.owl4agents.validation.ConsistencyAnalysisService(
- reasonerService.getLifecycleManager(), workspaceBasePath);
- this.semanticDeepeningService = new org.owl4agents.owlapi.SemanticDeepeningService(workspaceBasePath);
+ reasonerService.getLifecycleManager(), workspaceBasePath, ontologyCache);
+ this.semanticDeepeningService = new org.owl4agents.owlapi.SemanticDeepeningService(
+ workspaceBasePath, ontologyCache);
  this.claimVerificationService = new org.owl4agents.validation.ClaimVerificationService(
  reasonerService, consistencyAnalysisService, semanticDeepeningService,
  catalogStore, new WorkspaceId("default"));
@@ -185,12 +193,13 @@ public class McpServerAdapter {
  public static final String PROTOCOL_VERSION = "2025-06-18";
 
  /**
- * Server version. Bumped to `0.8.1` in the v0.8.1 release (5 claim-verification
- * accuracy fixes, 2 new claim types, complex class expression support). Single
- * source of truth -> ?read by both stdio and HTTP transports (including the
- * `GET /mcp` SSE path).
+ * Server version. Bumped to `0.8.2` in the v0.8.2 release (workspace-level
+ * OntologyCache shared across reasoner, consistency, and semantic-deepening
+ * services; eliminates redundant 36-211s reloads of large ontologies).
+ * Single source of truth -> ?read by both stdio and HTTP transports
+ * (including the `GET /mcp` SSE path).
  */
- public static final String SERVER_VERSION = "0.8.1";
+ public static final String SERVER_VERSION = "0.8.2";
 
  /**
  * Public JSON-RPC 2.0 entry point used by both the stdio transport

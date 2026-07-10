@@ -1,0 +1,13 @@
+{
+  "questionId": "mondo-057",
+  "ontologyId": "mondo",
+  "reasoner": "elk",
+  "claimsVerified": 1,
+  "actualVerdict": "contradicted",
+  "expectedVerdict": "out_of_scope",
+  "verdictMatch": false,
+  "elapsedMs": 76384,
+  "reviewStatus": "reviewed",
+  "error": null,
+  "edgeCase": true
+}

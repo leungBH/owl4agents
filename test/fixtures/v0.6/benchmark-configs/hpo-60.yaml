@@ -1,0 +1,9 @@
+name: hpo-60
+description: HPO ontology benchmark with 60 claims
+ontologyIds:
+  - hpo
+questionSetPath: test/fixtures/v0.6/question-sets/hpo-60.jsonl
+reasoners:
+  - elk
+outputPath: results/hpo-60-output.jsonl
+timeoutPerQuestion: 60

@@ -2,6 +2,7 @@ package org.owl4agents.reasoner;
 
 import org.owl4agents.core.*;
 import org.owl4agents.core.model.*;
+import org.owl4agents.owlapi.OntologyCache;
 import org.owl4agents.owlapi.OntologyImporter;
 import org.owl4agents.owlapi.OntologyIriResolver;
 import org.owl4agents.storage.CatalogStore;
@@ -27,6 +28,7 @@ public class ReasonerServiceImpl implements ReasonerService {
     private final CatalogStore catalogStore;
     private final String workspaceBasePath;
     private final String workspaceName;
+    private final OntologyCache ontologyCache;
 
     /**
      * Get the lifecycle manager for sharing with other services (e.g. consistency analysis).
@@ -35,15 +37,46 @@ public class ReasonerServiceImpl implements ReasonerService {
         return lifecycleManager;
     }
 
+    /**
+     * @deprecated Use the 4-arg constructor with shared {@link OntologyCache}
+     *             for cross-service cache sharing. This constructor creates
+     *             a standalone cache that is not shared with other services.
+     */
+    @Deprecated
     public ReasonerServiceImpl(CatalogStore catalogStore, String workspaceBasePath) {
         this(catalogStore, workspaceBasePath, "default");
     }
 
+    /**
+     * @deprecated Use the 4-arg constructor with shared {@link OntologyCache}
+     *             for cross-service cache sharing. This constructor creates
+     *             a standalone cache that is not shared with other services.
+     */
+    @Deprecated
     public ReasonerServiceImpl(CatalogStore catalogStore, String workspaceBasePath, String workspaceName) {
         this.lifecycleManager = new ReasonerLifecycleManager();
         this.catalogStore = catalogStore;
         this.workspaceBasePath = workspaceBasePath;
         this.workspaceName = workspaceName;
+        this.ontologyCache = new OntologyCache(workspaceBasePath, workspaceName);
+        this.ontologyCache.setReloadListener(this.lifecycleManager);
+    }
+
+    /**
+     * @param catalogStore       the catalog store for ontology metadata
+     * @param workspaceBasePath  absolute path to the workspace root
+     * @param workspaceName      workspace name (e.g. {@code "default"})
+     * @param ontologyCache      shared {@link OntologyCache} instance for
+     *                           cross-service ontology reuse
+     */
+    public ReasonerServiceImpl(CatalogStore catalogStore, String workspaceBasePath,
+                                String workspaceName, OntologyCache ontologyCache) {
+        this.lifecycleManager = new ReasonerLifecycleManager();
+        this.catalogStore = catalogStore;
+        this.workspaceBasePath = workspaceBasePath;
+        this.workspaceName = workspaceName;
+        this.ontologyCache = ontologyCache;
+        this.ontologyCache.setReloadListener(this.lifecycleManager);
     }
 
     @Override
@@ -470,13 +503,7 @@ public class ReasonerServiceImpl implements ReasonerService {
     }
 
     private OWLOntology loadOntology(OntologyId ontologyId) throws OWLOntologyCreationException {
-        Path ontologyPath = resolveOntologyPath(ontologyId);
-        OWLOntologyManager manager = OWLManager.createOWLOntologyManager();
-        return manager.loadOntologyFromOntologyDocument(ontologyPath.toFile());
-    }
-
-    private Path resolveOntologyPath(OntologyId ontologyId) {
-        return Path.of(workspaceBasePath, workspaceName, "ontologies", ontologyId.id(), "canonical", "ontology.owl");
+        return ontologyCache.getOrCreate(ontologyId);
     }
 
     private String detectProfile(OWLOntology ontology) {

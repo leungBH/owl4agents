@@ -3,7 +3,7 @@ plugins {
 }
 
 group = "org.owl4agents"
-version = "0.8.1"
+version = "0.8.2"
 description = "Local OWL ontology reasoning and MCP server for LLM agents"
 
 allprojects {
@@ -41,6 +41,8 @@ subprojects {
         testLogging {
             events("passed", "failed", "skipped")
         }
+        // v0.8.2: 4GB heap for large ontology tests (HPO 74MB, Mondo 236MB)
+        jvmArgs("-Xmx4g")
         // Resolve corpus fixtures from root project directory
         val rootCorpusDir = rootProject.layout.projectDirectory.dir("test/corpus").asFile.absolutePath
         systemProperty("corpus.fixtures", rootCorpusDir)
