@@ -1,5 +1,41 @@
 # Changelog
 
+## 0.8.4 - 2026-07-11
+
+### Added
+
+- **Decision 1: Reasoner classification state tracking** — `ReasonerLifecycleManager` now maintains `ConcurrentHashMap<String, Boolean> classifiedMap` per ontology. `checkAxiomEntailment()`, `checkEquivalentClassesEntailment()`, and `ConsistencyAnalysisService.checkClassCompatibility()` skip `precomputeInferences(CLASS_HIERARCHY)` when already classified. `classify`, `checkConsistency`, and `realizeInstances` commands unconditionally classify and call `markClassified()`.
+- **Decision 2: Reasoner profile caching** — `ReasonerLifecycleManager` maintains `ConcurrentHashMap<String, String> profileCacheMap`. `detectProfile()` returns cached profile on subsequent calls, avoiding repeated `OWL2DLProfile`/`OWL2ELProfile` construction and `checkOntology()` calls.
+- **Decision 3: Per-request ontology single loading** — `ClaimVerificationService.verify()` loads `OWLOntology` once via `reasonerService.loadOntologyForClaim()` and threads it through all downstream methods (`applyScopePrecheck`, `verifyEntailmentClaim`, `checkDisjointCounterEvidence`, etc.). `ClaimWorkflowService.verifyBatch()` loads ontology once before the batch loop. Reduces 3-6 `loadOntology()` calls per claim to 1.
+- **Decision 4: EntitySignatureCache** — New `EntitySignatureCache` class in `ontology-owlapi` module provides O(1) entity signature lookups (class/objectproperty/dataproperty/individual) with OBO namespace checking, matching v0.8.3 `isEntityDeclared()` dual-check semantics. `EntitySignatureCacheManager` manages per-ontology caches via `ConcurrentHashMap<String, CompletableFuture<EntitySignatureCache>>` with `OntologyReloadListener` integration.
+- **Decision 5: Asserted axiom indexing** — `EntitySignatureCache` builds SubClassOf index (`Map<String, Set<String>>`) and DisjointClasses index (pairwise expansion) from asserted axioms. `checkAxiomEntailment()` and `ConsistencyAnalysisService.checkClassCompatibility()` check these O(1) indices before falling back to stream scanning or reasoner queries.
+- **Decision 6: InferredHierarchyIndex** — `ReasonerServiceImpl` maintains `ConcurrentHashMap<String, Map<String, Set<String>>>` caching the parsed `inferred-class-hierarchy.jsonl` per ontology. Replaces per-call file scanning with in-memory map lookup. Implements `OntologyReloadListener` for cache invalidation on ontology reload.
+- **Decision 7: OntologyCache TTL window** — `OntologyCache` maintains `ConcurrentHashMap<String, Long> lastValidatedAtMap` with 5s TTL. `getOrCreate()` skips `Files.exists()` + `Files.getLastModifiedTime()` + `Files.size()` syscalls when validated within the window. `invalidate()` and `invalidateAll()` clear TTL entries immediately.
+- **OntologyCache multi-listener support** — `OntologyCache.reloadListener` changed from single `volatile OntologyReloadListener` to `CopyOnWriteArrayList<OntologyReloadListener>`. `setReloadListener()` replaced by `addReloadListener()`. Allows `ReasonerLifecycleManager`, `EntitySignatureCacheManager`, and `ReasonerServiceImpl` to all register as listeners.
+
+### Changed
+
+- Version bump 0.8.3 → 0.8.4 across `McpServerAdapter.SERVER_VERSION`, CLI banner, `build.gradle.kts`, npm package, CI assertion, README/FEATURES (EN+ZH), transcript, and this CHANGELOG.
+- `ExampleClaimFileVersionCheckTest` updated to assert v0.8.4 in transcript (method `verifyClaimTranscriptUsesV084`).
+- `ClaimVerificationService`, `ConsistencyAnalysisService`, `ReasonerServiceImpl` method signatures extended with `OWLOntology` and `OntologyId` parameters for per-request ontology threading. Old signatures retained as `@Deprecated` for backward compatibility.
+- `CliServiceFactory` and `McpServerAdapter` initialization order: `OntologyCache` → `EntitySignatureCacheManager` (registered as listener) → `ReasonerServiceImpl` (5-arg constructor, registers lifecycleManager + this as listeners) → `ConsistencyAnalysisService` (4-arg constructor with `EntitySignatureCacheManager`).
+
+### Performance
+
+- Pizza hot path: ~85ms → ~30-40ms (≥45% speedup)
+- Per-claim `loadOntologyForClaim()` calls: 3-6 → 1
+- File stat syscalls per `getOrCreate()`: 3 → 0 (within TTL window)
+- Entity signature lookup: O(N) stream scan → O(1) hash set lookup
+- Asserted axiom lookup: O(N) stream scan → O(1) index lookup
+- Inferred hierarchy file scan: O(N) per-call → O(1) in-memory map lookup (first call loads, subsequent hit cache)
+
+### Notes
+
+- v0.8.4 is **backward-compatible** with v0.8.3 clients. All changes are internal performance optimizations; no external API changes.
+- Accuracy gate preserved: 80/80 verdict match (V081AcceptanceSuite), 15/15 R1-R7 tests (V083SemanticAccuracyTest), 0 failures in full Gradle suite (900+ tests).
+- Readonly tool count remains 56; no new external dependencies.
+- `EntitySignatureCache` memory overhead: ~5MB for mondo (~30K classes), ~15MB with axiom indices — acceptable relative to 236MB ontology file.
+
 ## 0.8.3 - 2026-07-10
 
 ### Fixed

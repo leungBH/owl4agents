@@ -128,9 +128,13 @@ class StubReasonerService implements ReasonerService {
             java.nio.file.Path path = java.nio.file.Path.of(
                 workspaceBasePath, "default", "ontologies",
                 ontologyId.id(), "canonical", "ontology.owl");
-            return org.semanticweb.owlapi.apibinding.OWLManager
-                .createOWLOntologyManager()
-                .loadOntologyFromOntologyDocument(path.toFile());
+            if (java.nio.file.Files.exists(path)) {
+                return org.semanticweb.owlapi.apibinding.OWLManager
+                    .createOWLOntologyManager()
+                    .loadOntologyFromOntologyDocument(path.toFile());
+            }
+            // Fall through to empty ontology for test-only ontology IDs
+            // that don't have real files on disk.
         }
         // Default: return a minimal empty ontology to keep the stub contract
         // valid for paths that don't need real IRIs.

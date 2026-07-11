@@ -16,6 +16,7 @@ import org.owl4agents.core.model.ClaimType;
 import org.owl4agents.core.model.ClaimVerificationResult;
 import org.owl4agents.core.model.EntailmentResult;
 import org.owl4agents.core.model.Verdict;
+import org.owl4agents.owlapi.EntitySignatureCacheManager;
 import org.owl4agents.owlapi.OntologyCache;
 import org.owl4agents.owlapi.SemanticDeepeningService;
 import org.owl4agents.reasoner.ReasonerLifecycleManager;
@@ -54,9 +55,11 @@ class V083SemanticAccuracyTest {
     private ClaimVerificationService createServiceWithRealReasoner() {
         OntologyCache cache = new OntologyCache(WORKSPACE, "default");
         StubCatalogStore catalog = new StubCatalogStore();
-        ReasonerServiceImpl reasonerService = new ReasonerServiceImpl(catalog, WORKSPACE, "default", cache);
+        EntitySignatureCacheManager escManager = new EntitySignatureCacheManager();
+        cache.addReloadListener(escManager);
+        ReasonerServiceImpl reasonerService = new ReasonerServiceImpl(catalog, WORKSPACE, "default", cache, escManager);
         ConsistencyAnalysisService consistencyService = new ConsistencyAnalysisService(
-            reasonerService.getLifecycleManager(), WORKSPACE, cache);
+            reasonerService.getLifecycleManager(), WORKSPACE, cache, escManager);
         SemanticDeepeningService deepeningService = new SemanticDeepeningService(WORKSPACE, cache);
         return new ClaimVerificationService(
             reasonerService, consistencyService, deepeningService, catalog, new WorkspaceId("default"));
@@ -133,6 +136,111 @@ class V083SemanticAccuracyTest {
 
             ClaimVerificationResult data = verify(svc, claim);
             assertEquals(Verdict.OUT_OF_SCOPE, data.verdict());
+        }
+
+        @Test
+        @DisplayName("TC-R1-06: pizza individual (America) → NOT OUT_OF_SCOPE (stream scan, v0.8.5 P0 fix)")
+        void pizzaIndividualNotOutOfScopeStreamScan() {
+            StubReasonerService stub = new StubReasonerService().withRealOntology(WORKSPACE);
+            ClaimVerificationService svc = createServiceWithStub(stub);
+
+            Claim claim = new Claim("r1-06", ClaimType.DISJOINT_CLASSES, ONTOLOGY_ID,
+                new ClaimEntity("individual", PIZZA_NS + "America"),
+                "differentFrom",
+                new ClaimEntity("individual", PIZZA_NS + "England"),
+                Optional.empty(), Optional.empty(), Optional.empty());
+
+            ClaimVerificationResult data = verify(svc, claim);
+            assertNotEquals(Verdict.OUT_OF_SCOPE, data.verdict(),
+                "Pizza individual (America) must not be out_of_scope on stream scan path "
+                + "(signature-based check, no Declaration axiom required)");
+        }
+    }
+
+    // ── R1: OOS pre-check (production path via EntitySignatureCache) ──
+
+    @Nested
+    @DisplayName("R1: OOS pre-check (production path — EntitySignatureCache)")
+    class R1OosPrecheckProductionTests {
+
+        @Test
+        @DisplayName("TC-R1-PROD-01: external IRI subject → OUT_OF_SCOPE (via EntitySignatureCache)")
+        void externalIriSubjectReturnsOutOfScopeProduction() {
+            ClaimVerificationService svc = createServiceWithRealReasoner();
+
+            Claim claim = new Claim("r1-prod-01", ClaimType.SUBCLASS, ONTOLOGY_ID,
+                new ClaimEntity("class", EXTERNAL_IRI),
+                "http://www.w3.org/2000/01/rdf-schema#subClassOf",
+                new ClaimEntity("class", PIZZA),
+                Optional.empty(), Optional.empty(), Optional.empty());
+
+            ClaimVerificationResult data = verify(svc, claim);
+            assertEquals(Verdict.OUT_OF_SCOPE, data.verdict(),
+                "External IRI must be out_of_scope via EntitySignatureCache path");
+        }
+
+        @Test
+        @DisplayName("TC-R1-PROD-02: pizza class subject → NOT OUT_OF_SCOPE (via EntitySignatureCache)")
+        void pizzaClassSubjectNotOutOfScopeProduction() {
+            ClaimVerificationService svc = createServiceWithRealReasoner();
+
+            Claim claim = new Claim("r1-prod-02", ClaimType.SUBCLASS, ONTOLOGY_ID,
+                new ClaimEntity("class", CHEESEY_PIZZA),
+                "http://www.w3.org/2000/01/rdf-schema#subClassOf",
+                new ClaimEntity("class", PIZZA),
+                Optional.empty(), Optional.empty(), Optional.empty());
+
+            ClaimVerificationResult data = verify(svc, claim);
+            assertNotEquals(Verdict.OUT_OF_SCOPE, data.verdict(),
+                "Pizza class must not be out_of_scope via EntitySignatureCache path");
+        }
+
+        @Test
+        @DisplayName("TC-R1-PROD-03: external IRI object → OUT_OF_SCOPE (via EntitySignatureCache)")
+        void externalIriObjectReturnsOutOfScopeProduction() {
+            ClaimVerificationService svc = createServiceWithRealReasoner();
+
+            Claim claim = new Claim("r1-prod-03", ClaimType.SUBCLASS, ONTOLOGY_ID,
+                new ClaimEntity("class", PIZZA),
+                "http://www.w3.org/2000/01/rdf-schema#subClassOf",
+                new ClaimEntity("class", EXTERNAL_IRI),
+                Optional.empty(), Optional.empty(), Optional.empty());
+
+            ClaimVerificationResult data = verify(svc, claim);
+            assertEquals(Verdict.OUT_OF_SCOPE, data.verdict(),
+                "External IRI as object must be out_of_scope via EntitySignatureCache path");
+        }
+
+        @Test
+        @DisplayName("TC-R1-PROD-04: pizza object_property (hasBase) → NOT OUT_OF_SCOPE")
+        void pizzaObjectPropertyNotOutOfScopeProduction() {
+            ClaimVerificationService svc = createServiceWithRealReasoner();
+
+            Claim claim = new Claim("r1-prod-04", ClaimType.OBJECT_PROPERTY_ASSERTION, ONTOLOGY_ID,
+                new ClaimEntity("object_property", HAS_BASE),
+                "subPropertyOf",
+                new ClaimEntity("object_property", HAS_INGREDIENT),
+                Optional.empty(), Optional.empty(), Optional.empty());
+
+            ClaimVerificationResult data = verify(svc, claim);
+            assertNotEquals(Verdict.OUT_OF_SCOPE, data.verdict(),
+                "hasBase must not be out_of_scope via EntitySignatureCache path");
+        }
+
+        @Test
+        @DisplayName("TC-R1-PROD-05: pizza individual (America) → NOT OUT_OF_SCOPE")
+        void pizzaIndividualNotOutOfScopeProduction() {
+            ClaimVerificationService svc = createServiceWithRealReasoner();
+
+            Claim claim = new Claim("r1-prod-05", ClaimType.DISJOINT_CLASSES, ONTOLOGY_ID,
+                new ClaimEntity("individual", PIZZA_NS + "America"),
+                "differentFrom",
+                new ClaimEntity("individual", PIZZA_NS + "England"),
+                Optional.empty(), Optional.empty(), Optional.empty());
+
+            ClaimVerificationResult data = verify(svc, claim);
+            assertNotEquals(Verdict.OUT_OF_SCOPE, data.verdict(),
+                "Pizza individual (America) must not be out_of_scope via EntitySignatureCache path");
         }
     }
 

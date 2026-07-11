@@ -62,7 +62,8 @@ class ClaimWorkflowServiceTest {
             claimVerificationService,
             evidenceGroundingService,
             stubCatalog,
-            new WorkspaceId("default")
+            new WorkspaceId("default"),
+            stubReasoner
         );
     }
 

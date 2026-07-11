@@ -26,6 +26,8 @@ public class ReasonerLifecycleManager implements OntologyReloadListener {
     private final Map<String, OWLReasonerAdapter> activeReasoners = new ConcurrentHashMap<>();
     private final Map<String, String> activeReasonerNames = new ConcurrentHashMap<>();
     private final Map<String, ReasoningReport> reasoningReports = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, Boolean> classifiedMap = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, String> profileCacheMap = new ConcurrentHashMap<>();
 
     private final Map<String, OWLReasonerAdapter> adapterRegistry;
 
@@ -90,6 +92,8 @@ public class ReasonerLifecycleManager implements OntologyReloadListener {
         String key = ontologyId.id();
         OWLReasonerAdapter adapter = activeReasoners.remove(key);
         activeReasonerNames.remove(key);
+        classifiedMap.remove(key);
+        profileCacheMap.remove(key);
         if (adapter != null) {
             adapter.shutdown();
         }
@@ -127,6 +131,22 @@ public class ReasonerLifecycleManager implements OntologyReloadListener {
      */
     public Optional<ReasoningReport> getReasoningReport(OntologyId ontologyId) {
         return Optional.ofNullable(reasoningReports.get(ontologyId.id()));
+    }
+
+    public boolean isClassified(OntologyId ontologyId) {
+        return Boolean.TRUE.equals(classifiedMap.get(ontologyId.id()));
+    }
+
+    public void markClassified(OntologyId ontologyId) {
+        classifiedMap.put(ontologyId.id(), Boolean.TRUE);
+    }
+
+    public String getCachedProfile(OntologyId ontologyId) {
+        return profileCacheMap.get(ontologyId.id());
+    }
+
+    public void setCachedProfile(OntologyId ontologyId, String profile) {
+        profileCacheMap.put(ontologyId.id(), profile);
     }
 
     /**
@@ -182,6 +202,8 @@ public class ReasonerLifecycleManager implements OntologyReloadListener {
         }
         activeReasoners.clear();
         activeReasonerNames.clear();
+        classifiedMap.clear();
+        profileCacheMap.clear();
     }
 
     // ── OntologyReloadListener implementation ──────────────────────────

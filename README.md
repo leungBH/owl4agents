@@ -6,7 +6,9 @@
 
 > **v0.8** adds the MCP Streamable HTTP transport (SSE on `GET /mcp`, `Mcp-Session-Id` round-trip, content negotiation). The v0.7 plain-JSON HTTP transport is preserved as the no-regression baseline; stdio and wire-format parity are unchanged.
 >
-> **v0.8.3** (recommended) fixes 9 semantic accuracy errors in claim verification (R1-R7: OOS pre-check, disjoint proxy, EquivalentClasses complex expressions, individual-level disjointness, property hierarchy, ObjectPropertyDomain complex domains, ClaimType deserialization hardening). See [CHANGELOG.md](CHANGELOG.md) §"0.8.3".
+> **v0.8.4** (recommended) optimizes claim verification performance via 7 decisions: reasoner classification state tracking (skip redundant `precomputeInferences`), profile caching, per-request ontology single loading, `EntitySignatureCache` for O(1) entity signature lookups, asserted axiom indexing (SubClassOf + DisjointClasses), in-memory inferred hierarchy index, and `OntologyCache` 5s TTL window. Pizza hot path ~85ms → ~30-40ms. See [CHANGELOG.md](CHANGELOG.md) §"0.8.4".
+>
+> **v0.8.3** fixes 9 semantic accuracy errors in claim verification (R1-R7: OOS pre-check, disjoint proxy, EquivalentClasses complex expressions, individual-level disjointness, property hierarchy, ObjectPropertyDomain complex domains, ClaimType deserialization hardening). See [CHANGELOG.md](CHANGELOG.md) §"0.8.3".
 >
 > **v0.8.1** fixes 5 claim-verification accuracy defects from v0.8.0 (ISSUE-01…ISSUE-05) — see [CHANGELOG.md](CHANGELOG.md) §"0.8.1" and `doc/retrospectives/`. The 80-curated-claim accuracy gate moved from 75/80 → 80/80. Two new claim types (`different_individuals`, `object_property_subproperty`) and an optional `expression` field on `subject` / `object` for complex class expressions are now supported.
 
@@ -204,11 +206,11 @@ On Windows, prefer the npm launcher or `gradlew run --args="..."` over `java -ja
 .\gradlew.bat clean buildVerification
 .\gradlew.bat :modules:ontology-cli:shadowJar
 node tools/npm/test/launcher.test.js
-node tools/npm/bin/owl4agents.js --version    # → 0.8.3
+node tools/npm/bin/owl4agents.js --version    # → 0.8.4
 node tools/npm/bin/owl4agents.js --help
 ```
 
-A green run reports `BUILD SUCCESSFUL`, `Results: 29 passed, 0 failed` for the npm launcher, and `--version` prints `0.8.3`. The full Gradle suite has 800+ unit tests (0 failures) covering the 80 curated claim accuracy gate (80/80) — see `build/reports/tests/test/index.html` after a run.
+A green run reports `BUILD SUCCESSFUL`, `Results: 29 passed, 0 failed` for the npm launcher, and `--version` prints `0.8.4`. The full Gradle suite has 900+ unit tests (0 failures) covering the 80 curated claim accuracy gate (80/80) — see `build/reports/tests/test/index.html` after a run.
 
 ---
 

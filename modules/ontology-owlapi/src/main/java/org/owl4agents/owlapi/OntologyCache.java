@@ -10,9 +10,11 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CopyOnWriteArrayList;
 
 /**
  * Workspace-level in-memory cache for loaded {@link OWLOntology} instances.
@@ -52,7 +54,11 @@ public final class OntologyCache {
     private final ConcurrentHashMap<String, CompletableFuture<CacheEntry>> cache = new ConcurrentHashMap<>();
     private final String workspaceBasePath;
     private final String workspaceName;
-    private volatile OntologyReloadListener reloadListener;
+    private final CopyOnWriteArrayList<OntologyReloadListener> reloadListeners = new CopyOnWriteArrayList<>();
+
+    // v0.8.4 Decision 7: TTL window — skip file stat syscalls if validated within ttlMillis.
+    private final ConcurrentHashMap<String, Long> lastValidatedAtMap = new ConcurrentHashMap<>();
+    private final long ttlMillis;
 
     private record CacheEntry(OWLOntology ontology, long fileMtime, long fileSize) {}
 
@@ -61,17 +67,30 @@ public final class OntologyCache {
      * @param workspaceName     workspace name (e.g. {@code "default"})
      */
     public OntologyCache(String workspaceBasePath, String workspaceName) {
-        this.workspaceBasePath = workspaceBasePath;
-        this.workspaceName = workspaceName;
+        this(workspaceBasePath, workspaceName, 5000);
     }
 
     /**
-     * Inject a listener that receives callbacks when an ontology is reloaded.
-     * The field is {@code volatile} to allow post-construction injection
-     * while guaranteeing visibility across threads.
+     * @param workspaceBasePath absolute path to the workspace root directory
+     * @param workspaceName     workspace name (e.g. {@code "default"})
+     * @param ttlMillis         TTL window in milliseconds for skipping file stat
+     *                          syscalls. Use {@code 0} to disable the TTL window
+     *                          (always stat the file).
      */
-    public void setReloadListener(OntologyReloadListener listener) {
-        this.reloadListener = listener;
+    public OntologyCache(String workspaceBasePath, String workspaceName, long ttlMillis) {
+        this.workspaceBasePath = workspaceBasePath;
+        this.workspaceName = workspaceName;
+        this.ttlMillis = ttlMillis;
+    }
+
+    /**
+     * Register a listener that receives callbacks when an ontology is reloaded.
+     * Multiple listeners can be registered; each will be called on reload
+     * events. Uses {@link CopyOnWriteArrayList} for thread-safe
+     * post-construction registration.
+     */
+    public void addReloadListener(OntologyReloadListener listener) {
+        this.reloadListeners.add(listener);
     }
 
     /**
@@ -101,6 +120,23 @@ public final class OntologyCache {
      *         call retries)
      */
     public OWLOntology getOrCreate(OntologyId ontologyId) throws OWLOntologyCreationException {
+        String key = ontologyId.id();
+
+        // v0.8.4 Decision 7: TTL window — if validated within ttlMillis, skip all 3
+        // file stat syscalls (Files.exists + getLastModifiedTime + size) and
+        // return the cached ontology directly.
+        Long lastValidated = lastValidatedAtMap.get(key);
+        if (ttlMillis > 0 && lastValidated != null && System.currentTimeMillis() - lastValidated < ttlMillis) {
+            CompletableFuture<CacheEntry> cached = cache.get(key);
+            if (cached != null) {
+                try {
+                    return cached.join().ontology();
+                } catch (CompletionException e) {
+                    // Fall through to full load if cached entry is broken
+                }
+            }
+        }
+
         Path ontologyPath = resolveOntologyPath(ontologyId);
         if (!Files.exists(ontologyPath)) {
             throw new OWLOntologyCreationException("Ontology file not found: " + ontologyPath);
@@ -121,6 +157,8 @@ public final class OntologyCache {
                 CacheEntry entry = existing.join();
                 previousLoadSucceeded = true;
                 if (entry.fileMtime() == currentMtime && entry.fileSize() == currentSize) {
+                    // v0.8.4: update TTL timestamp on cache hit
+                    lastValidatedAtMap.put(key, System.currentTimeMillis());
                     return entry.ontology();
                 }
                 cache.remove(ontologyId.id(), existing);
@@ -129,8 +167,10 @@ public final class OntologyCache {
             }
         }
 
-        if (reloadListener != null && previousLoadSucceeded) {
-            reloadListener.onOntologyReloaded(ontologyId);
+        if (previousLoadSucceeded) {
+            for (OntologyReloadListener listener : reloadListeners) {
+                listener.onOntologyReloaded(ontologyId);
+            }
         }
 
         CompletableFuture<CacheEntry> newFuture = cache.computeIfAbsent(ontologyId.id(), k -> {
@@ -152,6 +192,8 @@ public final class OntologyCache {
 
         try {
             CacheEntry entry = newFuture.join();
+            // v0.8.4: update TTL timestamp after successful full load
+            lastValidatedAtMap.put(key, System.currentTimeMillis());
             return entry.ontology();
         } catch (CompletionException e) {
             cache.remove(ontologyId.id(), newFuture);
@@ -168,8 +210,11 @@ public final class OntologyCache {
      */
     public void invalidate(OntologyId ontologyId) {
         CompletableFuture<CacheEntry> removed = cache.remove(ontologyId.id());
-        if (removed != null && reloadListener != null) {
-            reloadListener.onOntologyReloaded(ontologyId);
+        lastValidatedAtMap.remove(ontologyId.id());
+        if (removed != null) {
+            for (OntologyReloadListener listener : reloadListeners) {
+                listener.onOntologyReloaded(ontologyId);
+            }
         }
     }
 
@@ -178,8 +223,9 @@ public final class OntologyCache {
      */
     public void invalidateAll() {
         cache.clear();
-        if (reloadListener != null) {
-            reloadListener.onAllOntologiesReloaded();
+        lastValidatedAtMap.clear();
+        for (OntologyReloadListener listener : reloadListeners) {
+            listener.onAllOntologiesReloaded();
         }
     }
 

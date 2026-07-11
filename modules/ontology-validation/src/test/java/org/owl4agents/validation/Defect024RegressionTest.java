@@ -211,6 +211,13 @@ class Defect024RegressionTest {
         }
 
         @Override
+        public boolean isEntityDeclared(
+                org.semanticweb.owlapi.model.OWLOntology ontology,
+                OntologyId ontologyId, String entityIRI, String kind) {
+            return true; // stub: everything is declared
+        }
+
+        @Override
         public ServiceResult<ScopeDescription> getScope(OntologyId ontologyId) {
             ScopeDescription scope = new ScopeDescription(
                 ontologyId.id(), List.of("test"), List.of(), List.of(), List.of());

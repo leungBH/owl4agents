@@ -1,6 +1,6 @@
 # owl4agents — Features and Tool Reference
 
-> **Version:** v0.8.3 (released 2026-07-10, semantic accuracy fixes R1-R7 + ClaimType deserialization hardening).
+> **Version:** v0.8.4 (released 2026-07-11, claim verification performance optimization: 7 decisions including EntitySignatureCache, per-request ontology single loading, asserted axiom indexing, inferred hierarchy index, OntologyCache TTL window).
 > **Audience:** programmers who want to **use** owl4agents (CLI or MCP) and understand what each command / tool does, what it takes as input, and what it returns. We assume you're a CS graduate — comfortable with JSON, HTTP, regex, and reading API docs — but you may or may not have touched OWL or SPARQL before.
 > **Pair this with:** [README.md](README.md) for the elevator pitch and 5-minute quick start. This file is the deep reference.
 
@@ -606,10 +606,10 @@ curl.exe -sS -X POST http://127.0.0.1:8091/mcp `
 ```
 
 ```json
-{"jsonrpc":"2.0","id":1,"result":{"protocolVersion":"2025-06-18","capabilities":{"tools":{}},"serverInfo":{"name":"owl4agents","version":"0.8.0"}}}
+{"jsonrpc":"2.0","id":1,"result":{"protocolVersion":"2025-06-18","capabilities":{"tools":{}},"serverInfo":{"name":"owl4agents","version":"0.8.4"}}}
 ```
 
-The `serverInfo.version` should be `"0.8.1"`. The session is anonymous (no `Mcp-Session-Id` returned for `initialize`); subsequent calls don't need a session id on the plain HTTP transport.
+The `serverInfo.version` should be `"0.8.4"`. The session is anonymous (no `Mcp-Session-Id` returned for `initialize`); subsequent calls don't need a session id on the plain HTTP transport.
 
 ```powershell
 curl.exe -sS -X POST http://127.0.0.1:8091/mcp `
@@ -1494,7 +1494,7 @@ node tools/npm/bin/owl4agents.js smoke
 ### 4.45 `--version` / `--help`
 
 ```powershell
-node tools/npm/bin/owl4agents.js --version    # → 0.8.3
+node tools/npm/bin/owl4agents.js --version    # → 0.8.4
 node tools/npm/bin/owl4agents.js --help       # → full command list
 ```
 

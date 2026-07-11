@@ -18,7 +18,7 @@ import org.owl4agents.core.OntologyId;
  * (in {@code ontology-owlapi}) can reference the listener without depending
  * on {@code ontology-reasoner}.</p>
  *
- * @see OntologyCache#setReloadListener(OntologyReloadListener)
+ * @see OntologyCache#addReloadListener(OntologyReloadListener)
  */
 public interface OntologyReloadListener {
 

@@ -93,7 +93,7 @@ class OntologyImporterCacheInteractionTest {
         HomeDirectoryResolver homeResolver = new HomeDirectoryResolver(tempDir);
         CatalogStore catalogStore = new CatalogStore(homeResolver);
         OntologyImporter importer = new OntologyImporter(homeResolver, catalogStore);
-        OntologyCache cache = new OntologyCache(workspaceBasePath(), "default");
+        OntologyCache cache = new OntologyCache(workspaceBasePath(), "default", 0);
         OntologyId ontId = new OntologyId("reload-test");
 
         Path sourceV1 = createSourceOntology("source-v1.owl");

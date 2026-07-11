@@ -1,6 +1,6 @@
 # owl4agents — 功能与工具参考手册
 
-> **版本:** v0.8.3(发布于 2026-07-10,修复语义准确度错误 R1-R7 + ClaimType 反序列化加固)。
+> **版本:** v0.8.4(发布于 2026-07-11,claim 验证性能优化:7 项决策包括 EntitySignatureCache、单次本体加载、断言公理索引、推理层次索引、OntologyCache TTL 窗口)。
 > **目标读者:** 想要**使用** owl4agents(CLI 或 MCP)、并希望了解每个命令/工具做什么、需要什么入参、返回什么结果的程序员。我们假设你是 CS 毕业生 —— 熟悉 JSON、HTTP、正则、能读 API 文档 —— 但 OWL 或 SPARQL 接触不接触都可以。
 > **配套阅读:** [README.zh-CN.md](README.zh-CN.md) 用于电梯演讲和 5 分钟快速启动;本文是深度参考。
 
@@ -605,10 +605,10 @@ curl.exe -sS -X POST http://127.0.0.1:8091/mcp `
 ```
 
 ```json
-{"jsonrpc":"2.0","id":1,"result":{"protocolVersion":"2025-06-18","capabilities":{"tools":{}},"serverInfo":{"name":"owl4agents","version":"0.8.3"}}}
+{"jsonrpc":"2.0","id":1,"result":{"protocolVersion":"2025-06-18","capabilities":{"tools":{}},"serverInfo":{"name":"owl4agents","version":"0.8.4"}}}
 ```
 
-`serverInfo.version` 应该是 `"0.8.3"`。会话是匿名的(`initialize` 不返回 `Mcp-Session-Id`);后续调用在 plain HTTP 传输上不需要 session id。
+`serverInfo.version` 应该是 `"0.8.4"`。会话是匿名的(`initialize` 不返回 `Mcp-Session-Id`);后续调用在 plain HTTP 传输上不需要 session id。
 
 ```powershell
 curl.exe -sS -X POST http://127.0.0.1:8091/mcp `
@@ -1493,7 +1493,7 @@ node tools/npm/bin/owl4agents.js smoke
 ### 4.45 `--version` / `--help`
 
 ```powershell
-node tools/npm/bin/owl4agents.js --version    # → 0.8.3
+node tools/npm/bin/owl4agents.js --version    # → 0.8.4
 node tools/npm/bin/owl4agents.js --help       # → 完整命令列表
 ```
 

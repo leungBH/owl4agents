@@ -2,6 +2,8 @@ package org.owl4agents.validation;
 
 import org.owl4agents.core.*;
 import org.owl4agents.core.model.*;
+import org.owl4agents.owlapi.EntitySignatureCache;
+import org.owl4agents.owlapi.EntitySignatureCacheManager;
 import org.owl4agents.owlapi.OntologyCache;
 import org.owl4agents.reasoner.*;
 import org.semanticweb.owlapi.apibinding.OWLManager;
@@ -25,6 +27,7 @@ public class ConsistencyAnalysisService {
     private final ReasonerLifecycleManager reasonerLifecycle;
     private final String workspaceBasePath;
     private final OntologyCache ontologyCache;
+    private final EntitySignatureCacheManager entitySignatureCacheManager;
 
     /**
      * @deprecated Use the 3-arg constructor with shared {@link OntologyCache}
@@ -37,14 +40,31 @@ public class ConsistencyAnalysisService {
         this.reasonerLifecycle = reasonerLifecycle;
         this.workspaceBasePath = workspaceBasePath;
         this.ontologyCache = new OntologyCache(workspaceBasePath, "default");
+        this.entitySignatureCacheManager = null;
     }
 
+    /**
+     * @deprecated Use the 4-arg constructor with {@link EntitySignatureCacheManager}
+     *             for O(1) entity signature lookups.
+     */
+    @Deprecated
     public ConsistencyAnalysisService(ReasonerLifecycleManager reasonerLifecycle,
                                        String workspaceBasePath,
                                        OntologyCache ontologyCache) {
         this.reasonerLifecycle = reasonerLifecycle;
         this.workspaceBasePath = workspaceBasePath;
         this.ontologyCache = ontologyCache;
+        this.entitySignatureCacheManager = null;
+    }
+
+    public ConsistencyAnalysisService(ReasonerLifecycleManager reasonerLifecycle,
+                                       String workspaceBasePath,
+                                       OntologyCache ontologyCache,
+                                       EntitySignatureCacheManager entitySignatureCacheManager) {
+        this.reasonerLifecycle = reasonerLifecycle;
+        this.workspaceBasePath = workspaceBasePath;
+        this.ontologyCache = ontologyCache;
+        this.entitySignatureCacheManager = entitySignatureCacheManager;
     }
 
     // ── Class Compatibility ──
@@ -52,6 +72,27 @@ public class ConsistencyAnalysisService {
     public ServiceResult<ClassCompatibilityResult> checkClassCompatibility(OntologyId ontologyId, String class1IRI, String class2IRI) {
         try {
             OWLOntology ontology = loadOntology(ontologyId);
+            return checkClassCompatibilityImpl(ontology, ontologyId, class1IRI, class2IRI);
+        } catch (Exception e) {
+            return ServiceResult.error(ErrorCode.ONTOLOGY_NOT_FOUND, e.getMessage());
+        }
+    }
+
+    /**
+     * v0.8.4: Overload that accepts a pre-loaded {@link OWLOntology}, avoiding
+     * redundant ontology loading in the claim verification hot path.
+     */
+    public ServiceResult<ClassCompatibilityResult> checkClassCompatibility(OWLOntology ontology, OntologyId ontologyId,
+                                                                           String class1IRI, String class2IRI) {
+        try {
+            return checkClassCompatibilityImpl(ontology, ontologyId, class1IRI, class2IRI);
+        } catch (Exception e) {
+            return ServiceResult.error(ErrorCode.ONTOLOGY_NOT_FOUND, e.getMessage());
+        }
+    }
+
+    private ServiceResult<ClassCompatibilityResult> checkClassCompatibilityImpl(OWLOntology ontology, OntologyId ontologyId,
+                                                                                String class1IRI, String class2IRI) {
             OWLDataFactory df = ontology.getOWLOntologyManager().getOWLDataFactory();
 
             // Check both classes exist
@@ -77,6 +118,21 @@ public class ConsistencyAnalysisService {
             }
 
             // Check explicit disjointness
+            // v0.8.4 Decision 5: check EntitySignatureCache index first (O(1) lookup)
+            if (entitySignatureCacheManager != null) {
+                try {
+                    EntitySignatureCache esc = entitySignatureCacheManager.getOrCreate(ontologyId, ontology);
+                    if (esc.getDisjointClasses(class1IRI).contains(class2IRI) ||
+                        esc.getDisjointClasses(class2IRI).contains(class1IRI)) {
+                        return ServiceResult.success(
+                            new ClassCompatibilityResult(ontologyId.id(), class1IRI, class2IRI,
+                                ClassCompatibilityResult.DISJOINT, null),
+                            ResultMetadata.empty());
+                    }
+                } catch (Exception ignored) {
+                }
+            }
+
             boolean disjoint = ontology.getAxioms(AxiomType.DISJOINT_CLASSES, Imports.INCLUDED)
                 .stream().anyMatch(ax -> {
                     Set<OWLClass> classes = ax.getClassExpressionsAsList()
@@ -111,10 +167,13 @@ public class ConsistencyAnalysisService {
                     if (owlReasoner != null) {
                         // v0.8.1: ensure classification has run before
                         // asking the reasoner entailment questions.
-                        try {
-                            owlReasoner.precomputeInferences(
-                                org.semanticweb.owlapi.reasoner.InferenceType.CLASS_HIERARCHY);
-                        } catch (Exception ignore) { /* some reasoners refuse no-op */ }
+                        if (!reasonerLifecycle.isClassified(ontologyId)) {
+                            try {
+                                owlReasoner.precomputeInferences(
+                                    org.semanticweb.owlapi.reasoner.InferenceType.CLASS_HIERARCHY);
+                            } catch (Exception ignore) { }
+                            reasonerLifecycle.markClassified(ontologyId);
+                        }
 
                         // v0.8.1 TC-14: if the reasoner explicitly entails
                         // DisjointClasses(class1, class2), return DISJOINT.
@@ -188,10 +247,6 @@ public class ConsistencyAnalysisService {
                 new ClassCompatibilityResult(ontologyId.id(), class1IRI, class2IRI,
                     ClassCompatibilityResult.UNKNOWN, null),
                 ResultMetadata.empty());
-
-        } catch (Exception e) {
-            return ServiceResult.error(ErrorCode.ONTOLOGY_NOT_FOUND, e.getMessage());
-        }
     }
 
     // ── Individual Membership ──
@@ -412,85 +467,86 @@ public class ConsistencyAnalysisService {
         if (entityIRI == null || entityIRI.isBlank()) return false;
         try {
             OWLOntology ontology = loadOntology(ontologyId);
-
-            // v0.8.4 R1 fix: OBO namespace check.
-            // OBO ontologies (HPO, Mondo, etc.) reference cross-ontology entities
-            // in their axioms AND declare them as <owl:Class rdf:about="...">,
-            // which creates Declaration axioms in the OWL API model. This makes
-            // the Declaration axiom check insufficient for distinguishing
-            // in-scope from cross-ontology entities. For OBO ontologies, verify
-            // that the entity's IRI matches the ontology's expected ID prefix
-            // (e.g., HP_ for HPO, MONDO_ for Mondo) before accepting it.
-            Optional<IRI> ontIriOpt = ontology.getOntologyID().getOntologyIRI();
-            if (ontIriOpt.isPresent()) {
-                String ontIriStr = ontIriOpt.get().toString();
-                if (ontIriStr.startsWith("http://purl.obolibrary.org/obo/") && ontIriStr.endsWith(".owl")) {
-                    String fileName = ontIriStr.substring(ontIriStr.lastIndexOf('/') + 1);
-                    String expectedPrefix = fileName.substring(0, fileName.length() - ".owl".length()).toUpperCase();
-                    if (!entityIRI.contains("/" + expectedPrefix + "_")) {
-                        return false;
-                    }
-                }
-            }
-
-            // v0.8.1: normalize kind to drop underscores so callers using
-            // either "object_property" or "objectproperty" hit the right branch.
-            String k = kind == null ? "" : kind.toLowerCase().replace("_", "");
-            IRI iri = IRI.create(entityIRI);
-            OWLDataFactory df = ontology.getOWLOntologyManager().getOWLDataFactory();
-
-            // v0.8.3 R1: dual check — direct signature (Imports.EXCLUDED) + Declaration axiom.
-            // Imports.EXCLUDED ensures cross-ontology entities (e.g., UBERON in HPO,
-            // HP in Mondo) are not found via the import closure. The Declaration axiom
-            // check is the reliable indicator of "declared in this ontology" because
-            // biomedical ontologies reference cross-ontology entities in their own
-            // axioms (e.g., Mondo's SubClassOf references HP entities), causing them
-            // to appear in getClassesInSignature(Imports.EXCLUDED) despite not being
-            // declared in the target ontology.
-            if (k.equals("class") || k.isEmpty()) {
-                boolean inSignature = ontology.getClassesInSignature(Imports.EXCLUDED)
-                    .stream().anyMatch(c -> c.getIRI().equals(iri));
-                if (inSignature) {
-                    OWLClass entity = df.getOWLClass(iri);
-                    boolean hasDeclaration = ontology.getAxioms(AxiomType.DECLARATION, Imports.EXCLUDED)
-                        .stream().anyMatch(ax -> ax.getEntity().equals(entity));
-                    if (hasDeclaration) return true;
-                }
-            }
-            if (k.equals("objectproperty") || k.equals("property") || k.isEmpty()) {
-                boolean inSignature = ontology.getObjectPropertiesInSignature(Imports.EXCLUDED)
-                    .stream().anyMatch(p -> p.getIRI().equals(iri));
-                if (inSignature) {
-                    OWLObjectProperty entity = df.getOWLObjectProperty(iri);
-                    boolean hasDeclaration = ontology.getAxioms(AxiomType.DECLARATION, Imports.EXCLUDED)
-                        .stream().anyMatch(ax -> ax.getEntity().equals(entity));
-                    if (hasDeclaration) return true;
-                }
-            }
-            if (k.equals("dataproperty") || k.equals("property") || k.isEmpty()) {
-                boolean inSignature = ontology.getDataPropertiesInSignature(Imports.EXCLUDED)
-                    .stream().anyMatch(p -> p.getIRI().equals(iri));
-                if (inSignature) {
-                    OWLDataProperty entity = df.getOWLDataProperty(iri);
-                    boolean hasDeclaration = ontology.getAxioms(AxiomType.DECLARATION, Imports.EXCLUDED)
-                        .stream().anyMatch(ax -> ax.getEntity().equals(entity));
-                    if (hasDeclaration) return true;
-                }
-            }
-            if (k.equals("individual") || k.isEmpty()) {
-                boolean inSignature = ontology.getIndividualsInSignature(Imports.EXCLUDED)
-                    .stream().anyMatch(i -> i.getIRI().equals(iri));
-                if (inSignature) {
-                    OWLNamedIndividual entity = df.getOWLNamedIndividual(iri);
-                    boolean hasDeclaration = ontology.getAxioms(AxiomType.DECLARATION, Imports.EXCLUDED)
-                        .stream().anyMatch(ax -> ax.getEntity().equals(entity));
-                    if (hasDeclaration) return true;
-                }
-            }
-            return false;
+            return isEntityDeclared(ontology, ontologyId, entityIRI, kind);
         } catch (Exception e) {
             return false;
         }
+    }
+
+    /**
+     * Overload that accepts a pre-loaded {@link OWLOntology}, avoiding redundant
+     * ontology loading when the caller already has the ontology in hand (v0.8.4
+     * per-request single-load optimization).
+     */
+    public boolean isEntityDeclared(OWLOntology ontology, OntologyId ontologyId, String entityIRI, String kind) {
+        if (entityIRI == null || entityIRI.isBlank()) return false;
+        try {
+            // v0.8.4: fast path via EntitySignatureCache (O(1) lookup)
+            if (entitySignatureCacheManager != null) {
+                EntitySignatureCache cache = entitySignatureCacheManager.getOrCreate(ontologyId, ontology);
+                if (cache != null) {
+                    return cache.contains(kind, entityIRI);
+                }
+            }
+            // Fallback: v0.8.3 stream scan (deprecated constructors with manager=null)
+            return isEntityDeclaredStreamScan(ontology, entityIRI, kind);
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    /**
+     * v0.8.3 fallback: full stream scan for entity declaration.
+     * Used when {@code entitySignatureCacheManager} is null (deprecated constructors).
+     *
+     * <p>v0.8.5 fix: checks signature only (Imports.EXCLUDED), without requiring
+     * an explicit Declaration axiom. Per OWL 2 spec, an entity referenced in any
+     * axiom is part of the ontology signature. This is consistent with
+     * {@link EntitySignatureCache#build(OWLOntology)} which now collects from
+     * both Declaration axioms and the signature.</p>
+     */
+    private boolean isEntityDeclaredStreamScan(OWLOntology ontology, String entityIRI, String kind) {
+        // v0.8.4 R1 fix: OBO namespace check.
+        Optional<IRI> ontIriOpt = ontology.getOntologyID().getOntologyIRI();
+        if (ontIriOpt.isPresent()) {
+            String ontIriStr = ontIriOpt.get().toString();
+            if (ontIriStr.startsWith("http://purl.obolibrary.org/obo/") && ontIriStr.endsWith(".owl")) {
+                String fileName = ontIriStr.substring(ontIriStr.lastIndexOf('/') + 1);
+                String expectedPrefix = fileName.substring(0, fileName.length() - ".owl".length()).toUpperCase();
+                if (!entityIRI.contains("/" + expectedPrefix + "_")) {
+                    return false;
+                }
+            }
+        }
+
+        String k = kind == null ? "" : kind.toLowerCase().replace("_", "");
+        IRI iri = IRI.create(entityIRI);
+
+        if (k.equals("class") || k.isEmpty()) {
+            if (ontology.getClassesInSignature(Imports.EXCLUDED)
+                .stream().anyMatch(c -> c.getIRI().equals(iri))) {
+                return true;
+            }
+        }
+        if (k.equals("objectproperty") || k.equals("property") || k.isEmpty()) {
+            if (ontology.getObjectPropertiesInSignature(Imports.EXCLUDED)
+                .stream().anyMatch(p -> p.getIRI().equals(iri))) {
+                return true;
+            }
+        }
+        if (k.equals("dataproperty") || k.equals("property") || k.isEmpty()) {
+            if (ontology.getDataPropertiesInSignature(Imports.EXCLUDED)
+                .stream().anyMatch(p -> p.getIRI().equals(iri))) {
+                return true;
+            }
+        }
+        if (k.equals("individual") || k.isEmpty()) {
+            if (ontology.getIndividualsInSignature(Imports.EXCLUDED)
+                .stream().anyMatch(i -> i.getIRI().equals(iri))) {
+                return true;
+            }
+        }
+        return false;
     }
 
     // ── Private Helpers ──

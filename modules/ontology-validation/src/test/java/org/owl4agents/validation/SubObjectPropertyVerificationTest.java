@@ -48,6 +48,7 @@ class SubObjectPropertyVerificationTest {
     @BeforeEach
     void setUp() {
         stubReasoner = new StubReasonerService();
+        stubReasoner.withRealOntology(WORKSPACE);
         service = new ClaimVerificationService(
             stubReasoner,
             new ConsistencyAnalysisService(new ReasonerLifecycleManager(), WORKSPACE),

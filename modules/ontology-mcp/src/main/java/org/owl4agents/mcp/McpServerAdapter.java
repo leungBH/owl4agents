@@ -74,6 +74,8 @@ public class McpServerAdapter {
  // v0.5 batch workflow services
  private final ClaimWorkflowService claimWorkflowService;
  private final EvidenceContextBuilder evidenceContextBuilder;
+ // v0.8.4: entity signature cache for O(1) entity lookups
+ private final org.owl4agents.owlapi.EntitySignatureCacheManager entitySignatureCacheManager;
 
  /**
  * Accessors for the 7 eagerly-initialized services. These are package-private
@@ -116,15 +118,21 @@ public class McpServerAdapter {
  // v0.8.2: Inject shared OntologyCache into all three services for
  // cross-service ontology reuse (avoiding redundant 36-211s loads
  // of large ontologies like Mondo).
+ // v0.8.4: Register EntitySignatureCacheManager as OntologyReloadListener
+ // for O(1) entity signature lookups in claim verification hot path.
  String workspaceBasePath = homeResolver.resolveHomeDirectory()
  .resolve("workspaces").toString();
  String workspaceName = "default";
  org.owl4agents.owlapi.OntologyCache ontologyCache =
  new org.owl4agents.owlapi.OntologyCache(workspaceBasePath, workspaceName);
+ this.entitySignatureCacheManager = new org.owl4agents.owlapi.EntitySignatureCacheManager();
+ ontologyCache.addReloadListener(this.entitySignatureCacheManager);
  this.reasonerService = new org.owl4agents.reasoner.ReasonerServiceImpl(
- catalogStore, workspaceBasePath, workspaceName, ontologyCache);
+ catalogStore, workspaceBasePath, workspaceName, ontologyCache,
+ this.entitySignatureCacheManager);
  this.consistencyAnalysisService = new org.owl4agents.validation.ConsistencyAnalysisService(
- reasonerService.getLifecycleManager(), workspaceBasePath, ontologyCache);
+ reasonerService.getLifecycleManager(), workspaceBasePath, ontologyCache,
+ this.entitySignatureCacheManager);
  this.semanticDeepeningService = new org.owl4agents.owlapi.SemanticDeepeningService(
  workspaceBasePath, ontologyCache);
  this.claimVerificationService = new org.owl4agents.validation.ClaimVerificationService(
@@ -134,7 +142,7 @@ public class McpServerAdapter {
  reasonerService, consistencyAnalysisService);
  this.claimWorkflowService = new ClaimWorkflowService(
  claimVerificationService, evidenceGroundingService,
- catalogStore, new WorkspaceId("default"));
+ catalogStore, new WorkspaceId("default"), reasonerService);
  this.evidenceContextBuilder = new EvidenceContextBuilder();
  }
 
@@ -193,12 +201,15 @@ public class McpServerAdapter {
  public static final String PROTOCOL_VERSION = "2025-06-18";
 
  /**
- * Server version. Bumped to `0.8.3` in the v0.8.3 release (semantic accuracy
- * fixes: R1-R7 + ClaimType deserialization hardening).
+ * Server version. Bumped to `0.8.4` in the v0.8.4 release (claim verification
+ * performance optimization: 7 decisions covering reasoner classification
+ * tracking, profile caching, per-request ontology single loading,
+ * EntitySignatureCache, asserted axiom indexing, inferred hierarchy index,
+ * and OntologyCache TTL window).
  * Single source of truth -> ?read by both stdio and HTTP transports
  * (including the `GET /mcp` SSE path).
  */
- public static final String SERVER_VERSION = "0.8.3";
+ public static final String SERVER_VERSION = "0.8.4";
 
  /**
  * Public JSON-RPC 2.0 entry point used by both the stdio transport

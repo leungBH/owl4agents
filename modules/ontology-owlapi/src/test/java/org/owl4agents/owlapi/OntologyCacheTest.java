@@ -47,7 +47,9 @@ class OntologyCacheTest {
     }
 
     private OntologyCache createCache() {
-        return new OntologyCache(tempDir.toString(), "default");
+        // TTL=0 disables the TTL window so file mtime/size changes are
+        // always detected. Tests that verify TTL behavior live in OntologyCacheTtlTest.
+        return new OntologyCache(tempDir.toString(), "default", 0);
     }
 
     @Test
@@ -257,7 +259,7 @@ class OntologyCacheTest {
         AtomicInteger callCount = new AtomicInteger(0);
         AtomicInteger visibleCount = new AtomicInteger(0);
 
-        cache.setReloadListener(new OntologyReloadListener() {
+        cache.addReloadListener(new OntologyReloadListener() {
             @Override
             public void onOntologyReloaded(OntologyId ontologyId) {
                 callCount.incrementAndGet();
@@ -285,5 +287,89 @@ class OntologyCacheTest {
         cache.getOrCreate(ontId);
         assertEquals(1, callCount.get(),
             "Listener must be called exactly once on reload (file changed)");
+    }
+
+    @Test
+    @DisplayName("TC-11: multiple listeners all receive onOntologyReloaded callback")
+    void tc11MultipleListenersAllCalledOnReload() throws Exception {
+        Path owlFile = createOntologyFile("test-11");
+        OntologyCache cache = createCache();
+        OntologyId ontId = new OntologyId("test-11");
+
+        AtomicInteger call1 = new AtomicInteger(0);
+        AtomicInteger call2 = new AtomicInteger(0);
+        AtomicInteger call3 = new AtomicInteger(0);
+
+        cache.addReloadListener(new CountingListener(call1));
+        cache.addReloadListener(new CountingListener(call2));
+        cache.addReloadListener(new CountingListener(call3));
+
+        // First load (no reload → no callbacks)
+        cache.getOrCreate(ontId);
+        assertEquals(0, call1.get());
+        assertEquals(0, call2.get());
+        assertEquals(0, call3.get());
+
+        // Modify file to trigger reload
+        Thread.sleep(50);
+        Files.writeString(owlFile, Files.readString(owlFile) + "\n<!-- modified -->\n");
+
+        // Second load (file changed → all 3 listeners called)
+        cache.getOrCreate(ontId);
+        assertEquals(1, call1.get(), "Listener 1 must be called");
+        assertEquals(1, call2.get(), "Listener 2 must be called");
+        assertEquals(1, call3.get(), "Listener 3 must be called");
+    }
+
+    @Test
+    @DisplayName("TC-12: multiple listeners all receive onAllOntologiesReloaded callback")
+    void tc12MultipleListenersAllCalledOnInvalidateAll() throws Exception {
+        createOntologyFile("test-12");
+        OntologyCache cache = createCache();
+        OntologyId ontId = new OntologyId("test-12");
+
+        AtomicInteger call1 = new AtomicInteger(0);
+        AtomicInteger call2 = new AtomicInteger(0);
+
+        cache.addReloadListener(new OntologyReloadListener() {
+            @Override
+            public void onOntologyReloaded(OntologyId ontologyId) {}
+
+            @Override
+            public void onAllOntologiesReloaded() {
+                call1.incrementAndGet();
+            }
+        });
+        cache.addReloadListener(new OntologyReloadListener() {
+            @Override
+            public void onOntologyReloaded(OntologyId ontologyId) {}
+
+            @Override
+            public void onAllOntologiesReloaded() {
+                call2.incrementAndGet();
+            }
+        });
+
+        cache.getOrCreate(ontId);
+        cache.invalidateAll();
+
+        assertEquals(1, call1.get(), "Listener 1 must receive onAllOntologiesReloaded");
+        assertEquals(1, call2.get(), "Listener 2 must receive onAllOntologiesReloaded");
+    }
+
+    private static class CountingListener implements OntologyReloadListener {
+        private final AtomicInteger counter;
+
+        CountingListener(AtomicInteger counter) {
+            this.counter = counter;
+        }
+
+        @Override
+        public void onOntologyReloaded(OntologyId ontologyId) {
+            counter.incrementAndGet();
+        }
+
+        @Override
+        public void onAllOntologiesReloaded() {}
     }
 }

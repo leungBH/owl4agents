@@ -7,6 +7,9 @@ import org.owl4agents.reasoner.ReasonerService;
 import org.owl4agents.owlapi.SemanticDeepeningService;
 import org.owl4agents.storage.CatalogStore;
 
+import org.semanticweb.owlapi.model.OWLOntology;
+import org.semanticweb.owlapi.model.OWLOntologyCreationException;
+
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -62,6 +65,46 @@ public class ClaimVerificationService {
             return mapError(catalogResult);
         }
 
+        // v0.8.4 Decision 3: load the ontology once and thread it through all
+        // downstream verification methods to avoid redundant loads.
+        OWLOntology ontology;
+        try {
+            ontology = reasonerService.loadOntologyForClaim(ontId);
+        } catch (OWLOntologyCreationException e) {
+            return ServiceResult.error(ServiceError.ontologyNotFound(ontId));
+        }
+
+        return verifyWithOntology(ontology, claim, ontId);
+    }
+
+    /**
+     * v0.8.4: Overload that accepts a pre-loaded {@link OWLOntology}, avoiding
+     * redundant ontology loading in batch verification ({@code ClaimWorkflowService.verifyBatch}).
+     * The caller is responsible for ensuring the ontology corresponds to
+     * {@code claim.ontologyId()}.
+     */
+    public ServiceResult<ClaimVerificationResult> verify(OWLOntology ontology, Claim claim) {
+        if (claim == null) {
+            return ServiceResult.error(ServiceError.invalidClaimSchema("Claim must not be null."));
+        }
+
+        OntologyId ontId = new OntologyId(claim.ontologyId());
+
+        // Check that the ontology exists in the catalog before proceeding
+        ServiceResult<org.owl4agents.core.model.CatalogEntry> catalogResult =
+            catalogStore.findEntry(defaultWorkspaceId, ontId);
+        if (!catalogResult.isSuccess()) {
+            ServiceError catalogError = ((ServiceResult.Error<org.owl4agents.core.model.CatalogEntry>) catalogResult).error();
+            if (catalogError.code() == ErrorCode.ONTOLOGY_NOT_FOUND) {
+                return ServiceResult.error(ServiceError.ontologyNotFound(ontId));
+            }
+            return mapError(catalogResult);
+        }
+
+        return verifyWithOntology(ontology, claim, ontId);
+    }
+
+    private ServiceResult<ClaimVerificationResult> verifyWithOntology(OWLOntology ontology, Claim claim, OntologyId ontId) {
         // v0.8.1 ISSUE-01: global scope pre-check. Verifies that the claim's
         // subject and object entities are declared in the ontology signature
         // BEFORE invoking any type-specific verification method. The pre-check
@@ -70,7 +113,7 @@ public class ClaimVerificationService {
         // owl:Thing), and LITERAL_VALIDITY (object is typically xsd:... which
         // is not in any ontology signature).
         if (!isExemptFromScopePrecheck(claim.type())) {
-            ServiceResult<ClaimVerificationResult> precheckResult = applyScopePrecheck(claim, ontId);
+            ServiceResult<ClaimVerificationResult> precheckResult = applyScopePrecheck(ontology, claim, ontId);
             if (precheckResult != null) {
                 return precheckResult;
             }
@@ -79,15 +122,15 @@ public class ClaimVerificationService {
         return switch (claim.type()) {
             case SUBCLASS, EQUIVALENT_CLASSES,
                  OBJECT_PROPERTY_DOMAIN, OBJECT_PROPERTY_RANGE,
-                 DATA_PROPERTY_DOMAIN, DATA_PROPERTY_RANGE -> verifyEntailmentClaim(claim, ontId);
-            case DISJOINT_CLASSES -> verifyDisjointClasses(claim, ontId);
+                 DATA_PROPERTY_DOMAIN, DATA_PROPERTY_RANGE -> verifyEntailmentClaim(ontology, claim, ontId);
+            case DISJOINT_CLASSES -> verifyDisjointClasses(ontology, claim, ontId);
             case INDIVIDUAL_MEMBERSHIP -> verifyIndividualMembership(claim, ontId);
             case OBJECT_PROPERTY_ASSERTION -> verifyObjectPropertyAssertion(claim, ontId);
             case DATA_PROPERTY_ASSERTION -> verifyDataPropertyAssertion(claim, ontId);
             case LITERAL_VALIDITY -> verifyLiteralValidity(claim, ontId);
-            case CLASS_COMPATIBILITY -> verifyClassCompatibility(claim, ontId);
+            case CLASS_COMPATIBILITY -> verifyClassCompatibility(ontology, claim, ontId);
             case ONTOLOGY_CONSISTENCY -> verifyOntologyConsistency(claim, ontId);
-            case ONTOLOGY_SCOPE -> verifyOntologyScope(claim, ontId);
+            case ONTOLOGY_SCOPE -> verifyOntologyScope(ontology, claim, ontId);
             case DIFFERENT_INDIVIDUALS -> verifyDifferentIndividuals(claim, ontId);
             case OBJECT_PROPERTY_SUBPROPERTY -> verifySubPropertyOf(claim, ontId);
         };
@@ -95,7 +138,7 @@ public class ClaimVerificationService {
 
     // --- Entailment-based claims: SUBCLASS, EQUIVALENT_CLASSES, domain/range ---
 
-    private ServiceResult<ClaimVerificationResult> verifyEntailmentClaim(Claim claim, OntologyId ontId) {
+    private ServiceResult<ClaimVerificationResult> verifyEntailmentClaim(OWLOntology ontology, Claim claim, OntologyId ontId) {
         String axiomType = entailmentAxiomType(claim.type());
 
         // v0.8.1 ISSUE-03: if either side of an EquivalentClasses claim has a
@@ -104,13 +147,13 @@ public class ClaimVerificationService {
         if (claim.type() == ClaimType.EQUIVALENT_CLASSES
                 && (claim.subject().expression() != null
                     || (claim.object() != null && claim.object().expression() != null))) {
-            return verifyEquivalentClassesWithExpressions(claim, ontId);
+            return verifyEquivalentClassesWithExpressions(ontology, claim, ontId);
         }
 
         Map<String, String> params = buildEntailmentParams(claim);
 
         ServiceResult<EntailmentResult> result =
-            reasonerService.checkEntailment(ontId, axiomType, params, claim.reasoner());
+            reasonerService.checkEntailment(ontology, ontId, axiomType, params, claim.reasoner());
 
         if (!result.isSuccess()) {
             return mapError(result);
@@ -129,7 +172,7 @@ public class ClaimVerificationService {
             && claim.object() != null && claim.object().iri() != null
             && EntailmentResult.NOT_ENTAILED.equals(entailment.result())) {
             ServiceResult<ClaimVerificationResult> disjointResult =
-                checkDisjointCounterEvidence(claim, ontId, entailment);
+                checkDisjointCounterEvidence(ontology, claim, ontId, entailment);
             if (disjointResult != null) {
                 return disjointResult;
             }
@@ -153,21 +196,21 @@ public class ClaimVerificationService {
      * (caller should keep the original UNKNOWN verdict).
      */
     private ServiceResult<ClaimVerificationResult> checkDisjointCounterEvidence(
-            Claim claim, OntologyId ontId, EntailmentResult originalEntailment) {
+            OWLOntology ontology, Claim claim, OntologyId ontId, EntailmentResult originalEntailment) {
         // v0.8.3 R2: skip proxy when subject or object entity is not in the ontology's
         // direct signature. This prevents false contradicted verdicts on cross-ontology
         // claims where suffix matching could falsely associate entities.
         if (claim.subject() != null && claim.subject().iri() != null
-            && !isEntityInOntology(claim.subject(), ontId)) {
+            && !isEntityInOntology(ontology, claim.subject(), ontId)) {
             return null;
         }
         if (claim.object() != null && claim.object().iri() != null
-            && !isEntityInOntology(claim.object(), ontId)) {
+            && !isEntityInOntology(ontology, claim.object(), ontId)) {
             return null;
         }
         ServiceResult<ClassCompatibilityResult> compatResult =
             consistencyService.checkClassCompatibility(
-                ontId, claim.subject().iri(), claim.object().iri());
+                ontology, ontId, claim.subject().iri(), claim.object().iri());
         if (!compatResult.isSuccess()) {
             return null; // signature/lookup error → not a clean disjoint match
         }
@@ -201,20 +244,13 @@ public class ClaimVerificationService {
      * {@code ClassExpressionBuilder} and delegates to
      * {@code ReasonerServiceImpl.checkEquivalentClassesEntailment}.
      */
-    private ServiceResult<ClaimVerificationResult> verifyEquivalentClassesWithExpressions(Claim claim, OntologyId ontId) {
-        return verifyEquivalentClassesWithExpressionsImpl(claim, ontId);
+    private ServiceResult<ClaimVerificationResult> verifyEquivalentClassesWithExpressions(OWLOntology ontology, Claim claim, OntologyId ontId) {
+        return verifyEquivalentClassesWithExpressionsImpl(ontology, claim, ontId);
     }
 
-    private ServiceResult<ClaimVerificationResult> verifyEquivalentClassesWithExpressionsImpl(Claim claim, OntologyId ontId) {
-        // v0.8.1 ISSUE-03: load the OWL ontology through the reasoner service
-        // (which knows the correct canonical path) and use it to build the
-        // operands and dispatch the entailment check.
-        org.semanticweb.owlapi.model.OWLOntology ontology;
-        try {
-            ontology = reasonerService.loadOntologyForClaim(ontId);
-        } catch (Exception e) {
-            return buildInvalidSchema(claim, ontId, "Failed to load ontology: " + e.getMessage());
-        }
+    private ServiceResult<ClaimVerificationResult> verifyEquivalentClassesWithExpressionsImpl(OWLOntology ontology, Claim claim, OntologyId ontId) {
+        // v0.8.4 Decision 3: ontology is now loaded once in verify() and
+        // passed through, avoiding the redundant loadOntologyForClaim() call.
         org.semanticweb.owlapi.model.OWLDataFactory df =
             ontology.getOWLOntologyManager().getOWLDataFactory();
 
@@ -270,7 +306,7 @@ public class ClaimVerificationService {
         }
 
         ServiceResult<EntailmentResult> result = reasonerService.checkEquivalentClassesEntailment(
-            ontId, subjectExpr, objectExpr, claim.reasoner());
+            ontology, ontId, subjectExpr, objectExpr, claim.reasoner());
 
         if (!result.isSuccess()) {
             return mapError(result);
@@ -415,7 +451,7 @@ public class ClaimVerificationService {
 
     // --- DISJOINT_CLASSES via class compatibility ---
 
-    private ServiceResult<ClaimVerificationResult> verifyDisjointClasses(Claim claim, OntologyId ontId) {
+    private ServiceResult<ClaimVerificationResult> verifyDisjointClasses(OWLOntology ontology, Claim claim, OntologyId ontId) {
         // v0.8.1 TC-14: if the entity kind doesn't match a class, return
         // UNKNOWN with INSUFFICIENT_AXIOMS rather than propagating the
         // ENTITY_NOT_FOUND error. This handles fixture cases where the
@@ -457,7 +493,7 @@ public class ClaimVerificationService {
         }
 
         ServiceResult<ClassCompatibilityResult> result =
-            consistencyService.checkClassCompatibility(ontId, claim.subject().iri(), claim.object().iri());
+            consistencyService.checkClassCompatibility(ontology, ontId, claim.subject().iri(), claim.object().iri());
 
         if (!result.isSuccess()) {
             // v0.8.1 TC-14: degrade gracefully when the compatibility check
@@ -495,9 +531,9 @@ public class ClaimVerificationService {
 
     // --- CLASS_COMPATIBILITY via class compatibility ---
 
-    private ServiceResult<ClaimVerificationResult> verifyClassCompatibility(Claim claim, OntologyId ontId) {
+    private ServiceResult<ClaimVerificationResult> verifyClassCompatibility(OWLOntology ontology, Claim claim, OntologyId ontId) {
         ServiceResult<ClassCompatibilityResult> result =
-            consistencyService.checkClassCompatibility(ontId, claim.subject().iri(), claim.object().iri());
+            consistencyService.checkClassCompatibility(ontology, ontId, claim.subject().iri(), claim.object().iri());
 
         if (!result.isSuccess()) {
             return mapError(result);
@@ -1081,7 +1117,7 @@ public class ClaimVerificationService {
 
     // --- ONTOLOGY_SCOPE via scope description ---
 
-    private ServiceResult<ClaimVerificationResult> verifyOntologyScope(Claim claim, OntologyId ontId) {
+    private ServiceResult<ClaimVerificationResult> verifyOntologyScope(OWLOntology ontology, Claim claim, OntologyId ontId) {
         // v0.8.1 DEFECT-2 fix: ONTOLOGY_SCOPE is exempt from the *global* pre-check
         // (which short-circuits before reaching the dispatcher), but the method
         // itself must still verify that any referenced entities are declared in
@@ -1089,14 +1125,14 @@ public class ClaimVerificationService {
         // part of the ontology's scope — that is the canonical OUT_OF_SCOPE
         // outcome (Spec `claim-verification/spec.md` line 100-101, 236).
         if (claim.subject() != null && claim.subject().iri() != null
-            && !isEntityInOntology(claim.subject(), ontId)) {
+            && !isEntityInOntology(ontology, claim.subject(), ontId)) {
             return buildResult(claim, ontId, Verdict.OUT_OF_SCOPE, List.of(),
                 Optional.of(UnknownReason.MISSING_ENTITY),
                 Optional.of("Subject entity " + claim.subject().iri()
                     + " is not declared in ontology '" + claim.ontologyId() + "'"));
         }
         if (claim.object() != null && claim.object().iri() != null
-            && !isEntityInOntology(claim.object(), ontId)) {
+            && !isEntityInOntology(ontology, claim.object(), ontId)) {
             return buildResult(claim, ontId, Verdict.OUT_OF_SCOPE, List.of(),
                 Optional.of(UnknownReason.MISSING_ENTITY),
                 Optional.of("Object entity " + claim.object().iri()
@@ -1138,7 +1174,7 @@ public class ClaimVerificationService {
         return buildResult(claim, ontId, verdict, evidence, unknownReason, unknownExplanation);
     }
 
-    private boolean isEntityInOntology(ClaimEntity entity, OntologyId ontId) {
+    private boolean isEntityInOntology(OWLOntology ontology, ClaimEntity entity, OntologyId ontId) {
         if (entity == null) return false;
         // v0.8.1 ISSUE-03: skip the top-level scope check for expression-only
         // entities (pure complex class expression). IRIs nested inside the
@@ -1157,7 +1193,7 @@ public class ClaimVerificationService {
             return true;
         }
         // Use consistency service to test if the entity IRI is declared in the ontology
-        return consistencyService.isEntityDeclared(ontId, entity.iri(), entity.kind());
+        return consistencyService.isEntityDeclared(ontology, ontId, entity.iri(), entity.kind());
     }
 
     /**
@@ -1188,12 +1224,12 @@ public class ClaimVerificationService {
      * return it directly), or {@code null} when the claim passes the pre-check
      * and the caller should proceed to the type-specific switch.
      */
-    private ServiceResult<ClaimVerificationResult> applyScopePrecheck(Claim claim, OntologyId ontId) {
+    private ServiceResult<ClaimVerificationResult> applyScopePrecheck(OWLOntology ontology, Claim claim, OntologyId ontId) {
         if (claim.subject() == null) {
             return null; // no subject → no precheck to apply
         }
-        boolean subjectInScope = isEntityInOntology(claim.subject(), ontId);
-        boolean objectInScope = claim.object() == null || isEntityInOntology(claim.object(), ontId);
+        boolean subjectInScope = isEntityInOntology(ontology, claim.subject(), ontId);
+        boolean objectInScope = claim.object() == null || isEntityInOntology(ontology, claim.object(), ontId);
         if (subjectInScope && objectInScope) {
             return null;
         }

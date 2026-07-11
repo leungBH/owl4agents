@@ -4,6 +4,7 @@ import org.owl4agents.core.OntologyId;
 import org.owl4agents.core.ServiceResult;
 import org.owl4agents.core.WorkspaceId;
 import org.owl4agents.core.model.*;
+import org.owl4agents.owlapi.EntitySignatureCacheManager;
 import org.owl4agents.owlapi.OntologyCache;
 import org.owl4agents.owlapi.OntologyImporter;
 import org.owl4agents.owlapi.OntologySummaryExtractor;
@@ -48,6 +49,7 @@ public class CliServiceFactory {
     private ReasonerServiceImpl reasonerService;
     private SemanticDeepeningService semanticDeepeningService;
     private ConsistencyAnalysisService consistencyAnalysisService;
+    private EntitySignatureCacheManager entitySignatureCacheManager;
     private OntologyCache ontologyCache;
     private ClaimVerificationService claimVerificationService;
     private EvidenceGroundingService evidenceGroundingService;
@@ -208,7 +210,8 @@ public class CliServiceFactory {
         if (reasonerService == null) {
             String workspaceBasePath = getOntologyCache().getWorkspaceBasePath();
             reasonerService = new ReasonerServiceImpl(
-                getCatalogStore(), workspaceBasePath, workspaceName, getOntologyCache());
+                getCatalogStore(), workspaceBasePath, workspaceName, getOntologyCache(),
+                getEntitySignatureCacheManager());
         }
         return reasonerService;
     }
@@ -227,6 +230,18 @@ public class CliServiceFactory {
     }
 
     /**
+     * Get the shared EntitySignatureCacheManager instance (lazy-initialized).
+     * Registered as an OntologyReloadListener on the shared OntologyCache.
+     */
+    private EntitySignatureCacheManager getEntitySignatureCacheManager() {
+        if (entitySignatureCacheManager == null) {
+            entitySignatureCacheManager = new EntitySignatureCacheManager();
+            getOntologyCache().addReloadListener(entitySignatureCacheManager);
+        }
+        return entitySignatureCacheManager;
+    }
+
+    /**
      * Get the consistency analysis service instance.
      */
     public ConsistencyAnalysisService getConsistencyAnalysisService() {
@@ -234,7 +249,8 @@ public class CliServiceFactory {
             String workspaceBasePath = getOntologyCache().getWorkspaceBasePath();
             ReasonerLifecycleManager lifecycleManager = getReasonerService().getLifecycleManager();
             consistencyAnalysisService = new ConsistencyAnalysisService(
-                lifecycleManager, workspaceBasePath, getOntologyCache());
+                lifecycleManager, workspaceBasePath, getOntologyCache(),
+                getEntitySignatureCacheManager());
         }
         return consistencyAnalysisService;
     }
@@ -277,7 +293,8 @@ public class CliServiceFactory {
                 getClaimVerificationService(),
                 getEvidenceGroundingService(),
                 getCatalogStore(),
-                getWorkspaceId()
+                getWorkspaceId(),
+                getReasonerService()
             );
         }
         return claimWorkflowService;

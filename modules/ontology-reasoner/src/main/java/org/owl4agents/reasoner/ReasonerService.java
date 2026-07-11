@@ -76,10 +76,27 @@ public interface ReasonerService {
 
     /**
      * Check whether a structured axiom is entailed by the ontology.
+     *
+     * @deprecated Use {@link #checkEntailment(OWLOntology, OntologyId, String, Map, Optional)}
+     *             to avoid redundant ontology loading.
      */
+    @Deprecated
     ServiceResult<EntailmentResult> checkEntailment(OntologyId ontologyId, String axiomType,
                                                      java.util.Map<String, String> parameters,
                                                      Optional<String> reasonerName);
+
+    /**
+     * v0.8.4: Overload that accepts a pre-loaded {@link OWLOntology}, avoiding
+     * redundant ontology loading in the claim verification hot path.
+     * Default implementation delegates to the 4-arg overload (loads internally).
+     */
+    @SuppressWarnings("deprecation")
+    default ServiceResult<EntailmentResult> checkEntailment(OWLOntology ontology, OntologyId ontologyId,
+                                                             String axiomType,
+                                                             java.util.Map<String, String> parameters,
+                                                             Optional<String> reasonerName) {
+        return checkEntailment(ontologyId, axiomType, parameters, reasonerName);
+    }
 
     /**
      * v0.8.1 ISSUE-03: Check equivalent-classes entailment using OWL API
@@ -87,12 +104,30 @@ public interface ReasonerService {
      * overload above can only handle named classes; this overload supports complex
      * expressions (intersection, union, complement, etc.) by delegating to
      * {@code reasoner.isEntailed(OWLEquivalentClassesAxiom)} on the constructed axiom.
+     *
+     * @deprecated Use {@link #checkEquivalentClassesEntailment(OWLOntology, OntologyId, OWLClassExpression, OWLClassExpression, Optional)}
+     *             to avoid redundant ontology loading.
      */
+    @Deprecated
     ServiceResult<EntailmentResult> checkEquivalentClassesEntailment(
             OntologyId ontologyId,
             OWLClassExpression subject,
             OWLClassExpression object,
             Optional<String> reasonerName);
+
+    /**
+     * v0.8.4: Overload that accepts a pre-loaded {@link OWLOntology}.
+     * Default implementation delegates to the 4-arg overload (loads internally).
+     */
+    @SuppressWarnings("deprecation")
+    default ServiceResult<EntailmentResult> checkEquivalentClassesEntailment(
+            OWLOntology ontology,
+            OntologyId ontologyId,
+            OWLClassExpression subject,
+            OWLClassExpression object,
+            Optional<String> reasonerName) {
+        return checkEquivalentClassesEntailment(ontologyId, subject, object, reasonerName);
+    }
 
     /**
      * v0.8.1 ISSUE-03: Load the canonical OWL ontology for the given ID.

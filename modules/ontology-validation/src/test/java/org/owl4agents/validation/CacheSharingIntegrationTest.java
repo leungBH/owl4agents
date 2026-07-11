@@ -5,6 +5,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.owl4agents.core.OntologyId;
+import org.owl4agents.owlapi.EntitySignatureCacheManager;
 import org.owl4agents.owlapi.OntologyCache;
 import org.owl4agents.owlapi.OntologyReloadListener;
 import org.owl4agents.owlapi.SemanticDeepeningService;
@@ -34,13 +35,16 @@ class CacheSharingIntegrationTest {
     Path tempDir;
 
     private OntologyCache ontologyCache;
+    private EntitySignatureCacheManager escManager;
     private OntologyId ontId;
     private Path owlFile;
 
     @BeforeEach
     void setUp() throws Exception {
         owlFile = createOntologyFile("test-cache");
-        ontologyCache = new OntologyCache(tempDir.toString(), "default");
+        ontologyCache = new OntologyCache(tempDir.toString(), "default", 0);
+        escManager = new EntitySignatureCacheManager();
+        ontologyCache.addReloadListener(escManager);
         ontId = new OntologyId("test-cache");
     }
 
@@ -69,9 +73,9 @@ class CacheSharingIntegrationTest {
         String basePath = tempDir.toString();
 
         ReasonerServiceImpl reasonerService = new ReasonerServiceImpl(
-            catalogStore, basePath, "default", ontologyCache);
+            catalogStore, basePath, "default", ontologyCache, escManager);
         ConsistencyAnalysisService consistencyService = new ConsistencyAnalysisService(
-            reasonerService.getLifecycleManager(), basePath, ontologyCache);
+            reasonerService.getLifecycleManager(), basePath, ontologyCache, escManager);
         SemanticDeepeningService deepeningService = new SemanticDeepeningService(
             basePath, ontologyCache);
 
@@ -104,9 +108,9 @@ class CacheSharingIntegrationTest {
         HomeDirectoryResolver homeResolver = new HomeDirectoryResolver(tempDir);
         CatalogStore catalogStore = new CatalogStore(homeResolver);
         ReasonerServiceImpl reasonerService = new ReasonerServiceImpl(
-            catalogStore, tempDir.toString(), "default", ontologyCache);
+            catalogStore, tempDir.toString(), "default", ontologyCache, escManager);
         ConsistencyAnalysisService consistencyService = new ConsistencyAnalysisService(
-            reasonerService.getLifecycleManager(), tempDir.toString(), ontologyCache);
+            reasonerService.getLifecycleManager(), tempDir.toString(), ontologyCache, escManager);
 
         OWLOntology loadedAgain = ontologyCache.getOrCreate(ontId);
         assertSame(loadedByCache, loadedAgain,
@@ -131,7 +135,7 @@ class CacheSharingIntegrationTest {
     void tc75ReloadTriggersListenerBeforeNewEntryVisible() throws Exception {
         AtomicInteger callCount = new AtomicInteger(0);
         AtomicInteger[] listenerCallSnapshot = new AtomicInteger[1];
-        ontologyCache.setReloadListener(new OntologyReloadListener() {
+        ontologyCache.addReloadListener(new OntologyReloadListener() {
             @Override
             public void onOntologyReloaded(OntologyId ontologyId) {
                 callCount.incrementAndGet();
@@ -159,7 +163,7 @@ class CacheSharingIntegrationTest {
     @DisplayName("TC-7.6: invalidate() triggers onOntologyReloaded and removes cache entry")
     void tc76InvalidateTriggersListener() throws Exception {
         AtomicInteger callCount = new AtomicInteger(0);
-        ontologyCache.setReloadListener(new OntologyReloadListener() {
+        ontologyCache.addReloadListener(new OntologyReloadListener() {
             @Override
             public void onOntologyReloaded(OntologyId ontologyId) {
                 callCount.incrementAndGet();
@@ -182,7 +186,7 @@ class CacheSharingIntegrationTest {
     @DisplayName("TC-7.7: no resource leak across multiple cache reloads")
     void tc77NoResourceLeakAcrossMultipleReloads() throws Exception {
         AtomicInteger reloadCount = new AtomicInteger(0);
-        ontologyCache.setReloadListener(new OntologyReloadListener() {
+        ontologyCache.addReloadListener(new OntologyReloadListener() {
             @Override
             public void onOntologyReloaded(OntologyId ontologyId) {
                 reloadCount.incrementAndGet();

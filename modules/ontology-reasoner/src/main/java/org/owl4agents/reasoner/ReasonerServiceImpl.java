@@ -2,6 +2,8 @@ package org.owl4agents.reasoner;
 
 import org.owl4agents.core.*;
 import org.owl4agents.core.model.*;
+import org.owl4agents.owlapi.EntitySignatureCache;
+import org.owl4agents.owlapi.EntitySignatureCacheManager;
 import org.owl4agents.owlapi.OntologyCache;
 import org.owl4agents.owlapi.OntologyImporter;
 import org.owl4agents.owlapi.OntologyIriResolver;
@@ -22,19 +24,33 @@ import java.util.stream.*;
  * Default implementation of ReasonerService.
  * Manages reasoner lifecycle, executes reasoning operations, and stores inferred results.
  */
-public class ReasonerServiceImpl implements ReasonerService {
+public class ReasonerServiceImpl implements ReasonerService, org.owl4agents.owlapi.OntologyReloadListener {
 
     private final ReasonerLifecycleManager lifecycleManager;
     private final CatalogStore catalogStore;
     private final String workspaceBasePath;
     private final String workspaceName;
     private final OntologyCache ontologyCache;
+    private final EntitySignatureCacheManager entitySignatureCacheManager;
+
+    // v0.8.4 Decision 6: in-memory index of inferred class hierarchy per ontology.
+    // Key = ontologyId.id(), Value = Map<subjectIRI, Set<objectIRI>>.
+    private final java.util.concurrent.ConcurrentHashMap<String, Map<String, Set<String>>> inferredHierarchyCache =
+        new java.util.concurrent.ConcurrentHashMap<>();
 
     /**
      * Get the lifecycle manager for sharing with other services (e.g. consistency analysis).
      */
     public ReasonerLifecycleManager getLifecycleManager() {
         return lifecycleManager;
+    }
+
+    /**
+     * Get the entity signature cache manager (v0.8.4). May be {@code null} when
+     * constructed via deprecated constructors.
+     */
+    public EntitySignatureCacheManager getEntitySignatureCacheManager() {
+        return entitySignatureCacheManager;
     }
 
     /**
@@ -59,16 +75,16 @@ public class ReasonerServiceImpl implements ReasonerService {
         this.workspaceBasePath = workspaceBasePath;
         this.workspaceName = workspaceName;
         this.ontologyCache = new OntologyCache(workspaceBasePath, workspaceName);
-        this.ontologyCache.setReloadListener(this.lifecycleManager);
+        this.ontologyCache.addReloadListener(this.lifecycleManager);
+        this.ontologyCache.addReloadListener(this);
+        this.entitySignatureCacheManager = null;
     }
 
     /**
-     * @param catalogStore       the catalog store for ontology metadata
-     * @param workspaceBasePath  absolute path to the workspace root
-     * @param workspaceName      workspace name (e.g. {@code "default"})
-     * @param ontologyCache      shared {@link OntologyCache} instance for
-     *                           cross-service ontology reuse
+     * @deprecated Use the 5-arg constructor with {@link EntitySignatureCacheManager}
+     *             for O(1) entity signature lookups in {@code checkAxiomEntailment}.
      */
+    @Deprecated
     public ReasonerServiceImpl(CatalogStore catalogStore, String workspaceBasePath,
                                 String workspaceName, OntologyCache ontologyCache) {
         this.lifecycleManager = new ReasonerLifecycleManager();
@@ -76,7 +92,46 @@ public class ReasonerServiceImpl implements ReasonerService {
         this.workspaceBasePath = workspaceBasePath;
         this.workspaceName = workspaceName;
         this.ontologyCache = ontologyCache;
-        this.ontologyCache.setReloadListener(this.lifecycleManager);
+        this.ontologyCache.addReloadListener(this.lifecycleManager);
+        this.ontologyCache.addReloadListener(this);
+        this.entitySignatureCacheManager = null;
+    }
+
+    /**
+     * v0.8.4: Primary constructor with shared {@link OntologyCache} and
+     * {@link EntitySignatureCacheManager} for O(1) entity signature lookups.
+     *
+     * @param catalogStore                the catalog store for ontology metadata
+     * @param workspaceBasePath           absolute path to the workspace root
+     * @param workspaceName               workspace name (e.g. {@code "default"})
+     * @param ontologyCache               shared {@link OntologyCache} instance
+     * @param entitySignatureCacheManager shared {@link EntitySignatureCacheManager}
+     *                                    for asserted axiom index lookups
+     */
+    public ReasonerServiceImpl(CatalogStore catalogStore, String workspaceBasePath,
+                                String workspaceName, OntologyCache ontologyCache,
+                                EntitySignatureCacheManager entitySignatureCacheManager) {
+        this.lifecycleManager = new ReasonerLifecycleManager();
+        this.catalogStore = catalogStore;
+        this.workspaceBasePath = workspaceBasePath;
+        this.workspaceName = workspaceName;
+        this.ontologyCache = ontologyCache;
+        this.entitySignatureCacheManager = entitySignatureCacheManager;
+        this.ontologyCache.addReloadListener(this.lifecycleManager);
+        // v0.8.4 Decision 6: register self to clear inferredHierarchyCache on reload
+        this.ontologyCache.addReloadListener(this);
+    }
+
+    // ── OntologyReloadListener implementation (v0.8.4 Decision 6) ──
+
+    @Override
+    public void onOntologyReloaded(OntologyId ontologyId) {
+        inferredHierarchyCache.remove(ontologyId.id());
+    }
+
+    @Override
+    public void onAllOntologiesReloaded() {
+        inferredHierarchyCache.clear();
     }
 
     @Override
@@ -89,7 +144,7 @@ public class ReasonerServiceImpl implements ReasonerService {
         long totalStart = System.currentTimeMillis();
         try {
             OWLOntology ontology = loadOntology(ontologyId);
-            String detectedProfile = detectProfile(ontology);
+            String detectedProfile = detectProfile(ontologyId, ontology);
             boolean explanationRequested = reasonerName.map("openllet"::equalsIgnoreCase).orElse(false);
             String effectiveReasonerName = resolveReasonerName(reasonerName, detectedProfile, explanationRequested);
 
@@ -158,7 +213,7 @@ public class ReasonerServiceImpl implements ReasonerService {
     public ServiceResult<ClassificationResult> classify(OntologyId ontologyId, Optional<String> reasonerName) {
         try {
             OWLOntology ontology = loadOntology(ontologyId);
-            String detectedProfile = detectProfile(ontology);
+            String detectedProfile = detectProfile(ontologyId, ontology);
             boolean explanationRequested = false;
             String effectiveReasonerName = resolveReasonerName(reasonerName, detectedProfile, explanationRequested);
 
@@ -166,6 +221,7 @@ public class ReasonerServiceImpl implements ReasonerService {
                 ontologyId, effectiveReasonerName, ontology, detectedProfile, explanationRequested);
 
             ClassificationResult result = adapter.classify(ontologyId.id());
+            lifecycleManager.markClassified(ontologyId);
             return ServiceResult.success(result, ResultMetadata.empty());
         } catch (Exception e) {
             return ServiceResult.error(ErrorCode.CLASSIFICATION_FAILED, e.getMessage());
@@ -176,13 +232,14 @@ public class ReasonerServiceImpl implements ReasonerService {
     public ServiceResult<RealizationResult> realize(OntologyId ontologyId, Optional<String> reasonerName) {
         try {
             OWLOntology ontology = loadOntology(ontologyId);
-            String detectedProfile = detectProfile(ontology);
+            String detectedProfile = detectProfile(ontologyId, ontology);
             String effectiveReasonerName = resolveReasonerName(reasonerName, detectedProfile, false);
 
             OWLReasonerAdapter adapter = lifecycleManager.getOrCreateReasoner(
                 ontologyId, effectiveReasonerName, ontology, detectedProfile, false);
 
             RealizationResult result = adapter.realize(ontologyId.id());
+            lifecycleManager.markClassified(ontologyId);
             return ServiceResult.success(result, ResultMetadata.empty());
         } catch (Exception e) {
             return ServiceResult.error(ErrorCode.CLASSIFICATION_FAILED, e.getMessage());
@@ -193,13 +250,14 @@ public class ReasonerServiceImpl implements ReasonerService {
     public ServiceResult<ConsistencyResult> checkConsistency(OntologyId ontologyId, Optional<String> reasonerName) {
         try {
             OWLOntology ontology = loadOntology(ontologyId);
-            String detectedProfile = detectProfile(ontology);
+            String detectedProfile = detectProfile(ontologyId, ontology);
             String effectiveReasonerName = resolveReasonerName(reasonerName, detectedProfile, false);
 
             OWLReasonerAdapter adapter = lifecycleManager.getOrCreateReasoner(
                 ontologyId, effectiveReasonerName, ontology, detectedProfile, false);
 
             ConsistencyResult result = adapter.checkConsistency(ontologyId.id());
+            lifecycleManager.markClassified(ontologyId);
             return ServiceResult.success(result, ResultMetadata.empty());
         } catch (Exception e) {
             return ServiceResult.error(ErrorCode.CLASSIFICATION_FAILED, e.getMessage());
@@ -227,7 +285,7 @@ public class ReasonerServiceImpl implements ReasonerService {
             // For explanation, prefer Openllet
             boolean explanationRequested = true;
             OWLOntology ontology = loadOntology(ontologyId);
-            String detectedProfile = detectProfile(ontology);
+            String detectedProfile = detectProfile(ontologyId, ontology);
             String effectiveReasonerName = reasonerName.orElse("openllet");
 
             OWLReasonerAdapter adapter = lifecycleManager.getOrCreateReasoner(
@@ -253,7 +311,7 @@ public class ReasonerServiceImpl implements ReasonerService {
         try {
             boolean explanationRequested = true;
             OWLOntology ontology = loadOntology(ontologyId);
-            String detectedProfile = detectProfile(ontology);
+            String detectedProfile = detectProfile(ontologyId, ontology);
             String effectiveReasonerName = reasonerName.orElse("openllet");
 
             OWLReasonerAdapter adapter = lifecycleManager.getOrCreateReasoner(
@@ -344,6 +402,8 @@ public class ReasonerServiceImpl implements ReasonerService {
      * running {@code reasoner.isEntailed(OWLEquivalentClassesAxiom)} on
      * the constructed axiom.
      */
+    @Deprecated
+    @Override
     public ServiceResult<EntailmentResult> checkEquivalentClassesEntailment(
             OntologyId ontologyId,
             org.semanticweb.owlapi.model.OWLClassExpression subject,
@@ -351,54 +411,7 @@ public class ReasonerServiceImpl implements ReasonerService {
             Optional<String> reasonerName) {
         try {
             OWLOntology ontology = loadOntology(ontologyId);
-            String detectedProfile = detectProfile(ontology);
-            String effectiveReasonerName = resolveReasonerName(reasonerName, detectedProfile, false);
-
-            OWLReasonerAdapter adapter = lifecycleManager.getOrCreateReasoner(
-                ontologyId, effectiveReasonerName, ontology, detectedProfile, false);
-
-            if (!adapter.isActive()) {
-                return ServiceResult.error(ErrorCode.REASONING_NOT_RUN,
-                    "Reasoner is not active after initialization for ontology: " + ontologyId.id());
-            }
-
-            // v0.8.1 Task 5.5: classify precondition before isEntailed
-            try {
-                adapter.getUnderlyingReasoner().precomputeInferences(InferenceType.CLASS_HIERARCHY);
-            } catch (Exception ignored) {
-                // safe to ignore; precompute is best-effort
-            }
-
-            OWLDataFactory df = ontology.getOWLOntologyManager().getOWLDataFactory();
-            org.semanticweb.owlapi.model.OWLEquivalentClassesAxiom axiom =
-                df.getOWLEquivalentClassesAxiom(subject, object);
-
-            // Asserted check (rare for complex expressions but possible)
-            boolean asserted = ontology.getAxioms(AxiomType.EQUIVALENT_CLASSES, Imports.INCLUDED).stream()
-                .anyMatch(ax -> ax.getClassExpressions().size() == 2
-                    && ax.getClassExpressions().contains(subject)
-                    && ax.getClassExpressions().contains(object));
-            if (asserted) {
-                return ServiceResult.success(
-                    new EntailmentResult(ontologyId.id(), "EquivalentClasses",
-                        EntailmentResult.ENTAILED, "asserted", effectiveReasonerName, null),
-                    ResultMetadata.empty());
-            }
-
-            boolean entailed;
-            try {
-                entailed = adapter.getUnderlyingReasoner().isEntailed(axiom);
-            } catch (Exception e) {
-                return ServiceResult.error(ErrorCode.CLASSIFICATION_FAILED,
-                    "isEntailed failed for EquivalentClasses: " + e.getMessage());
-            }
-
-            return ServiceResult.success(
-                new EntailmentResult(ontologyId.id(), "EquivalentClasses",
-                    entailed ? EntailmentResult.ENTAILED : EntailmentResult.NOT_ENTAILED,
-                    entailed ? "inferred" : null, effectiveReasonerName, null),
-                ResultMetadata.empty());
-
+            return checkEquivalentClassesEntailmentImpl(ontology, ontologyId, subject, object, reasonerName);
         } catch (OWLOntologyCreationException e) {
             return ServiceResult.error(ErrorCode.CLASSIFICATION_FAILED, e.getMessage());
         } catch (Exception e) {
@@ -407,6 +420,80 @@ public class ReasonerServiceImpl implements ReasonerService {
         }
     }
 
+    /**
+     * v0.8.4: Overload that accepts a pre-loaded {@link OWLOntology}.
+     */
+    @Override
+    public ServiceResult<EntailmentResult> checkEquivalentClassesEntailment(
+            OWLOntology ontology,
+            OntologyId ontologyId,
+            org.semanticweb.owlapi.model.OWLClassExpression subject,
+            org.semanticweb.owlapi.model.OWLClassExpression object,
+            Optional<String> reasonerName) {
+        try {
+            return checkEquivalentClassesEntailmentImpl(ontology, ontologyId, subject, object, reasonerName);
+        } catch (Exception e) {
+            return ServiceResult.error(ErrorCode.CLASSIFICATION_FAILED,
+                "Failed to check EquivalentClasses entailment: " + e.getMessage());
+        }
+    }
+
+    private ServiceResult<EntailmentResult> checkEquivalentClassesEntailmentImpl(
+            OWLOntology ontology, OntologyId ontologyId,
+            org.semanticweb.owlapi.model.OWLClassExpression subject,
+            org.semanticweb.owlapi.model.OWLClassExpression object,
+            Optional<String> reasonerName) throws Exception {
+        String detectedProfile = detectProfile(ontologyId, ontology);
+        String effectiveReasonerName = resolveReasonerName(reasonerName, detectedProfile, false);
+
+        OWLReasonerAdapter adapter = lifecycleManager.getOrCreateReasoner(
+            ontologyId, effectiveReasonerName, ontology, detectedProfile, false);
+
+        if (!adapter.isActive()) {
+            return ServiceResult.error(ErrorCode.REASONING_NOT_RUN,
+                "Reasoner is not active after initialization for ontology: " + ontologyId.id());
+        }
+
+        if (!lifecycleManager.isClassified(ontologyId)) {
+            try {
+                adapter.getUnderlyingReasoner().precomputeInferences(InferenceType.CLASS_HIERARCHY);
+            } catch (Exception ignored) {
+            }
+            lifecycleManager.markClassified(ontologyId);
+        }
+
+        OWLDataFactory df = ontology.getOWLOntologyManager().getOWLDataFactory();
+        org.semanticweb.owlapi.model.OWLEquivalentClassesAxiom axiom =
+            df.getOWLEquivalentClassesAxiom(subject, object);
+
+        // Asserted check (rare for complex expressions but possible)
+        boolean asserted = ontology.getAxioms(AxiomType.EQUIVALENT_CLASSES, Imports.INCLUDED).stream()
+            .anyMatch(ax -> ax.getClassExpressions().size() == 2
+                && ax.getClassExpressions().contains(subject)
+                && ax.getClassExpressions().contains(object));
+        if (asserted) {
+            return ServiceResult.success(
+                new EntailmentResult(ontologyId.id(), "EquivalentClasses",
+                    EntailmentResult.ENTAILED, "asserted", effectiveReasonerName, null),
+                ResultMetadata.empty());
+        }
+
+        boolean entailed;
+        try {
+            entailed = adapter.getUnderlyingReasoner().isEntailed(axiom);
+        } catch (Exception e) {
+            return ServiceResult.error(ErrorCode.CLASSIFICATION_FAILED,
+                "isEntailed failed for EquivalentClasses: " + e.getMessage());
+        }
+
+        return ServiceResult.success(
+            new EntailmentResult(ontologyId.id(), "EquivalentClasses",
+                entailed ? EntailmentResult.ENTAILED : EntailmentResult.NOT_ENTAILED,
+                entailed ? "inferred" : null, effectiveReasonerName, null),
+            ResultMetadata.empty());
+    }
+
+    @Deprecated
     @Override
     public ServiceResult<EntailmentResult> checkEntailment(OntologyId ontologyId, String axiomType,
                                                              Map<String, String> parameters, Optional<String> reasonerName) {
@@ -414,15 +501,8 @@ public class ReasonerServiceImpl implements ReasonerService {
         Set<String> supportedTypes = Set.of(
             "SubClassOf", "EquivalentClasses", "DisjointClasses", "ClassAssertion",
             "ObjectPropertyAssertion", "DataPropertyAssertion", "ObjectPropertyDomain", "ObjectPropertyRange",
-            // v0.8.1 ISSUE-02: add DataPropertyDomain / DataPropertyRange so
-            // DATA_PROPERTY_DOMAIN / DATA_PROPERTY_RANGE claims reach
-            // checkAxiomEntailment instead of returning UNSUPPORTED_AXIOM_TYPE.
             "DataPropertyDomain", "DataPropertyRange",
-            // v0.8.1 ISSUE-04 / ISSUE-05: DifferentIndividuals + SubObjectPropertyOf
             "DifferentIndividuals", "SubObjectPropertyOf",
-            // v0.8.1 ISSUE-04 counter-evidence: SameIndividual is consulted by
-            // verifyDifferentIndividuals to detect a CONTRADICTED outcome (i.e.
-            // two named individuals that the reasoner proves are the same).
             "SameIndividual");
 
         if (!supportedTypes.contains(axiomType)) {
@@ -431,44 +511,82 @@ public class ReasonerServiceImpl implements ReasonerService {
                 ResultMetadata.empty());
         }
 
-        // Validate required parameters
         if (parameters == null || parameters.isEmpty()) {
             return ServiceResult.error(ErrorCode.INVALID_AXIOM_PARAMETERS,
                 "Required axiom fields are missing or malformed for axiom type: " + axiomType);
         }
 
         try {
-            Optional<OWLReasonerAdapter> adapter = lifecycleManager.getActiveReasoner(ontologyId);
-            if (adapter.isEmpty()) {
-                // Initialize reasoner if needed
-                OWLOntology ontology = loadOntology(ontologyId);
-                String detectedProfile = detectProfile(ontology);
-                String effectiveReasonerName = resolveReasonerName(reasonerName, detectedProfile, false);
-                OWLReasonerAdapter newAdapter = lifecycleManager.getOrCreateReasoner(
-                    ontologyId, effectiveReasonerName, ontology, detectedProfile, false);
-
-                boolean entailed = checkAxiomEntailment(newAdapter, ontology, axiomType, parameters);
-                String source = determineSource(ontology, axiomType, parameters);
-
-                return ServiceResult.success(
-                    new EntailmentResult(ontologyId.id(), axiomType,
-                        entailed ? EntailmentResult.ENTAILED : EntailmentResult.NOT_ENTAILED,
-                        source, effectiveReasonerName, null),
-                    ResultMetadata.empty());
-            }
-
             OWLOntology ontology = loadOntology(ontologyId);
-            boolean entailed = checkAxiomEntailment(adapter.get(), ontology, axiomType, parameters);
-            String source = determineSource(ontology, axiomType, parameters);
+            return checkEntailmentImpl(ontology, ontologyId, axiomType, parameters, reasonerName);
+        } catch (Exception e) {
+            return ServiceResult.error(ErrorCode.CLASSIFICATION_FAILED, e.getMessage());
+        }
+    }
+
+    /**
+     * v0.8.4: Overload that accepts a pre-loaded {@link OWLOntology}, avoiding
+     * redundant ontology loading in the claim verification hot path.
+     */
+    @Override
+    public ServiceResult<EntailmentResult> checkEntailment(OWLOntology ontology, OntologyId ontologyId,
+                                                             String axiomType,
+                                                             Map<String, String> parameters,
+                                                             Optional<String> reasonerName) {
+        Set<String> supportedTypes = Set.of(
+            "SubClassOf", "EquivalentClasses", "DisjointClasses", "ClassAssertion",
+            "ObjectPropertyAssertion", "DataPropertyAssertion", "ObjectPropertyDomain", "ObjectPropertyRange",
+            "DataPropertyDomain", "DataPropertyRange",
+            "DifferentIndividuals", "SubObjectPropertyOf",
+            "SameIndividual");
+
+        if (!supportedTypes.contains(axiomType)) {
+            return ServiceResult.success(
+                new EntailmentResult(ontologyId.id(), axiomType, EntailmentResult.UNSUPPORTED_AXIOM_TYPE, null, null, null),
+                ResultMetadata.empty());
+        }
+
+        if (parameters == null || parameters.isEmpty()) {
+            return ServiceResult.error(ErrorCode.INVALID_AXIOM_PARAMETERS,
+                "Required axiom fields are missing or malformed for axiom type: " + axiomType);
+        }
+
+        try {
+            return checkEntailmentImpl(ontology, ontologyId, axiomType, parameters, reasonerName);
+        } catch (Exception e) {
+            return ServiceResult.error(ErrorCode.CLASSIFICATION_FAILED, e.getMessage());
+        }
+    }
+
+    private ServiceResult<EntailmentResult> checkEntailmentImpl(OWLOntology ontology, OntologyId ontologyId,
+                                                                  String axiomType,
+                                                                  Map<String, String> parameters,
+                                                                  Optional<String> reasonerName) throws Exception {
+        Optional<OWLReasonerAdapter> adapter = lifecycleManager.getActiveReasoner(ontologyId);
+        if (adapter.isEmpty()) {
+            String detectedProfile = detectProfile(ontologyId, ontology);
+            String effectiveReasonerName = resolveReasonerName(reasonerName, detectedProfile, false);
+            OWLReasonerAdapter newAdapter = lifecycleManager.getOrCreateReasoner(
+                ontologyId, effectiveReasonerName, ontology, detectedProfile, false);
+
+            boolean entailed = checkAxiomEntailment(newAdapter, ontologyId, ontology, axiomType, parameters);
+            String source = determineSource(ontologyId, ontology, axiomType, parameters);
 
             return ServiceResult.success(
                 new EntailmentResult(ontologyId.id(), axiomType,
                     entailed ? EntailmentResult.ENTAILED : EntailmentResult.NOT_ENTAILED,
-                    source, adapter.get().getName(), null),
+                    source, effectiveReasonerName, null),
                 ResultMetadata.empty());
-        } catch (Exception e) {
-            return ServiceResult.error(ErrorCode.CLASSIFICATION_FAILED, e.getMessage());
         }
+
+        boolean entailed = checkAxiomEntailment(adapter.get(), ontologyId, ontology, axiomType, parameters);
+        String source = determineSource(ontologyId, ontology, axiomType, parameters);
+
+        return ServiceResult.success(
+            new EntailmentResult(ontologyId.id(), axiomType,
+                entailed ? EntailmentResult.ENTAILED : EntailmentResult.NOT_ENTAILED,
+                source, adapter.get().getName(), null),
+            ResultMetadata.empty());
     }
 
     @Override
@@ -481,7 +599,7 @@ public class ReasonerServiceImpl implements ReasonerService {
     public ServiceResult<ReasonerSelectionResult> selectReasoner(OntologyId ontologyId, boolean explanationRequested) {
         try {
             OWLOntology ontology = loadOntology(ontologyId);
-            String detectedProfile = detectProfile(ontology);
+            String detectedProfile = detectProfile(ontologyId, ontology);
             AutoReasonerSelector selector = new AutoReasonerSelector();
             ReasonerSelectionResult result = selector.select(detectedProfile, explanationRequested);
             return ServiceResult.success(result, ResultMetadata.empty());
@@ -506,9 +624,15 @@ public class ReasonerServiceImpl implements ReasonerService {
         return ontologyCache.getOrCreate(ontologyId);
     }
 
-    private String detectProfile(OWLOntology ontology) {
-        // Basic profile detection based on ontology expressivity
-        // The OWL API provides profile violation checking
+    private String detectProfile(OntologyId ontologyId, OWLOntology ontology) {
+        String cached = lifecycleManager.getCachedProfile(ontologyId);
+        if (cached != null) return cached;
+        String profile = computeProfile(ontology);
+        lifecycleManager.setCachedProfile(ontologyId, profile);
+        return profile;
+    }
+
+    private String computeProfile(OWLOntology ontology) {
         try {
             org.semanticweb.owlapi.profiles.OWL2DLProfile dlProfile = new org.semanticweb.owlapi.profiles.OWL2DLProfile();
             org.semanticweb.owlapi.profiles.OWL2ELProfile elProfile = new org.semanticweb.owlapi.profiles.OWL2ELProfile();
@@ -718,22 +842,16 @@ public class ReasonerServiceImpl implements ReasonerService {
         }
     }
 
-    private boolean checkAxiomEntailment(OWLReasonerAdapter adapter, OWLOntology ontology,
+    private boolean checkAxiomEntailment(OWLReasonerAdapter adapter, OntologyId ontologyId, OWLOntology ontology,
                                            String axiomType, Map<String, String> parameters) {
         OWLDataFactory df = ontology.getOWLOntologyManager().getOWLDataFactory();
 
-        // v0.8.1 ISSUE-02: classify precondition. Ensure the reasoner has
-        // classified before any isEntailed() call. We trigger
-        // precomputeInferences synchronously; for batch flows this is fine
-        // because ReasonerServiceImpl.checkEntailment is single-threaded per
-        // ontology (lifecycleManager hands out a per-ontology adapter).
-        if (adapter.isActive()) {
+        if (adapter.isActive() && !lifecycleManager.isClassified(ontologyId)) {
             try {
                 adapter.getUnderlyingReasoner().precomputeInferences(InferenceType.CLASS_HIERARCHY);
             } catch (Exception ignored) {
-                // Some reasoners (e.g. ELK) refuse precomputeInferences when
-                // nothing has changed; this is safe to ignore.
             }
+            lifecycleManager.markClassified(ontologyId);
         }
 
         switch (axiomType) {
@@ -746,6 +864,17 @@ public class ReasonerServiceImpl implements ReasonerService {
                 if (subIri == null || supIri == null) return false;
                 OWLClass subClass = df.getOWLClass(subIri);
                 OWLClass superClass = df.getOWLClass(supIri);
+
+                // v0.8.4 Decision 5: check EntitySignatureCache index first (O(1) lookup)
+                if (entitySignatureCacheManager != null) {
+                    try {
+                        EntitySignatureCache esc = entitySignatureCacheManager.getOrCreate(ontologyId, ontology);
+                        if (esc.getSuperClasses(subclassIRI).contains(superclassIRI)) {
+                            return true;
+                        }
+                    } catch (Exception ignored) {
+                    }
+                }
 
                 // Check if asserted first
                 boolean asserted = ontology.getAxioms(AxiomType.SUBCLASS_OF, Imports.INCLUDED).stream()
@@ -771,7 +900,7 @@ public class ReasonerServiceImpl implements ReasonerService {
                 }
 
                 // Check in stored inferred hierarchy
-                return checkStoredEntailment(ontology, "SubClassOf", subclassIRI, superclassIRI);
+                return checkStoredEntailment(ontologyId, ontology, "SubClassOf", subclassIRI, superclassIRI);
             }
 
             case "ClassAssertion": {
@@ -790,7 +919,7 @@ public class ReasonerServiceImpl implements ReasonerService {
                         ax.getClassExpression().asOWLClass().getIRI().equals(clsIri));
                 if (asserted) return true;
 
-                return checkStoredEntailment(ontology, "Type", individualIRI, classIRI);
+                return checkStoredEntailment(ontologyId, ontology, "Type", individualIRI, classIRI);
             }
 
             // v0.8.1 ISSUE-02 / v0.8.3 R7: ObjectPropertyDomain
@@ -1131,46 +1260,103 @@ public class ReasonerServiceImpl implements ReasonerService {
                 return false;
             }
 
+            // v0.8.4 Decision 5: DisjointClasses with EntitySignatureCache index
+            case "DisjointClasses": {
+                String class1IRI = parameters.get("class1");
+                String class2IRI = parameters.get("class2");
+                if (class1IRI == null || class2IRI == null) return false;
+
+                // v0.8.4: check EntitySignatureCache index first (O(1) lookup)
+                if (entitySignatureCacheManager != null) {
+                    try {
+                        EntitySignatureCache esc = entitySignatureCacheManager.getOrCreate(ontologyId, ontology);
+                        if (esc.getDisjointClasses(class1IRI).contains(class2IRI)) {
+                            return true;
+                        }
+                        if (esc.getDisjointClasses(class2IRI).contains(class1IRI)) {
+                            return true;
+                        }
+                    } catch (Exception ignored) {
+                    }
+                }
+
+                // Check asserted disjointness
+                IRI c1Iri = OntologyIriResolver.resolveOntologyIRI(ontology, class1IRI, "class");
+                IRI c2Iri = OntologyIriResolver.resolveOntologyIRI(ontology, class2IRI, "class");
+                if (c1Iri == null || c2Iri == null) return false;
+                OWLClass cls1 = df.getOWLClass(c1Iri);
+                OWLClass cls2 = df.getOWLClass(c2Iri);
+
+                boolean asserted = ontology.getAxioms(AxiomType.DISJOINT_CLASSES, Imports.INCLUDED)
+                    .stream().anyMatch(ax -> {
+                        Set<OWLClass> classes = ax.getClassExpressionsAsList()
+                            .stream().filter(OWLClassExpression::isNamed)
+                            .map(OWLClassExpression::asOWLClass).collect(Collectors.toSet());
+                        return classes.contains(cls1) && classes.contains(cls2);
+                    });
+                if (asserted) return true;
+
+                // Check via reasoner
+                try {
+                    if (adapter.isActive()) {
+                        return adapter.getUnderlyingReasoner().isEntailed(
+                            df.getOWLDisjointClassesAxiom(cls1, cls2));
+                    }
+                } catch (Exception ignored) {
+                }
+                return false;
+            }
+
             default:
                 // For other axiom types, check stored inferred data
                 return false;
         }
     }
 
-    private boolean checkStoredEntailment(OWLOntology ontology, String type, String subject, String object) {
-        // Check the stored inferred-class-hierarchy.jsonl / inferred-facts.jsonl on disk.
-        // Reasoning may have run in this or a prior session, so the file is the
-        // authoritative source for transitive entailments.
-        try {
-            String workingDir = System.getProperty("user.dir");
-            // Try a few candidate locations to find the workspace's inferred dir.
-            // The harness sets OWL4AGENTS_HOME; otherwise we fall back to the default
-            // workspace name "default".
-            String home = System.getenv("OWL4AGENTS_HOME");
-            if (home == null || home.isBlank()) {
-                // Also accept the OWL4AGENTS_HOME system property (used by integration tests
-                // that cannot mutate the process environment).
-                home = System.getProperty("OWL4AGENTS_HOME");
-            }
-            if (home == null || home.isBlank()) {
-                // Heuristic: look in the current user's home for the owl4agents default workspace
-                String userHome = System.getProperty("user.home");
-                Path candidate = Path.of(userHome, ".owl4agents", "workspaces", workspaceName, "ontologies",
-                    resolveOntologyIdFromOntology(ontology), "inferred", "inferred-class-hierarchy.jsonl");
-                if (Files.exists(candidate)) {
-                    return scanHierarchyFile(candidate, subject, object);
-                }
+    private boolean checkStoredEntailment(OntologyId ontologyId, OWLOntology ontology, String type, String subject, String object) {
+        // v0.8.4 Decision 6: use in-memory inferred hierarchy cache for O(1) lookup.
+        // On first call for a given ontologyId, load the inferred-class-hierarchy.jsonl
+        // into the cache. Subsequent calls query the cache directly.
+        String key = ontologyId.id();
+        Map<String, Set<String>> hierarchy = inferredHierarchyCache.get(key);
+        if (hierarchy == null) {
+            hierarchy = loadInferredHierarchy(ontologyId);
+            if (hierarchy == null) {
+                // File not found or load error → not entailed
                 return false;
             }
-            // Find inferred dir by scanning the home directory for matching inferred-class-hierarchy.jsonl
-            Path inferredFile = findInferredFile(home, "inferred-class-hierarchy.jsonl");
-            if (inferredFile != null) {
-                return scanHierarchyFile(inferredFile, subject, object);
+            Map<String, Set<String>> existing = inferredHierarchyCache.putIfAbsent(key, hierarchy);
+            if (existing != null) {
+                hierarchy = existing;
+            }
+        }
+        Set<String> objects = hierarchy.get(subject);
+        return objects != null && objects.contains(object);
+    }
+
+    /**
+     * v0.8.4 Decision 6: Load inferred-class-hierarchy.jsonl into an in-memory
+     * map (subjectIRI → Set<objectIRI>). Returns null if the file doesn't exist.
+     */
+    private Map<String, Set<String>> loadInferredHierarchy(OntologyId ontologyId) {
+        Path inferredFile = getInferredDir(ontologyId).resolve("inferred-class-hierarchy.jsonl");
+        if (!Files.exists(inferredFile)) {
+            // v0.8.4 Decision 6 task 7.4: file missing → return null (not-entailed)
+            return null;
+        }
+        Map<String, Set<String>> map = new java.util.HashMap<>();
+        try {
+            for (String line : Files.readAllLines(inferredFile)) {
+                String sub = extractJsonValue(line, "subjectIRI");
+                String obj = extractJsonValue(line, "objectIRI");
+                if (sub != null && obj != null) {
+                    map.computeIfAbsent(sub, k -> new java.util.HashSet<>()).add(obj);
+                }
             }
         } catch (Exception e) {
-            // Fall through to false
+            return null;
         }
-        return false;
+        return map;
     }
 
     private Path findInferredFile(String homeDir, String fileName) throws IOException {
@@ -1212,7 +1398,7 @@ public class ReasonerServiceImpl implements ReasonerService {
         return "unknown";
     }
 
-    private String determineSource(OWLOntology ontology, String axiomType, Map<String, String> parameters) {
+    private String determineSource(OntologyId ontologyId, OWLOntology ontology, String axiomType, Map<String, String> parameters) {
         // Determine whether the axiom is asserted in the ontology.
         // v0.8.1: returns "asserted" (not v0.8.0's "explicit") to align with the
         // claim-verification spec — the `ClaimVerificationService.buildEntailmentEvidence`
@@ -1228,6 +1414,18 @@ public class ReasonerServiceImpl implements ReasonerService {
                     String subclassIRI = parameters.get("subclass");
                     String superclassIRI = parameters.get("superclass");
                     if (subclassIRI == null || superclassIRI == null) return "unknown";
+
+                    // v0.8.4 Decision 5: use EntitySignatureCache index for O(1) lookup
+                    if (entitySignatureCacheManager != null) {
+                        try {
+                            EntitySignatureCache esc = entitySignatureCacheManager.getOrCreate(ontologyId, ontology);
+                            if (esc.getSuperClasses(subclassIRI).contains(superclassIRI)) {
+                                return "asserted";
+                            }
+                        } catch (Exception ignored) {
+                        }
+                    }
+
                     OWLClass subClass = df.getOWLClass(IRI.create(subclassIRI));
                     OWLClass superClass = df.getOWLClass(IRI.create(superclassIRI));
                     boolean asserted = ontology.getAxioms(AxiomType.SUBCLASS_OF, Imports.INCLUDED).stream()

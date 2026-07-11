@@ -7,7 +7,11 @@ import java.util.Optional;
 import org.owl4agents.core.*;
 import org.owl4agents.core.model.*;
 
+import org.owl4agents.reasoner.ReasonerService;
 import org.owl4agents.storage.CatalogStore;
+
+import org.semanticweb.owlapi.model.OWLOntology;
+import org.semanticweb.owlapi.model.OWLOntologyCreationException;
 
 /**
  * Orchestrates v0.5 answer-level claim verification workflow.
@@ -22,15 +26,18 @@ public class ClaimWorkflowService {
     private final EvidenceGroundingService evidenceGroundingService;
     private final CatalogStore catalogStore;
     private final WorkspaceId defaultWorkspaceId;
+    private final ReasonerService reasonerService;
 
     public ClaimWorkflowService(ClaimVerificationService claimVerificationService,
                                 EvidenceGroundingService evidenceGroundingService,
                                 CatalogStore catalogStore,
-                                WorkspaceId workspaceId) {
+                                WorkspaceId workspaceId,
+                                ReasonerService reasonerService) {
         this.claimVerificationService = claimVerificationService;
         this.evidenceGroundingService = evidenceGroundingService;
         this.catalogStore = catalogStore;
         this.defaultWorkspaceId = workspaceId;
+        this.reasonerService = reasonerService;
     }
 
     /**
@@ -51,6 +58,15 @@ public class ClaimWorkflowService {
         OntologyId ontId = new OntologyId(ontologyId);
         ServiceResult<CatalogEntry> catalogResult = catalogStore.findEntry(defaultWorkspaceId, ontId);
         if (!catalogResult.isSuccess()) {
+            return ServiceResult.error(ServiceError.ontologyNotFound(ontId));
+        }
+
+        // v0.8.4 Decision 3: load the ontology once before the batch loop,
+        // then pass it to each claim's verify() call to avoid redundant loads.
+        OWLOntology ontology;
+        try {
+            ontology = reasonerService.loadOntologyForClaim(ontId);
+        } catch (OWLOntologyCreationException e) {
             return ServiceResult.error(ServiceError.ontologyNotFound(ontId));
         }
 
@@ -75,7 +91,7 @@ public class ClaimWorkflowService {
             Claim v03Claim = batchClaimToV03Claim(batchClaim, ontologyId);
 
             ServiceResult<ClaimVerificationResult> verifyResult =
-                claimVerificationService.verify(v03Claim);
+                claimVerificationService.verify(ontology, v03Claim);
 
             if (!verifyResult.isSuccess()) {
                 // Downstream verification error → treat as unknown for this claim
