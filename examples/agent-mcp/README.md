@@ -100,7 +100,7 @@ Send `tools/list` to discover available tools. The response includes readonly on
 - `ontology_check_consistency`
 - `ontology_get_inferred_facts`
 
-> Note: `ontology_import` is a write tool planned for v0.8. It requires `--allow-write` and is not available in the default readonly MCP server.
+> Note: `ontology_import` is a write tool not available in the default readonly MCP server. It requires `--allow-write`.
 
 ## HTTP Transport (v0.7+)
 
@@ -168,8 +168,8 @@ into the JSON config. The IDE will open a long-lived `GET /mcp` SSE
 stream, send `initialize` to receive a `Mcp-Session-Id`, and use that
 id on every subsequent `POST /mcp` request. If the server is older
 than v0.8.0, Trae IDE will fail to connect with `SSE error: Non-200
-status code (405)` — upgrade to v0.8.0 or later to fix it (v0.8.1 is
-recommended for the latest claim-verification accuracy improvements).
+status code (405)` — upgrade to v0.8.0 or later to fix it (v0.8.4 is
+recommended for the latest claim-verification accuracy and performance improvements).
 
 ### v0.8.1 Claim Types
 
@@ -184,9 +184,9 @@ additional claim types beyond the v0.8.0 baseline:
   reverse-direction entailment (for contradiction detection).
 - Complex class expressions in `equivalent_classes` claims — the
   `subject.expression` and `object.expression` fields accept a
-  nested structure with 6 supported types: `named`, `object_intersection`,
-  `object_union`, `object_existential` (∃), `object_universal` (∀),
-  and `object_complement` (¬). Up to 4 levels of nesting are allowed.
+  nested structure with 6 supported types: `named`, `intersection`,
+  `union`, `existential` (∃), `universal` (∀),
+  and `complement` (¬). Up to 3 levels of nesting are allowed.
 
 For example, the v0.8.1 sample `example.yaml` shows a
 `different_individuals` claim against the pizza ontology, and an

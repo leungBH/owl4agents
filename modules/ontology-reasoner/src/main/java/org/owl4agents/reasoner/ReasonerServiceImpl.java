@@ -1359,45 +1359,6 @@ public class ReasonerServiceImpl implements ReasonerService, org.owl4agents.owla
         return map;
     }
 
-    private Path findInferredFile(String homeDir, String fileName) throws IOException {
-        Path ontologiesRoot = Path.of(homeDir, "workspaces", workspaceName, "ontologies");
-        if (!Files.exists(ontologiesRoot)) return null;
-        try (Stream<Path> paths = Files.walk(ontologiesRoot)) {
-            return paths
-                .filter(p -> p.getFileName().toString().equals(fileName))
-                .findFirst()
-                .orElse(null);
-        }
-    }
-
-    private boolean scanHierarchyFile(Path file, String subject, String object) {
-        try {
-            for (String line : Files.readAllLines(file)) {
-                // Lines look like: {"ontologyId":"...","subjectIRI":"<sub>","predicateIRI":"rdfs:subClassOf","objectIRI":"<obj>","source":"inferred","reasoner":"..."}
-                String sub = extractJsonValue(line, "subjectIRI");
-                String obj = extractJsonValue(line, "objectIRI");
-                if (subject.equals(sub) && object.equals(obj)) {
-                    return true;
-                }
-            }
-        } catch (Exception e) {
-            return false;
-        }
-        return false;
-    }
-
-    private String resolveOntologyIdFromOntology(OWLOntology ontology) {
-        if (ontology.getOntologyID().getOntologyIRI().isPresent()) {
-            String iri = ontology.getOntologyID().getOntologyIRI().get().toString();
-            // The id used in storage is the local name (no slash, no protocol)
-            int lastSlash = Math.max(iri.lastIndexOf('/'), iri.lastIndexOf('#'));
-            if (lastSlash >= 0 && lastSlash < iri.length() - 1) {
-                return iri.substring(lastSlash + 1);
-            }
-        }
-        return "unknown";
-    }
-
     private String determineSource(OntologyId ontologyId, OWLOntology ontology, String axiomType, Map<String, String> parameters) {
         // Determine whether the axiom is asserted in the ontology.
         // v0.8.1: returns "asserted" (not v0.8.0's "explicit") to align with the
@@ -1510,13 +1471,6 @@ public class ReasonerServiceImpl implements ReasonerService, org.owl4agents.owla
         } catch (Exception e) {
             return "unknown";
         }
-    }
-
-    private Object getOWLReasonerFromAdapter(OWLReasonerAdapter adapter) {
-        // v0.8.1: removed/deprecated. The v0.8.0 private bridge that returned
-        // null caused the SubClassOf inferred path to silently fall through.
-        // v0.8.1 callers should use adapter.getUnderlyingReasoner() instead.
-        return adapter.getUnderlyingReasoner();
     }
 
     /**

@@ -8,7 +8,7 @@
 >
 > **v0.8.4**(推荐)优化 claim 验证性能,包含 7 项决策:推理机分类状态跟踪(跳过冗余 `precomputeInferences`)、profile 缓存、单次本体加载、`EntitySignatureCache` O(1) 实体签名查询、断言公理索引(SubClassOf + DisjointClasses)、内存推理层次索引、`OntologyCache` 5 秒 TTL 窗口。Pizza 热路径 ~85ms → ~30-40ms。见 [CHANGELOG.md](CHANGELOG.md) §"0.8.4"。
 >
-> **v0.8.3** 修复 claim 验证中的 9 个语义准确度错误(R1-R7:OOS 预检查、矛盾代理、EquivalentClasses 复杂表达式、个体级不相交、属性层次、ObjectPropertyDomain 复杂 domain、ClaimType 反序列化加固)。见 [CHANGELOG.md](CHANGELOG.md) §"0.8.3"。
+> **v0.8.3** 修复 claim 验证中的 7 项语义准确度问题(R1, R2, R4-R7:OOS 预检查、矛盾代理、EquivalentClasses 复杂表达式、个体级不相交、属性层次、ObjectPropertyDomain 复杂 domain;D7:ClaimType 反序列化加固)——解决了升级包中的 9 个错误 claim。见 [CHANGELOG.md](CHANGELOG.md) §"0.8.3"。
 >
 > **v0.8.1**修复 v0.8.0 的 5 个 claim verification 准确率缺陷(ISSUE-01…ISSUE-05)—— 见 [CHANGELOG.md](CHANGELOG.md) §"0.8.1" 与 `doc/retrospectives/`。80 个策展 claim 的准确率门禁从 75/80 提升到 80/80。新增两个 claim 类型(`different_individuals`、`object_property_subproperty`),并支持在 `subject` / `object` 上使用可选的 `expression` 字段表达复杂类表达式。
 

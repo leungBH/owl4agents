@@ -280,8 +280,16 @@ public class ConsistencyAnalysisService {
 
             if (adapter.isPresent() && adapter.get().isActive()) {
                 try {
-                    OWLReasoner owlReasoner = getOWLReasonerFromAdapter(adapter.get());
+                    org.semanticweb.owlapi.reasoner.OWLReasoner owlReasoner =
+                        adapter.get().getUnderlyingReasoner();
                     if (owlReasoner != null) {
+                        if (!reasonerLifecycle.isClassified(ontologyId)) {
+                            try {
+                                owlReasoner.precomputeInferences(
+                                    org.semanticweb.owlapi.reasoner.InferenceType.CLASS_HIERARCHY);
+                            } catch (Exception ignore) { }
+                            reasonerLifecycle.markClassified(ontologyId);
+                        }
                         NodeSet<OWLClass> types = owlReasoner.getTypes(ind, false);
                         inferred = types.getFlattened().contains(cls);
                     }
@@ -346,8 +354,16 @@ public class ConsistencyAnalysisService {
 
             if (adapter.isPresent() && adapter.get().isActive()) {
                 try {
-                    OWLReasoner owlReasoner = getOWLReasonerFromAdapter(adapter.get());
+                    org.semanticweb.owlapi.reasoner.OWLReasoner owlReasoner =
+                        adapter.get().getUnderlyingReasoner();
                     if (owlReasoner != null) {
+                        if (!reasonerLifecycle.isClassified(ontologyId)) {
+                            try {
+                                owlReasoner.precomputeInferences(
+                                    org.semanticweb.owlapi.reasoner.InferenceType.CLASS_HIERARCHY);
+                            } catch (Exception ignore) { }
+                            reasonerLifecycle.markClassified(ontologyId);
+                        }
                         NodeSet<OWLNamedIndividual> values = owlReasoner.getObjectPropertyValues(source, prop);
                         inferred = values.getFlattened().contains(target);
                     }
@@ -578,11 +594,5 @@ public class ConsistencyAnalysisService {
             }
         }
         return null;
-    }
-
-    private OWLReasoner getOWLReasonerFromAdapter(OWLReasonerAdapter adapter) {
-        // This is a temporary bridge. The full implementation will store
-        // the underlying OWLReasoner in the adapter for direct access.
-        return null; // Will be resolved when adapter exposes OWLReasoner
     }
 }

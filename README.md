@@ -8,7 +8,7 @@
 >
 > **v0.8.4** (recommended) optimizes claim verification performance via 7 decisions: reasoner classification state tracking (skip redundant `precomputeInferences`), profile caching, per-request ontology single loading, `EntitySignatureCache` for O(1) entity signature lookups, asserted axiom indexing (SubClassOf + DisjointClasses), in-memory inferred hierarchy index, and `OntologyCache` 5s TTL window. Pizza hot path ~85ms → ~30-40ms. See [CHANGELOG.md](CHANGELOG.md) §"0.8.4".
 >
-> **v0.8.3** fixes 9 semantic accuracy errors in claim verification (R1-R7: OOS pre-check, disjoint proxy, EquivalentClasses complex expressions, individual-level disjointness, property hierarchy, ObjectPropertyDomain complex domains, ClaimType deserialization hardening). See [CHANGELOG.md](CHANGELOG.md) §"0.8.3".
+> **v0.8.3** fixes 7 semantic accuracy issues in claim verification (R1, R2, R4-R7: OOS pre-check, disjoint proxy, EquivalentClasses complex expressions, individual-level disjointness, property hierarchy, ObjectPropertyDomain complex domains; D7: ClaimType deserialization hardening) — resolving 9 error claims from the upgrade package. See [CHANGELOG.md](CHANGELOG.md) §"0.8.3".
 >
 > **v0.8.1** fixes 5 claim-verification accuracy defects from v0.8.0 (ISSUE-01…ISSUE-05) — see [CHANGELOG.md](CHANGELOG.md) §"0.8.1" and `doc/retrospectives/`. The 80-curated-claim accuracy gate moved from 75/80 → 80/80. Two new claim types (`different_individuals`, `object_property_subproperty`) and an optional `expression` field on `subject` / `object` for complex class expressions are now supported.
 
