@@ -1,0 +1,17 @@
+<?xml version="1.0"?>
+<rdf:RDF xmlns="http://owl4agents.org/test/exact-consistency/negative-membership#"
+     xml:base="http://owl4agents.org/test/exact-consistency/negative-membership"
+     xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+     xmlns:owl="http://www.w3.org/2002/07/owl#"
+     xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#"
+     xmlns:xsd="http://www.w3.org/2001/XMLSchema#">
+    <owl:Ontology rdf:about="http://owl4agents.org/test/exact-consistency/negative-membership"/>
+    <owl:Class rdf:about="http://owl4agents.org/test/exact-consistency/negative-membership#C"/>
+    <owl:NamedIndividual rdf:about="http://owl4agents.org/test/exact-consistency/negative-membership#a">
+        <rdf:type>
+            <owl:Class>
+                <owl:complementOf rdf:resource="http://owl4agents.org/test/exact-consistency/negative-membership#C"/>
+            </owl:Class>
+        </rdf:type>
+    </owl:NamedIndividual>
+</rdf:RDF>

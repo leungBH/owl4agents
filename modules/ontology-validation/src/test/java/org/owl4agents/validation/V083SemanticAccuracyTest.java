@@ -42,6 +42,7 @@ class V083SemanticAccuracyTest {
     private static final String GERMANY = PIZZA_NS + "Germany";
     private static final String HAS_BASE = PIZZA_NS + "hasBase";
     private static final String HAS_INGREDIENT = PIZZA_NS + "hasIngredient";
+    private static final String HAS_TOPPING = PIZZA_NS + "hasTopping";
     private static final String IS_BASE_OF = PIZZA_NS + "isBaseOf";
     private static final String PIZZA_BASE = PIZZA_NS + "PizzaBase";
     private static final String EXTERNAL_IRI = "http://purl.obolibrary.org/obo/UBERON_0000948";
@@ -293,8 +294,13 @@ class V083SemanticAccuracyTest {
     class R4EquivalentClassesTests {
 
         @Test
-        @DisplayName("TC-R4-01: CheeseyPizza equivalentTo Pizza (complex expression) → SUPPORTED")
-        void cheeseyPizzaEquivalentPizzaReturnsSupported() {
+        @DisplayName("TC-R4-01: CheeseyPizza equivalentTo Pizza (not entailed in exact flow) → not SUPPORTED")
+        void cheeseyPizzaEquivalentPizzaReturnsNotSupported() {
+            // v0.8.5 exact-consistency: EquivalentClasses(CheeseyPizza, Pizza)
+            // is NOT entailed — CheeseyPizza is a PROPER SUBCLASS of Pizza
+            // (CheeseyPizza ≡ Pizza ∩ ∃hasTopping.CheeseTopping). The old R4
+            // structural proxy extracted named classes from complex expressions
+            // and returned SUPPORTED; the new exact flow correctly rejects this.
             ClaimVerificationService svc = createServiceWithRealReasoner();
 
             Claim claim = new Claim("r4-01", ClaimType.EQUIVALENT_CLASSES, ONTOLOGY_ID,
@@ -303,8 +309,8 @@ class V083SemanticAccuracyTest {
                 Optional.empty(), Optional.empty(), Optional.empty());
 
             ClaimVerificationResult data = verify(svc, claim);
-            assertEquals(Verdict.SUPPORTED, data.verdict(),
-                "CheeseyPizza equivalentTo Pizza must be supported (R4 stage 1 extracts named classes from complex expression)");
+            assertNotEquals(Verdict.SUPPORTED, data.verdict(),
+                "CheeseyPizza is a proper subclass of Pizza, not equivalent — exact consistency check must not return SUPPORTED");
         }
 
         @Test
@@ -428,14 +434,18 @@ class V083SemanticAccuracyTest {
         @Test
         @DisplayName("TC-R6-03: NOT_ENTAILED without reverse counter → UNKNOWN")
         void propertyHierarchyNotEntailedWithoutCounterReturnsUnknown() {
+            // v0.8.5: Use a non-asserted property pair (hasTopping, isBaseOf)
+            // so the stub's asserted fast-path does NOT override the configured
+            // NOT_ENTAILED. hasBase subPropertyOf hasIngredient IS asserted in
+            // pizza.owl, which would cause the fast-path to return ENTAILED.
             StubReasonerService stub = new StubReasonerService().withRealOntology(WORKSPACE);
             stub.withEntailmentResult("SubObjectPropertyOf", EntailmentResult.NOT_ENTAILED);
             ClaimVerificationService svc = createServiceWithStub(stub);
 
             Claim claim = new Claim("r6-03", ClaimType.OBJECT_PROPERTY_ASSERTION, ONTOLOGY_ID,
-                new ClaimEntity("object_property", HAS_BASE),
+                new ClaimEntity("object_property", HAS_TOPPING),
                 "subPropertyOf",
-                new ClaimEntity("object_property", HAS_INGREDIENT),
+                new ClaimEntity("object_property", IS_BASE_OF),
                 Optional.empty(), Optional.empty(), Optional.empty());
 
             ClaimVerificationResult data = verify(svc, claim);

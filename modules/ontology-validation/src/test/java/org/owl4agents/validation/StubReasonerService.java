@@ -35,6 +35,11 @@ class StubReasonerService implements ReasonerService {
     private List<String> unsatClasses = List.of();
     private java.util.List<String> callLog = new java.util.ArrayList<>();
     private String workspaceBasePath = null;
+    // v0.8.5 exact consistency stub configuration
+    private boolean sourceConsistent = true;
+    private org.owl4agents.core.model.ConsistencyAfterAdditionStatus consistencyAfterAdditionStatus =
+        org.owl4agents.core.model.ConsistencyAfterAdditionStatus.CONSISTENT;
+    private java.util.List<String> consistencyExplanationAxioms = java.util.List.of();
 
     /** Set the entailment result to return from checkEntailment(). */
     StubReasonerService withEntailmentResult(String result) {
@@ -88,6 +93,25 @@ class StubReasonerService implements ReasonerService {
      */
     StubReasonerService withRealOntology(String workspaceBasePath) {
         this.workspaceBasePath = workspaceBasePath;
+        return this;
+    }
+
+    /** Set whether the source ontology is consistent for checkSourceOntologyConsistency(). */
+    StubReasonerService withSourceConsistent(boolean sourceConsistent) {
+        this.sourceConsistent = sourceConsistent;
+        return this;
+    }
+
+    /** Set the ConsistencyAfterAdditionStatus to return from checkConsistencyAfterAdding(). */
+    StubReasonerService withConsistencyAfterAdditionStatus(
+            org.owl4agents.core.model.ConsistencyAfterAdditionStatus status) {
+        this.consistencyAfterAdditionStatus = status;
+        return this;
+    }
+
+    /** Set explanation axioms to return from checkConsistencyAfterAdding() when INCONSISTENT. */
+    StubReasonerService withConsistencyExplanationAxioms(java.util.List<String> axioms) {
+        this.consistencyExplanationAxioms = axioms;
         return this;
     }
 
@@ -246,5 +270,61 @@ class StubReasonerService implements ReasonerService {
             new ReasonerSelectionResult("HermiT", "OWL2-DL", "Default selection"),
             ResultMetadata.empty()
         );
+    }
+
+    // ── v0.8.5 exact consistency verification stubs (task 6.9) ──
+
+    @Override
+    public ServiceResult<org.owl4agents.core.model.ConsistencyAfterAdditionResult> checkConsistencyAfterAdding(
+            org.semanticweb.owlapi.model.OWLOntology sourceOntology,
+            OntologyId ontologyId,
+            String claimId,
+            org.semanticweb.owlapi.model.OWLAxiom claimAxiom,
+            java.util.Optional<String> reasonerName,
+            java.time.Duration timeout) {
+        callLog.add("checkConsistencyAfterAdding:" + claimId);
+        org.owl4agents.core.model.ConsistencyAfterAdditionResult result =
+            new org.owl4agents.core.model.ConsistencyAfterAdditionResult(
+                ontologyId, claimId,
+                reasonerName.orElse("HermiT"),
+                consistencyAfterAdditionStatus,
+                claimAxiom != null ? claimAxiom.toString() : "null",
+                0L, sourceConsistent, true,
+                java.util.Optional.empty(),
+                consistencyExplanationAxioms,
+                org.owl4agents.core.model.PerStageTiming.empty());
+        return ServiceResult.success(result, ResultMetadata.empty());
+    }
+
+    @Override
+    public ServiceResult<Boolean> checkSourceOntologyConsistency(
+            OntologyId ontologyId, java.util.Optional<String> reasonerName) {
+        callLog.add("checkSourceOntologyConsistency:" + ontologyId.id());
+        return ServiceResult.success(sourceConsistent, ResultMetadata.empty());
+    }
+
+    @Override
+    public ServiceResult<EntailmentResult> checkAxiomEntailment(
+            org.semanticweb.owlapi.model.OWLOntology ontology,
+            OntologyId ontologyId,
+            org.semanticweb.owlapi.model.OWLAxiom axiom,
+            java.util.Optional<String> reasonerName) {
+        callLog.add("checkAxiomEntailment:" + (axiom != null ? axiom.getAxiomType().getName() : "null"));
+        // Asserted fast-path: if the axiom is already in the ontology, return ENTAILED
+        if (ontology != null && axiom != null && ontology.containsAxiom(axiom, true)) {
+            return ServiceResult.success(
+                new EntailmentResult(ontologyId.id(), axiom.getAxiomType().getName(),
+                    EntailmentResult.ENTAILED, "asserted", "", ""),
+                ResultMetadata.empty());
+        }
+        // Otherwise, respect the configured entailment result (for backward
+        // compatibility with tests that use withEntailmentResult to simulate
+        // reasoner entailment decisions)
+        String axiomType = axiom != null ? axiom.getAxiomType().getName() : "unknown";
+        String result = entailmentResultsByType.getOrDefault(axiomType, entailmentResult);
+        return ServiceResult.success(
+            new EntailmentResult(ontologyId.id(), axiomType, result,
+                "stub", "HermiT", ""),
+            ResultMetadata.empty());
     }
 }

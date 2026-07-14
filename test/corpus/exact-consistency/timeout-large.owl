@@ -1,0 +1,39 @@
+<?xml version="1.0"?>
+<rdf:RDF xmlns="http://owl4agents.org/test/exact-consistency/timeout-large#"
+     xml:base="http://owl4agents.org/test/exact-consistency/timeout-large"
+     xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+     xmlns:owl="http://www.w3.org/2002/07/owl#"
+     xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#"
+     xmlns:xsd="http://www.w3.org/2001/XMLSchema#">
+    <owl:Ontology rdf:about="http://owl4agents.org/test/exact-consistency/timeout-large"/>
+    <!-- Large ontology with deep class hierarchy to trigger timeout with short timeout setting -->
+    <owl:Class rdf:about="http://owl4agents.org/test/exact-consistency/timeout-large#Root"/>
+    <owl:Class rdf:about="http://owl4agents.org/test/exact-consistency/timeout-large#L1A"><rdfs:subClassOf rdf:resource="http://owl4agents.org/test/exact-consistency/timeout-large#Root"/></owl:Class>
+    <owl:Class rdf:about="http://owl4agents.org/test/exact-consistency/timeout-large#L1B"><rdfs:subClassOf rdf:resource="http://owl4agents.org/test/exact-consistency/timeout-large#Root"/></owl:Class>
+    <owl:Class rdf:about="http://owl4agents.org/test/exact-consistency/timeout-large#L1C"><rdfs:subClassOf rdf:resource="http://owl4agents.org/test/exact-consistency/timeout-large#Root"/></owl:Class>
+    <owl:Class rdf:about="http://owl4agents.org/test/exact-consistency/timeout-large#L1D"><rdfs:subClassOf rdf:resource="http://owl4agents.org/test/exact-consistency/timeout-large#Root"/></owl:Class>
+    <owl:Class rdf:about="http://owl4agents.org/test/exact-consistency/timeout-large#L2A1"><rdfs:subClassOf rdf:resource="http://owl4agents.org/test/exact-consistency/timeout-large#L1A"/></owl:Class>
+    <owl:Class rdf:about="http://owl4agents.org/test/exact-consistency/timeout-large#L2A2"><rdfs:subClassOf rdf:resource="http://owl4agents.org/test/exact-consistency/timeout-large#L1A"/></owl:Class>
+    <owl:Class rdf:about="http://owl4agents.org/test/exact-consistency/timeout-large#L2B1"><rdfs:subClassOf rdf:resource="http://owl4agents.org/test/exact-consistency/timeout-large#L1B"/></owl:Class>
+    <owl:Class rdf:about="http://owl4agents.org/test/exact-consistency/timeout-large#L2B2"><rdfs:subClassOf rdf:resource="http://owl4agents.org/test/exact-consistency/timeout-large#L1B"/></owl:Class>
+    <owl:Class rdf:about="http://owl4agents.org/test/exact-consistency/timeout-large#L2C1"><rdfs:subClassOf rdf:resource="http://owl4agents.org/test/exact-consistency/timeout-large#L1C"/></owl:Class>
+    <owl:Class rdf:about="http://owl4agents.org/test/exact-consistency/timeout-large#L2C2"><rdfs:subClassOf rdf:resource="http://owl4agents.org/test/exact-consistency/timeout-large#L1C"/></owl:Class>
+    <owl:Class rdf:about="http://owl4agents.org/test/exact-consistency/timeout-large#L2D1"><rdfs:subClassOf rdf:resource="http://owl4agents.org/test/exact-consistency/timeout-large#L1D"/></owl:Class>
+    <owl:Class rdf:about="http://owl4agents.org/test/exact-consistency/timeout-large#L2D2"><rdfs:subClassOf rdf:resource="http://owl4agents.org/test/exact-consistency/timeout-large#L1D"/></owl:Class>
+    <owl:AllDisjointClasses>
+        <owl:members rdf:parseType="Collection">
+            <owl:Class rdf:about="http://owl4agents.org/test/exact-consistency/timeout-large#L2A1"/>
+            <owl:Class rdf:about="http://owl4agents.org/test/exact-consistency/timeout-large#L2A2"/>
+            <owl:Class rdf:about="http://owl4agents.org/test/exact-consistency/timeout-large#L2B1"/>
+            <owl:Class rdf:about="http://owl4agents.org/test/exact-consistency/timeout-large#L2B2"/>
+            <owl:Class rdf:about="http://owl4agents.org/test/exact-consistency/timeout-large#L2C1"/>
+            <owl:Class rdf:about="http://owl4agents.org/test/exact-consistency/timeout-large#L2C2"/>
+            <owl:Class rdf:about="http://owl4agents.org/test/exact-consistency/timeout-large#L2D1"/>
+            <owl:Class rdf:about="http://owl4agents.org/test/exact-consistency/timeout-large#L2D2"/>
+        </owl:members>
+    </owl:AllDisjointClasses>
+    <owl:Class rdf:about="http://owl4agents.org/test/exact-consistency/timeout-large#Conflict">
+        <rdfs:subClassOf rdf:resource="http://owl4agents.org/test/exact-consistency/timeout-large#L2A1"/>
+        <rdfs:subClassOf rdf:resource="http://owl4agents.org/test/exact-consistency/timeout-large#L2B1"/>
+    </owl:Class>
+</rdf:RDF>

@@ -1,0 +1,16 @@
+<?xml version="1.0"?>
+<rdf:RDF xmlns="http://owl4agents.org/test/exact-consistency/imports-closure-main#"
+     xml:base="http://owl4agents.org/test/exact-consistency/imports-closure-main"
+     xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+     xmlns:owl="http://www.w3.org/2002/07/owl#"
+     xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#"
+     xmlns:xsd="http://www.w3.org/2001/XMLSchema#">
+    <owl:Ontology rdf:about="http://owl4agents.org/test/exact-consistency/imports-closure-main">
+        <owl:imports rdf:resource="http://owl4agents.org/test/exact-consistency/imports-closure-imported"/>
+    </owl:Ontology>
+    <owl:Class rdf:about="http://owl4agents.org/test/exact-consistency/imports-closure-imported#E">
+        <rdfs:subClassOf rdf:resource="http://owl4agents.org/test/exact-consistency/imports-closure-imported#C"/>
+        <rdfs:subClassOf rdf:resource="http://owl4agents.org/test/exact-consistency/imports-closure-imported#D"/>
+    </owl:Class>
+    <owl:NamedIndividual rdf:about="http://owl4agents.org/test/exact-consistency/imports-closure-main#a"/>
+</rdf:RDF>

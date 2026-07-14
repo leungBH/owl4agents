@@ -3,10 +3,12 @@ package org.owl4agents.reasoner;
 import org.owl4agents.core.OntologyId;
 import org.owl4agents.core.ServiceResult;
 import org.owl4agents.core.model.*;
+import org.semanticweb.owlapi.model.OWLAxiom;
 import org.semanticweb.owlapi.model.OWLClassExpression;
 import org.semanticweb.owlapi.model.OWLOntology;
 import org.semanticweb.owlapi.model.OWLOntologyCreationException;
 
+import java.time.Duration;
 import java.util.Optional;
 
 /**
@@ -145,4 +147,88 @@ public interface ReasonerService {
      * Select the appropriate reasoner based on the ontology's OWL profile.
      */
     ServiceResult<ReasonerSelectionResult> selectReasoner(OntologyId ontologyId, boolean explanationRequested);
+
+    /**
+     * v0.8.5: Perform an exact consistency check on an isolated temporary
+     * ontology consisting of the source ontology's imports closure plus the
+     * given claim axiom. The source ontology SHALL NOT be modified.
+     *
+     * <p>The method SHALL: (1) create a temporary ontology via
+     * {@code TemporaryOntologyFactory}; (2) initialize a
+     * {@code TransientReasonerSession} on the temporary ontology;
+     * (3) call {@code checkConsistency()} with the configured timeout,
+     * wrapped in {@code Future.get(timeout)}; (4) dispose the session in a
+     * {@code finally} block; (5) return {@link ConsistencyAfterAdditionResult}
+     * with status, timing, and optional explanation.
+     *
+     * @param sourceOntology the source ontology (not modified)
+     * @param ontologyId     the source ontology ID (for caching/diagnostics)
+     * @param claimId        the claim ID (for diagnostics)
+     * @param claimAxiom     the axiom to add to the temporary ontology
+     * @param reasonerName   the reasoner to use (HermiT/ELK/Openllet); if empty,
+     *                       auto-select based on the ontology's OWL profile
+     * @param timeout        the timeout for the consistency check; if null,
+     *                       a default of 60 seconds is used
+     * @return a {@link ServiceResult} with the
+     *         {@link ConsistencyAfterAdditionResult} on success, or an error
+     *         with code {@link org.owl4agents.core.ErrorCode#CLAIM_CONSISTENCY_CHECK_FAILED}
+     *         on failure
+     */
+    ServiceResult<ConsistencyAfterAdditionResult> checkConsistencyAfterAdding(
+            OWLOntology sourceOntology,
+            OntologyId ontologyId,
+            String claimId,
+            OWLAxiom claimAxiom,
+            Optional<String> reasonerName,
+            Duration timeout);
+
+    /**
+     * v0.8.5: Check whether the source ontology (without any added axiom)
+     * is consistent. The result SHALL be cached keyed by
+     * {@code (ontologyId, fingerprint, reasonerName, importsState)} to avoid
+     * redundant checks during batch processing. The cache SHALL be
+     * invalidated on ontology reload, checksum change, import change,
+     * reasoner change, or workspace change.
+     *
+     * @param ontologyId   the source ontology ID
+     * @param reasonerName the reasoner to use; if empty, auto-select
+     * @return a {@link ServiceResult} with {@link Boolean#TRUE} when the
+     *         source is consistent, {@link Boolean#FALSE} when inconsistent,
+     *         or an error with code
+     *         {@link org.owl4agents.core.ErrorCode#SOURCE_ONTOLOGY_INCONSISTENT}
+     *         is NOT returned here (that code is for claim-verification stage 2
+     *         precondition failure; this method returns a plain
+     *         {@code false} boolean result when the source is inconsistent)
+     */
+    ServiceResult<Boolean> checkSourceOntologyConsistency(
+            OntologyId ontologyId,
+            Optional<String> reasonerName);
+
+    /**
+     * v0.8.5 (task 6.8): Check whether the given pre-built axiom is entailed
+     * by the ontology. This method accepts a pre-built {@link OWLAxiom}
+     * (unlike the existing {@link #checkEntailment} which takes
+     * {@code String axiomType + Map params}) to guarantee reference equality
+     * between the entailment axiom and the exact-consistency axiom (D2).
+     *
+     * <p>The method SHALL: (1) check the asserted fast-path
+     * ({@code ontology.containsAxiom(axiom, Imports.INCLUDED)}); if asserted,
+     * return SUPPORTED immediately without invoking the reasoner; (2) otherwise,
+     * call {@code reasoner.isEntailed(axiom)} with ELK exception isolation
+     * (ELK throws on unsupported axiom types — return
+     * {@link EntailmentResult#UNSUPPORTED_AXIOM_TYPE}).
+     *
+     * @param ontology     the source ontology
+     * @param ontologyId   the source ontology ID
+     * @param axiom        the pre-built axiom to check
+     * @param reasonerName the reasoner to use; if empty, auto-select
+     * @return a {@link ServiceResult} with {@link EntailmentResult}
+     *         ({@code ENTAILED}, {@code NOT_ENTAILED}, or
+     *         {@code UNSUPPORTED_AXIOM_TYPE})
+     */
+    ServiceResult<EntailmentResult> checkAxiomEntailment(
+            OWLOntology ontology,
+            OntologyId ontologyId,
+            OWLAxiom axiom,
+            Optional<String> reasonerName);
 }

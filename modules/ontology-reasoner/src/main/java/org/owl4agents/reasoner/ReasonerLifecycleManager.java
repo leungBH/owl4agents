@@ -158,7 +158,8 @@ public class ReasonerLifecycleManager implements OntologyReloadListener {
             OWLReasonerAdapter adapter = entry.getValue();
             capabilities.add(new ReasonerCapability(
                 adapter.getName(), adapter.getSupportedProfiles(),
-                adapter.getSupportedOperations(), adapter.supportsExplanation()));
+                adapter.getSupportedOperations(), adapter.supportsExplanation(),
+                adapter.supportsConsistency(), adapter.supportsTemporaryOntology()));
         }
         return new ReasonerListResult(capabilities);
     }

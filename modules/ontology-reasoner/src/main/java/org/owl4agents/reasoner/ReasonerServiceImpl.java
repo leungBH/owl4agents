@@ -38,6 +38,40 @@ public class ReasonerServiceImpl implements ReasonerService, org.owl4agents.owla
     private final java.util.concurrent.ConcurrentHashMap<String, Map<String, Set<String>>> inferredHierarchyCache =
         new java.util.concurrent.ConcurrentHashMap<>();
 
+    // v0.8.5 D5/D7: Source ontology consistency cache.
+    // Key = "<ontologyId>|<fingerprint>|<reasonerName>|<importsState>"
+    // Value = Boolean (true = consistent, false = inconsistent).
+    // Bounded LRU cache (max 256 entries) with synchronized access.
+    private final java.util.LinkedHashMap<String, Boolean> sourceConsistencyCache =
+        new java.util.LinkedHashMap<>(64, 0.75f, true);
+    private static final int SOURCE_CONSISTENCY_CACHE_MAX = 256;
+    private long sourceConsistencyCacheHits = 0;
+    private long sourceConsistencyCacheMisses = 0;
+    private long sourceConsistencyCacheEvictions = 0;
+
+    // v0.8.5 D7: Platform-thread ExecutorService for exact consistency checks.
+    // NOT virtual threads (HermiT/Openllet use synchronized blocks that pin
+    // virtual thread carriers, preventing unmount on timeout).
+    private final java.util.concurrent.ExecutorService exactCheckExecutor =
+        java.util.concurrent.Executors.newCachedThreadPool(r -> {
+            Thread t = new Thread(r, "owl4agents-exact-check");
+            t.setDaemon(true);
+            return t;
+        });
+
+    // v0.8.5 D3/D4: TemporaryOntologyFactory + TransientReasonerSession collaborators.
+    private final TemporaryOntologyFactory temporaryOntologyFactory = new TemporaryOntologyFactory();
+
+    // v0.8.5 P1 fix: Cached exact-check session per (ontologyId, reasonerName).
+    // The base ontology copy (without claim axiom) and reasoner are created once
+    // and reused across claims. Each claim axiom is added via applyChange(AddAxiom),
+    // consistency is checked, then the axiom is removed via applyChange(RemoveAxiom)
+    // to restore the base state. This reduces per-claim cost from ~5s (copy + reasoner
+    // init for Mondo 226MB) to milliseconds (incremental consistency check).
+    // Cache is invalidated on ontology reload (see onOntologyReloaded).
+    private final java.util.concurrent.ConcurrentHashMap<String, CachedExactCheckSession> exactCheckSessionCache =
+        new java.util.concurrent.ConcurrentHashMap<>();
+
     /**
      * Get the lifecycle manager for sharing with other services (e.g. consistency analysis).
      */
@@ -122,16 +156,26 @@ public class ReasonerServiceImpl implements ReasonerService, org.owl4agents.owla
         this.ontologyCache.addReloadListener(this);
     }
 
-    // ── OntologyReloadListener implementation (v0.8.4 Decision 6) ──
+    // ── OntologyReloadListener implementation (v0.8.4 Decision 6, v0.8.5 D5) ──
 
     @Override
     public void onOntologyReloaded(OntologyId ontologyId) {
         inferredHierarchyCache.remove(ontologyId.id());
+        // v0.8.5 D5: invalidate source consistency cache entries for this ontology
+        invalidateSourceConsistencyCache(ontologyId.id());
+        // v0.8.5 P1: invalidate cached exact-check session for this ontology
+        invalidateExactCheckSessionCache(ontologyId.id());
     }
 
     @Override
     public void onAllOntologiesReloaded() {
         inferredHierarchyCache.clear();
+        // v0.8.5 D5: clear all source consistency cache entries
+        synchronized (sourceConsistencyCache) {
+            sourceConsistencyCache.clear();
+        }
+        // v0.8.5 P1: close all cached exact-check sessions
+        closeAllExactCheckSessionCache();
     }
 
     @Override
@@ -569,7 +613,7 @@ public class ReasonerServiceImpl implements ReasonerService, org.owl4agents.owla
             OWLReasonerAdapter newAdapter = lifecycleManager.getOrCreateReasoner(
                 ontologyId, effectiveReasonerName, ontology, detectedProfile, false);
 
-            boolean entailed = checkAxiomEntailment(newAdapter, ontologyId, ontology, axiomType, parameters);
+            boolean entailed = checkAxiomEntailmentByType(newAdapter, ontologyId, ontology, axiomType, parameters);
             String source = determineSource(ontologyId, ontology, axiomType, parameters);
 
             return ServiceResult.success(
@@ -579,7 +623,7 @@ public class ReasonerServiceImpl implements ReasonerService, org.owl4agents.owla
                 ResultMetadata.empty());
         }
 
-        boolean entailed = checkAxiomEntailment(adapter.get(), ontologyId, ontology, axiomType, parameters);
+        boolean entailed = checkAxiomEntailmentByType(adapter.get(), ontologyId, ontology, axiomType, parameters);
         String source = determineSource(ontologyId, ontology, axiomType, parameters);
 
         return ServiceResult.success(
@@ -842,7 +886,7 @@ public class ReasonerServiceImpl implements ReasonerService, org.owl4agents.owla
         }
     }
 
-    private boolean checkAxiomEntailment(OWLReasonerAdapter adapter, OntologyId ontologyId, OWLOntology ontology,
+    private boolean checkAxiomEntailmentByType(OWLReasonerAdapter adapter, OntologyId ontologyId, OWLOntology ontology,
                                            String axiomType, Map<String, String> parameters) {
         OWLDataFactory df = ontology.getOWLOntologyManager().getOWLDataFactory();
 
@@ -1577,5 +1621,581 @@ public class ReasonerServiceImpl implements ReasonerService, org.owl4agents.owla
             }
             pos = valEnd + 1;
         }
+    }
+
+    // ════════════════════════════════════════════════════════════════════════
+    // v0.8.5: Exact consistency check pipeline (tasks 6.1-6.8)
+    // ════════════════════════════════════════════════════════════════════════
+
+    @Override
+    public ServiceResult<org.owl4agents.core.model.ConsistencyAfterAdditionResult> checkConsistencyAfterAdding(
+            OWLOntology sourceOntology,
+            OntologyId ontologyId,
+            String claimId,
+            OWLAxiom claimAxiom,
+            Optional<String> reasonerName,
+            java.time.Duration timeout) {
+
+        long totalStart = System.nanoTime();
+        if (sourceOntology == null) {
+            return ServiceResult.error(ErrorCode.CLAIM_CONSISTENCY_CHECK_FAILED,
+                "Source ontology must not be null.");
+        }
+        if (claimAxiom == null) {
+            return ServiceResult.error(ErrorCode.CLAIM_CONSISTENCY_CHECK_FAILED,
+                "Claim axiom must not be null.");
+        }
+        java.time.Duration effectiveTimeout = (timeout != null) ? timeout : java.time.Duration.ofSeconds(60);
+
+        // Resolve reasoner name (auto-select if not specified)
+        String detectedProfile = detectProfile(ontologyId, sourceOntology);
+        String effectiveReasoner = resolveReasonerName(reasonerName, detectedProfile, false);
+
+        // v0.8.5 P1: get or create cached exact-check session (base copy + reasoner).
+        // On cache hit, temporaryCopyMs and reasonerInitMs are 0 (reused).
+        // On cache miss, creates base ontology copy + initializes reasoner (expensive).
+        long[] sessionTiming = new long[2]; // [temporaryCopyMs, reasonerInitMs]
+        CachedExactCheckSession cached = getOrCreateCachedSession(
+            sourceOntology, ontologyId.id(), effectiveReasoner, effectiveTimeout, sessionTiming);
+        long temporaryCopyMs = sessionTiming[0];
+        long reasonerInitMs = sessionTiming[1];
+
+        if (cached == null) {
+            long totalMs = msSince(totalStart);
+            String phase = (temporaryCopyMs > 0 && reasonerInitMs == 0)
+                ? "Temporary ontology creation failed"
+                : "Transient reasoner init failed";
+            return ServiceResult.success(
+                new org.owl4agents.core.model.ConsistencyAfterAdditionResult(
+                    ontologyId, claimId, effectiveReasoner,
+                    org.owl4agents.core.model.ConsistencyAfterAdditionStatus.ERROR,
+                    claimAxiom.toString(), totalMs, false, (reasonerInitMs > 0 || temporaryCopyMs == 0),
+                    Optional.of(phase),
+                    java.util.List.of(),
+                    new org.owl4agents.core.model.PerStageTiming(
+                        null, null, null, temporaryCopyMs, reasonerInitMs, null, null, totalMs)),
+                ResultMetadata.empty());
+        }
+
+        // Acquire opLock to serialize add/check/remove on the cached ontology.
+        // This ensures only one claim is processed at a time per ontology.
+        cached.opLock.lock();
+        try {
+            OWLOntology tempOntology = cached.baseHandle.ontology();
+            org.semanticweb.owlapi.model.OWLOntologyManager tempManager =
+                tempOntology.getOWLOntologyManager();
+
+            // Add claim axiom to the base ontology (incremental, O(ms))
+            tempManager.applyChange(new org.semanticweb.owlapi.model.AddAxiom(tempOntology, claimAxiom));
+
+            try {
+                // Run consistency check wrapped in Future.get(timeout) (D7)
+                long consistencyCheckStart = System.nanoTime();
+                java.util.concurrent.Future<org.owl4agents.core.model.ConsistencyResult> future =
+                    exactCheckExecutor.submit(() -> cached.session.checkConsistency());
+
+                org.owl4agents.core.model.ConsistencyResult cr;
+                org.owl4agents.core.model.ConsistencyAfterAdditionStatus status;
+                Optional<String> diagnostic = Optional.empty();
+                java.util.List<String> explanationAxioms = java.util.List.of();
+
+                try {
+                    cr = future.get(effectiveTimeout.toNanos(), java.util.concurrent.TimeUnit.NANOSECONDS);
+                    long consistencyCheckMs = msSince(consistencyCheckStart);
+
+                    if (cr.consistent()) {
+                        status = org.owl4agents.core.model.ConsistencyAfterAdditionStatus.CONSISTENT;
+                    } else {
+                        status = org.owl4agents.core.model.ConsistencyAfterAdditionStatus.INCONSISTENT;
+                        // Attempt explanation if supported (Openllet)
+                        long explanationStart = System.nanoTime();
+                        if (cached.session.supportsExplanation()) {
+                            try {
+                                org.owl4agents.core.model.InconsistencyExplanation expl =
+                                    cached.session.explainInconsistency();
+                                explanationAxioms = flattenExplanation(expl);
+                            } catch (Exception e) {
+                                // explanation is best-effort
+                            }
+                        }
+                        @SuppressWarnings("unused")
+                        long explanationMs = msSince(explanationStart);
+                    }
+
+                    long totalMs = msSince(totalStart);
+                    return ServiceResult.success(
+                        new org.owl4agents.core.model.ConsistencyAfterAdditionResult(
+                            ontologyId, claimId, effectiveReasoner, status,
+                            claimAxiom.toString(), totalMs, true, true,
+                            diagnostic, explanationAxioms,
+                            new org.owl4agents.core.model.PerStageTiming(
+                                null, null, null, temporaryCopyMs, reasonerInitMs,
+                                consistencyCheckMs, null, totalMs)),
+                        ResultMetadata.empty());
+
+                } catch (java.util.concurrent.TimeoutException te) {
+                    future.cancel(true);
+                    long consistencyCheckMs = msSince(consistencyCheckStart);
+                    long totalMs = msSince(totalStart);
+                    status = org.owl4agents.core.model.ConsistencyAfterAdditionStatus.TIMEOUT;
+                    diagnostic = Optional.of("Reasoner exceeded timeout of " + effectiveTimeout.toMillis() + "ms (precision: nanos)");
+                    // On timeout, the reasoner may be in a corrupted state —
+                    // invalidate the cache entry and close the session.
+                    invalidateExactCheckSessionCache(ontologyId.id());
+                    return ServiceResult.success(
+                        new org.owl4agents.core.model.ConsistencyAfterAdditionResult(
+                            ontologyId, claimId, effectiveReasoner, status,
+                            claimAxiom.toString(), totalMs, false, true,
+                            diagnostic, explanationAxioms,
+                            new org.owl4agents.core.model.PerStageTiming(
+                                null, null, null, temporaryCopyMs, reasonerInitMs,
+                                consistencyCheckMs, null, totalMs)),
+                        ResultMetadata.empty());
+
+                } catch (java.util.concurrent.ExecutionException ee) {
+                    long consistencyCheckMs = msSince(consistencyCheckStart);
+                    long totalMs = msSince(totalStart);
+                    Throwable cause = ee.getCause() != null ? ee.getCause() : ee;
+                    status = org.owl4agents.core.model.ConsistencyAfterAdditionStatus.ERROR;
+                    diagnostic = Optional.of("Reasoner threw exception: " +
+                        cause.getClass().getSimpleName() + ": " + cause.getMessage());
+                    // On exception, the reasoner may be in a corrupted state —
+                    // invalidate the cache entry and close the session.
+                    invalidateExactCheckSessionCache(ontologyId.id());
+                    return ServiceResult.success(
+                        new org.owl4agents.core.model.ConsistencyAfterAdditionResult(
+                            ontologyId, claimId, effectiveReasoner, status,
+                            claimAxiom.toString(), totalMs, false, true,
+                            diagnostic, explanationAxioms,
+                            new org.owl4agents.core.model.PerStageTiming(
+                                null, null, null, temporaryCopyMs, reasonerInitMs,
+                                consistencyCheckMs, null, totalMs)),
+                        ResultMetadata.empty());
+
+                } catch (InterruptedException ie) {
+                    Thread.currentThread().interrupt();
+                    long consistencyCheckMs = msSince(consistencyCheckStart);
+                    long totalMs = msSince(totalStart);
+                    status = org.owl4agents.core.model.ConsistencyAfterAdditionStatus.ERROR;
+                    diagnostic = Optional.of("Consistency check interrupted");
+                    invalidateExactCheckSessionCache(ontologyId.id());
+                    return ServiceResult.success(
+                        new org.owl4agents.core.model.ConsistencyAfterAdditionResult(
+                            ontologyId, claimId, effectiveReasoner, status,
+                            claimAxiom.toString(), totalMs, false, true,
+                            diagnostic, explanationAxioms,
+                            new org.owl4agents.core.model.PerStageTiming(
+                                null, null, null, temporaryCopyMs, reasonerInitMs,
+                                consistencyCheckMs, null, totalMs)),
+                        ResultMetadata.empty());
+                }
+            } finally {
+                // Always remove the claim axiom to restore base ontology state.
+                // Best-effort: if this fails, the cache entry is invalidated to
+                // avoid corrupting subsequent checks.
+                try {
+                    tempManager.applyChange(
+                        new org.semanticweb.owlapi.model.RemoveAxiom(tempOntology, claimAxiom));
+                } catch (Exception e) {
+                    // Axiom removal failed — invalidate cache to prevent stale state
+                    invalidateExactCheckSessionCache(ontologyId.id());
+                }
+            }
+        } finally {
+            cached.opLock.unlock();
+        }
+    }
+
+    @Override
+    public ServiceResult<Boolean> checkSourceOntologyConsistency(
+            OntologyId ontologyId, Optional<String> reasonerName) {
+        try {
+            OWLOntology ontology = loadOntology(ontologyId);
+            String detectedProfile = detectProfile(ontologyId, ontology);
+            String effectiveReasoner = resolveReasonerName(reasonerName, detectedProfile, false);
+
+            // D5: check cache first
+            String fingerprint = computeFingerprint(ontologyId, ontology);
+            String importsState = computeImportsState(ontology);
+            String cacheKey = buildSourceConsistencyCacheKey(ontologyId.id(), fingerprint, effectiveReasoner, importsState);
+
+            Boolean cached = getSourceConsistencyCacheEntry(cacheKey);
+            if (cached != null) {
+                sourceConsistencyCacheHits++;
+                return ServiceResult.success(cached, ResultMetadata.empty());
+            }
+            sourceConsistencyCacheMisses++;
+
+            // Run consistency check via the lifecycle manager (reuses the cached adapter)
+            OWLReasonerAdapter adapter = lifecycleManager.getOrCreateReasoner(
+                ontologyId, effectiveReasoner, ontology, detectedProfile, false);
+            org.owl4agents.core.model.ConsistencyResult cr = adapter.checkConsistency(ontologyId.id());
+            boolean consistent = cr.consistent();
+
+            // Cache the result
+            putSourceConsistencyCacheEntry(cacheKey, consistent);
+
+            return ServiceResult.success(consistent, ResultMetadata.empty());
+        } catch (OWLOntologyCreationException e) {
+            return ServiceResult.error(ErrorCode.CLASSIFICATION_FAILED, e.getMessage());
+        } catch (IllegalArgumentException e) {
+            if (e.getMessage() != null && (e.getMessage().contains("Unknown reasoner")
+                    || e.getMessage().contains("PROFILE_NOT_SUPPORTED"))) {
+                return ServiceResult.error(ErrorCode.PROFILE_NOT_SUPPORTED, e.getMessage());
+            }
+            return ServiceResult.error(ErrorCode.CLASSIFICATION_FAILED, e.getMessage());
+        }
+    }
+
+    @Override
+    public ServiceResult<EntailmentResult> checkAxiomEntailment(
+            OWLOntology ontology, OntologyId ontologyId,
+            OWLAxiom axiom, Optional<String> reasonerName) {
+        if (ontology == null || axiom == null) {
+            return ServiceResult.error(ErrorCode.INVALID_AXIOM_PARAMETERS,
+                "Ontology and axiom must not be null.");
+        }
+
+        // D1 stage 3 asserted fast-path: if the axiom is already in the
+        // ontology's asserted axiom set, return ENTAILED immediately
+        // without invoking the reasoner. This prevents false UNKNOWN
+        // verdicts when a reasoner (e.g. ELK) does not support
+        // isEntailed() for certain axiom types but the axiom is trivially
+        // present in the ontology.
+        try {
+            if (ontology.containsAxiom(axiom, true)) {
+                return ServiceResult.success(
+                    new EntailmentResult(ontologyId.id(), axiom.getAxiomType().getName(),
+                        EntailmentResult.ENTAILED, "asserted", "", ""),
+                    ResultMetadata.empty());
+            }
+            // v0.8.5: DifferentIndividuals subset matching. The ontology
+            // may assert a single AllDifferent axiom over N individuals
+            // (e.g. DifferentIndividuals(America, England, France,
+            // Germany, Italy)) while the query asks about a pair (e.g.
+            // France vs Germany). containsAxiom returns false for the
+            // 2-individual axiom because the asserted axiom has 5
+            // individuals. Recognize this case as asserted, since the
+            // pairwise different-from relationship is explicitly stated
+            // in the source ontology.
+            if (axiom instanceof OWLDifferentIndividualsAxiom queryDiff) {
+                java.util.Set<OWLIndividual> queryInds = queryDiff.getIndividuals();
+                for (OWLDifferentIndividualsAxiom assertedDiff :
+                        ontology.getAxioms(AxiomType.DIFFERENT_INDIVIDUALS, Imports.INCLUDED)) {
+                    if (assertedDiff.getIndividuals().containsAll(queryInds)) {
+                        return ServiceResult.success(
+                            new EntailmentResult(ontologyId.id(), axiom.getAxiomType().getName(),
+                                EntailmentResult.ENTAILED, "asserted", "", ""),
+                            ResultMetadata.empty());
+                    }
+                }
+            }
+        } catch (Exception e) {
+            // Fall through to reasoner check
+        }
+
+        // Resolve reasoner
+        String detectedProfile = detectProfile(ontologyId, ontology);
+        String effectiveReasoner = resolveReasonerName(reasonerName, detectedProfile, false);
+
+        try {
+            OWLReasonerAdapter adapter = lifecycleManager.getOrCreateReasoner(
+                ontologyId, effectiveReasoner, ontology, detectedProfile, false);
+            if (!adapter.isActive()) {
+                adapter.initialize(ontology);
+            }
+
+            try {
+                boolean entailed = adapter.getUnderlyingReasoner().isEntailed(axiom);
+                return ServiceResult.success(
+                    new EntailmentResult(ontologyId.id(), axiom.getAxiomType().getName(),
+                        entailed ? EntailmentResult.ENTAILED : EntailmentResult.NOT_ENTAILED,
+                        "inferred", effectiveReasoner, ""),
+                    ResultMetadata.empty());
+            } catch (org.semanticweb.owlapi.model.OWLRuntimeException e) {
+                // ELK throws on unsupported axiom types — return UNSUPPORTED_AXIOM_TYPE
+                return ServiceResult.success(
+                    new EntailmentResult(ontologyId.id(), axiom.getAxiomType().getName(),
+                        EntailmentResult.UNSUPPORTED_AXIOM_TYPE, "unsupported",
+                        effectiveReasoner, e.getClass().getSimpleName()),
+                    ResultMetadata.empty());
+            }
+        } catch (IllegalArgumentException e) {
+            if (e.getMessage() != null && (e.getMessage().contains("Unknown reasoner")
+                    || e.getMessage().contains("PROFILE_NOT_SUPPORTED"))) {
+                return ServiceResult.error(ErrorCode.PROFILE_NOT_SUPPORTED, e.getMessage());
+            }
+            return ServiceResult.error(ErrorCode.CLASSIFICATION_FAILED, e.getMessage());
+        } catch (Exception e) {
+            return ServiceResult.error(ErrorCode.CLASSIFICATION_FAILED, e.getMessage());
+        }
+    }
+
+    // ── v0.8.5 helpers ──────────────────────────────────────────────────
+
+    private static long msSince(long startNanos) {
+        return (System.nanoTime() - startNanos) / 1_000_000L;
+    }
+
+    /**
+     * Flatten an {@link org.owl4agents.core.model.InconsistencyExplanation} into
+     * a list of Manchester-syntax axiom description strings (D10).
+     */
+    private static java.util.List<String> flattenExplanation(
+            org.owl4agents.core.model.InconsistencyExplanation expl) {
+        if (expl == null || expl.conflictingAxiomSets() == null) {
+            return java.util.List.of();
+        }
+        java.util.List<String> result = new java.util.ArrayList<>();
+        for (var set : expl.conflictingAxiomSets()) {
+            if (set.axiomDescriptions() != null) {
+                result.addAll(set.axiomDescriptions());
+            }
+        }
+        return result;
+    }
+
+    /**
+     * Compute a SHA-256 fingerprint of the source ontology file content.
+     * Used as part of the source consistency cache key (D5).
+     */
+    private String computeFingerprint(OntologyId ontologyId, OWLOntology ontology) {
+        try {
+            Path ontologyPath = resolveOntologyPathInternal(ontologyId);
+            if (ontologyPath != null && Files.exists(ontologyPath)) {
+                java.security.MessageDigest md = java.security.MessageDigest.getInstance("SHA-256");
+                try (InputStream is = Files.newInputStream(ontologyPath)) {
+                    byte[] buf = new byte[8192];
+                    int n;
+                    while ((n = is.read(buf)) != -1) {
+                        md.update(buf, 0, n);
+                    }
+                }
+                byte[] hash = md.digest();
+                StringBuilder sb = new StringBuilder();
+                for (byte b : hash) {
+                    sb.append(String.format("%02x", b));
+                }
+                return sb.toString();
+            }
+        } catch (Exception e) {
+            // fall through to ontology-based fingerprint
+        }
+        // Fallback: hash the axioms directly
+        int hash = ontology.getAxioms(Imports.INCLUDED).hashCode();
+        return Integer.toHexString(hash);
+    }
+
+    /**
+     * Compute a hash of the sorted set of all direct and transitive import
+     * IRIs from the source ontology (D5).
+     */
+    private String computeImportsState(OWLOntology ontology) {
+        try {
+            java.util.List<String> iris = ontology.getImportsDeclarations().stream()
+                .map(decl -> decl.getIRI().toString())
+                .sorted()
+                .toList();
+            if (iris.isEmpty()) return "none";
+            java.security.MessageDigest md = java.security.MessageDigest.getInstance("SHA-256");
+            for (String iri : iris) {
+                md.update(iri.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+                md.update((byte) ',');
+            }
+            byte[] hash = md.digest();
+            StringBuilder sb = new StringBuilder();
+            for (byte b : hash) {
+                sb.append(String.format("%02x", b));
+            }
+            return sb.toString();
+        } catch (Exception e) {
+            return "unknown";
+        }
+    }
+
+    private static String buildSourceConsistencyCacheKey(
+            String ontologyId, String fingerprint, String reasonerName, String importsState) {
+        return ontologyId + "|" + fingerprint + "|" + reasonerName + "|" + importsState;
+    }
+
+    private Boolean getSourceConsistencyCacheEntry(String key) {
+        synchronized (sourceConsistencyCache) {
+            return sourceConsistencyCache.get(key);
+        }
+    }
+
+    private void putSourceConsistencyCacheEntry(String key, Boolean value) {
+        synchronized (sourceConsistencyCache) {
+            if (sourceConsistencyCache.size() >= SOURCE_CONSISTENCY_CACHE_MAX) {
+                // LRU eviction: remove the eldest entry (LinkedHashMap with
+                // accessOrder=true puts eldest at iteration head)
+                java.util.Iterator<String> it = sourceConsistencyCache.keySet().iterator();
+                if (it.hasNext()) {
+                    it.next();
+                    it.remove();
+                    sourceConsistencyCacheEvictions++;
+                }
+            }
+            sourceConsistencyCache.put(key, value);
+        }
+    }
+
+    private void invalidateSourceConsistencyCache(String ontologyId) {
+        synchronized (sourceConsistencyCache) {
+            sourceConsistencyCache.entrySet().removeIf(e -> e.getKey().startsWith(ontologyId + "|"));
+        }
+    }
+
+    public long getSourceConsistencyCacheHits() {
+        return sourceConsistencyCacheHits;
+    }
+
+    public long getSourceConsistencyCacheMisses() {
+        return sourceConsistencyCacheMisses;
+    }
+
+    public long getSourceConsistencyCacheEvictions() {
+        return sourceConsistencyCacheEvictions;
+    }
+
+    public int getSourceConsistencyCacheSize() {
+        synchronized (sourceConsistencyCache) {
+            return sourceConsistencyCache.size();
+        }
+    }
+
+    /**
+     * Resolve the canonical ontology file path for the given ontology ID.
+     * Mirrors {@link OntologyCache}'s path resolution.
+     */
+    private Path resolveOntologyPathInternal(OntologyId ontologyId) {
+        return Path.of(workspaceBasePath, workspaceName, "ontologies",
+            ontologyId.id(), "canonical", "ontology.owl");
+    }
+
+    // ════════════════════════════════════════════════════════════════════════
+    // v0.8.5 P1 fix: Cached exact-check session for warm performance
+    // ════════════════════════════════════════════════════════════════════════
+
+    /**
+     * Cached exact-check session: holds a base ontology copy (without any
+     * claim axiom) and a reasoner initialized on it. Claim axioms are
+     * added/removed incrementally via {@code applyChange} for O(ms) checks
+     * instead of O(seconds) copy+init per claim.
+     *
+     * <p>Thread safety: {@link #opLock} serializes add/check/remove operations
+     * so that only one claim is processed at a time per ontology (per the
+     * design constraint that reasoner-using tool calls are serialized).
+     */
+    static final class CachedExactCheckSession {
+        final TemporaryOntologyHandle baseHandle;
+        final TransientReasonerSession session;
+        final java.util.concurrent.locks.ReentrantLock opLock =
+            new java.util.concurrent.locks.ReentrantLock();
+
+        CachedExactCheckSession(TemporaryOntologyHandle baseHandle,
+                                TransientReasonerSession session) {
+            this.baseHandle = baseHandle;
+            this.session = session;
+        }
+
+        void close() {
+            try { session.close(); } catch (Exception ignored) {}
+            try { baseHandle.close(); } catch (Exception ignored) {}
+        }
+    }
+
+    /**
+     * Invalidate (and close) the cached exact-check session for the given
+     * ontology ID. Called on ontology reload.
+     */
+    private void invalidateExactCheckSessionCache(String ontologyId) {
+        // Remove all entries whose key starts with "ontologyId|"
+        java.util.List<String> keysToRemove = new java.util.ArrayList<>();
+        for (String key : exactCheckSessionCache.keySet()) {
+            if (key.startsWith(ontologyId + "|")) {
+                keysToRemove.add(key);
+            }
+        }
+        for (String key : keysToRemove) {
+            CachedExactCheckSession cached = exactCheckSessionCache.remove(key);
+            if (cached != null) {
+                cached.close();
+            }
+        }
+    }
+
+    /**
+     * Close all cached exact-check sessions. Called on full reload and shutdown.
+     */
+    private void closeAllExactCheckSessionCache() {
+        java.util.Iterator<java.util.Map.Entry<String, CachedExactCheckSession>> it =
+            exactCheckSessionCache.entrySet().iterator();
+        while (it.hasNext()) {
+            java.util.Map.Entry<String, CachedExactCheckSession> entry = it.next();
+            entry.getValue().close();
+            it.remove();
+        }
+    }
+
+    /**
+     * Get or create a cached exact-check session for the given ontology and
+     * reasoner. On cache miss, creates the base ontology copy and initializes
+     * the reasoner (expensive for large ontologies). On cache hit, returns
+     * the existing session (O(1)).
+     *
+     * @return an array of {@code [CachedExactCheckSession, temporaryCopyMs, reasonerInitMs]};
+     *         on failure returns {@code null} (caller handles error)
+     */
+    private CachedExactCheckSession getOrCreateCachedSession(
+            OWLOntology sourceOntology,
+            String ontologyIdStr,
+            String effectiveReasoner,
+            java.time.Duration effectiveTimeout,
+            long[] timingOut) {
+
+        String cacheKey = ontologyIdStr + "|" + effectiveReasoner;
+        CachedExactCheckSession cached = exactCheckSessionCache.get(cacheKey);
+        if (cached != null) {
+            timingOut[0] = 0; // temporaryCopyMs
+            timingOut[1] = 0; // reasonerInitMs
+            return cached;
+        }
+
+        // Cache miss: create base copy (without claim axiom)
+        long tempCopyStart = System.nanoTime();
+        ServiceResult<TemporaryOntologyHandle> baseResult =
+            temporaryOntologyFactory.createBase(sourceOntology, TemporaryOntologyOptions.defaults());
+        timingOut[0] = msSince(tempCopyStart);
+
+        if (!baseResult.isSuccess()) {
+            return null;
+        }
+        TemporaryOntologyHandle baseHandle =
+            ((ServiceResult.Success<TemporaryOntologyHandle>) baseResult).data();
+
+        // Initialize reasoner on base ontology
+        long reasonerInitStart = System.nanoTime();
+        ServiceResult<TransientReasonerSession> sessionResult =
+            TransientReasonerSession.create(baseHandle.ontology(), effectiveReasoner, effectiveTimeout);
+        timingOut[1] = msSince(reasonerInitStart);
+
+        if (!sessionResult.isSuccess()) {
+            baseHandle.close();
+            return null;
+        }
+        TransientReasonerSession session =
+            ((ServiceResult.Success<TransientReasonerSession>) sessionResult).data();
+
+        CachedExactCheckSession newEntry = new CachedExactCheckSession(baseHandle, session);
+        CachedExactCheckSession existing = exactCheckSessionCache.putIfAbsent(cacheKey, newEntry);
+        if (existing != null) {
+            // Another thread won the race; close our new session, use existing
+            newEntry.close();
+            timingOut[0] = 0;
+            timingOut[1] = 0;
+            return existing;
+        }
+        return newEntry;
     }
 }

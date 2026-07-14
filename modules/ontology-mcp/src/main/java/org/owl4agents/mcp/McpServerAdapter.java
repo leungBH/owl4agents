@@ -1251,10 +1251,17 @@ public class McpServerAdapter {
 
  ClaimVerificationResult data = ((ServiceResult.Success<ClaimVerificationResult>) result).data();
  Map<String, Object> responseData = new HashMap<>();
+ // v0.8.5: schema v2 fields
+ responseData.put("schemaVersion", "claim-verification-result/2");
+ responseData.put("executionStatus", data.executionStatus().jsonName());
  responseData.put("claimId", data.claimId());
  responseData.put("ontologyId", data.ontologyId());
  responseData.put("claimType", data.claimType().jsonName());
- responseData.put("verdict", data.verdict().jsonName());
+ // v0.8.5: semanticVerdict is null when executionStatus != completed
+ responseData.put("semanticVerdict", data.verdict() != null ? data.verdict().jsonName() : null);
+ if (data.errorCode().isPresent()) {
+ responseData.put("errorCode", data.errorCode().get().code());
+ }
  responseData.put("truncated", data.truncated());
  responseData.put("totalEvidenceAvailable", data.totalEvidenceAvailable());
  if (data.unknownReason().isPresent()) {
@@ -1265,6 +1272,20 @@ public class McpServerAdapter {
  }
  if (data.reasonerName().isPresent()) {
  responseData.put("reasonerName", data.reasonerName().get());
+ }
+ // v0.8.5: per-stage timing metadata
+ PerStageTiming timing = data.perStageTiming();
+ if (timing != null) {
+ Map<String, Object> timingMap = new LinkedHashMap<>();
+ timingMap.put("axiomBuildMs", timing.axiomBuildMs());
+ timingMap.put("sourceConsistencyMs", timing.sourceConsistencyMs());
+ timingMap.put("entailmentMs", timing.entailmentMs());
+ timingMap.put("temporaryCopyMs", timing.temporaryCopyMs());
+ timingMap.put("reasonerInitMs", timing.reasonerInitMs());
+ timingMap.put("consistencyCheckMs", timing.consistencyCheckMs());
+ timingMap.put("explanationMs", timing.explanationMs());
+ timingMap.put("totalMs", timing.totalMs());
+ responseData.put("perStageTiming", timingMap);
  }
  List<Map<String, Object>> evidenceItems = data.evidence().stream()
  .map(e -> {
@@ -1967,6 +1988,8 @@ public class McpServerAdapter {
  */
  private Map<String, Object> serializeVerificationReport(AnswerVerificationReport report) {
  Map<String, Object> m = new LinkedHashMap<>();
+ // v0.8.5: schema v2
+ m.put("schemaVersion", "claim-verification-result/2");
  m.put("answerId", report.answerId());
  m.put("aggregateStatus", report.aggregateStatus().jsonName());
  m.put("claimResults", report.claimResults().stream()
@@ -1990,7 +2013,9 @@ public class McpServerAdapter {
  m.put("claimId", result.claimId());
  m.put("claimType", result.claimType().jsonName());
  m.put("required", result.required());
- m.put("verdict", result.verdict().jsonName());
+ // v0.8.5: null-safe verdict (ClaimWorkflowService wraps errored claims as
+ // UNKNOWN with diagnostics, but defensive null check prevents NPE).
+ m.put("verdict", result.verdict() != null ? result.verdict().jsonName() : null);
  if (result.unknownReason().isPresent()) {
  m.put("unknownReason", result.unknownReason().get());
  }

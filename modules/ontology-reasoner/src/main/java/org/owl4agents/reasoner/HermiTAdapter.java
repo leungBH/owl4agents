@@ -130,6 +130,10 @@ public class HermiTAdapter implements OWLReasonerAdapter {
     @Override
     public ConsistencyResult checkConsistency(String ontologyId) {
         checkActive();
+        // v0.8.5 P1: flush pending ontology changes (axiom add/remove) before
+        // querying consistency. Required for cached exact-check sessions where
+        // claim axioms are incrementally added/removed via applyChange.
+        reasoner.flush();
         boolean consistent = reasoner.isConsistent();
         List<String> unsatIRIs = new ArrayList<>();
         if (!consistent) {

@@ -32,6 +32,8 @@ public class ListReasonersCommand implements Callable<Integer> {
                 System.out.println("    Supported profiles: " + cap.supportedProfiles());
                 System.out.println("    Supported operations: " + cap.supportedOperations());
                 System.out.println("    Explanation supported: " + cap.explanationSupported());
+                System.out.println("    Consistency supported: " + cap.supportsConsistency());
+                System.out.println("    Temporary ontology supported: " + cap.supportsTemporaryOntology());
             }
             return 0;
         } else {

@@ -147,9 +147,9 @@ class SubObjectPropertyVerificationTest {
         service.verify(claim);
 
         var log = stubReasoner.getCallLog();
-        assertTrue(log.contains("checkEntailment:SubObjectPropertyOf"),
-            "Should call checkEntailment with SubObjectPropertyOf (got: " + log + ")");
-        assertFalse(log.contains("checkEntailment:ObjectPropertyAssertion"),
+        assertTrue(log.contains("checkAxiomEntailment:SubObjectPropertyOf"),
+            "Should call checkAxiomEntailment with SubObjectPropertyOf (got: " + log + ")");
+        assertFalse(log.contains("checkAxiomEntailment:ObjectPropertyAssertion"),
             "Should NOT call ObjectPropertyAssertion for a subproperty claim (got: " + log + ")");
     }
 
@@ -163,7 +163,7 @@ class SubObjectPropertyVerificationTest {
 
         var log = stubReasoner.getCallLog();
         long subPropCalls = log.stream()
-            .filter(s -> s.equals("checkEntailment:SubObjectPropertyOf"))
+            .filter(s -> s.equals("checkAxiomEntailment:SubObjectPropertyOf"))
             .count();
         assertEquals(1, subPropCalls,
             "SubObjectPropertyOf should be checked exactly once on the asserted path "

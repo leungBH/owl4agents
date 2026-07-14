@@ -35,7 +35,7 @@ class CliJsonOutputTest {
         @Test
         @DisplayName("Supported verdict serializes without JsonIOException")
         void supportedVerdictSerializes() {
-            ClaimVerificationResult result = new ClaimVerificationResult(
+            ClaimVerificationResult result = ClaimVerificationResult.completed(
                 "claim-supported-001",
                 "v0.3-claim-verification",
                 ClaimType.SUBCLASS,
@@ -61,7 +61,7 @@ class CliJsonOutputTest {
 
             String json = gson.toJson(result);
             assertNotNull(json);
-            assertTrue(json.contains("\"verdict\":\"supported\""));
+            assertTrue(json.contains("\"semanticVerdict\":\"supported\""));
             assertTrue(json.contains("\"claimId\":\"claim-supported-001\""));
             assertTrue(json.contains("\"evidence\""));
         }
@@ -69,7 +69,7 @@ class CliJsonOutputTest {
         @Test
         @DisplayName("Unknown verdict with Optional fields serializes correctly")
         void unknownVerdictSerializes() {
-            ClaimVerificationResult result = new ClaimVerificationResult(
+            ClaimVerificationResult result = ClaimVerificationResult.completed(
                 "claim-unknown-001",
                 "v0.3-claim-verification",
                 ClaimType.SUBCLASS,
@@ -85,7 +85,7 @@ class CliJsonOutputTest {
 
             String json = gson.toJson(result);
             assertNotNull(json);
-            assertTrue(json.contains("\"verdict\":\"unknown\""));
+            assertTrue(json.contains("\"semanticVerdict\":\"unknown\""));
             assertTrue(json.contains("\"unknownReason\":\"insufficient_axioms\""));
             assertTrue(json.contains("\"unknownExplanation\":\"No entailment found for Goldfish→Fish\""));
         }
@@ -93,7 +93,7 @@ class CliJsonOutputTest {
         @Test
         @DisplayName("All-Optional-empty fields serialize as null")
         void allOptionalEmptySerializesAsNull() {
-            ClaimVerificationResult result = new ClaimVerificationResult(
+            ClaimVerificationResult result = ClaimVerificationResult.completed(
                 "claim-minimal",
                 "v0.3-claim-verification",
                 ClaimType.ONTOLOGY_SCOPE,
@@ -258,7 +258,7 @@ class CliJsonOutputTest {
             assertNotNull(g);
 
             // Verify it can serialize Optional fields without exception
-            ClaimVerificationResult result = new ClaimVerificationResult(
+            ClaimVerificationResult result = ClaimVerificationResult.completed(
                 "test", "test", ClaimType.SUBCLASS, Verdict.SUPPORTED,
                 List.of(), Optional.empty(), Optional.empty(), Optional.empty(), Optional.empty(),
                 false, 0
@@ -270,7 +270,7 @@ class CliJsonOutputTest {
         @Test
         @DisplayName("GsonFactory serializeNulls is enabled")
         void gsonFactorySerializeNullsEnabled() {
-            ClaimVerificationResult result = new ClaimVerificationResult(
+            ClaimVerificationResult result = ClaimVerificationResult.completed(
                 "test", "test", ClaimType.SUBCLASS, Verdict.SUPPORTED,
                 List.of(), Optional.empty(), Optional.empty(), Optional.empty(), Optional.empty(),
                 false, 0
@@ -283,7 +283,7 @@ class CliJsonOutputTest {
         @Test
         @DisplayName("GsonFactory disableHtmlEscaping is enabled")
         void gsonFactoryDisableHtmlEscapingEnabled() {
-            ClaimVerificationResult result = new ClaimVerificationResult(
+            ClaimVerificationResult result = ClaimVerificationResult.completed(
                 "test", "test", ClaimType.SUBCLASS, Verdict.SUPPORTED,
                 List.of(new EvidenceItem(
                     "ev-1", "supporting", EvidenceKind.INFERRED_AXIOM,

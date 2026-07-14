@@ -68,7 +68,7 @@ class EvidenceGroundingServiceTest {
     }
 
     private ClaimVerificationResult supportedResult(Claim claim) {
-        return new ClaimVerificationResult(
+        return ClaimVerificationResult.completed(
             claim.claimId(), claim.ontologyId(), claim.type(),
             Verdict.SUPPORTED,
             List.of(new EvidenceItem(
@@ -87,7 +87,7 @@ class EvidenceGroundingServiceTest {
     }
 
     private ClaimVerificationResult unknownResult(Claim claim, UnknownReason reason) {
-        return new ClaimVerificationResult(
+        return ClaimVerificationResult.completed(
             claim.claimId(), claim.ontologyId(), claim.type(),
             Verdict.UNKNOWN,
             List.of(new EvidenceItem(
@@ -106,7 +106,7 @@ class EvidenceGroundingServiceTest {
     }
 
     private ClaimVerificationResult contradictedResult(Claim claim) {
-        return new ClaimVerificationResult(
+        return ClaimVerificationResult.completed(
             claim.claimId(), claim.ontologyId(), claim.type(),
             Verdict.CONTRADICTED,
             List.of(new EvidenceItem(
@@ -246,7 +246,7 @@ class EvidenceGroundingServiceTest {
             Claim claim = new Claim("c9", ClaimType.ONTOLOGY_CONSISTENCY, "test-ontology",
                 null, null, null,
                 Optional.empty(), Optional.empty(), Optional.empty());
-            ClaimVerificationResult verification = new ClaimVerificationResult(
+            ClaimVerificationResult verification = ClaimVerificationResult.completed(
                 "c9", "test-ontology", ClaimType.ONTOLOGY_CONSISTENCY,
                 Verdict.CONTRADICTED,
                 List.of(new EvidenceItem(

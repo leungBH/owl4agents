@@ -1,0 +1,48 @@
+<?xml version="1.0"?>
+<rdf:RDF xmlns="http://owl4agents.org/test/exact-consistency/existential-with-witness#"
+     xml:base="http://owl4agents.org/test/exact-consistency/existential-with-witness"
+     xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+     xmlns:owl="http://www.w3.org/2002/07/owl#"
+     xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#"
+     xmlns:xsd="http://www.w3.org/2001/XMLSchema#">
+    <owl:Ontology rdf:about="http://owl4agents.org/test/exact-consistency/existential-with-witness"/>
+    <owl:Class rdf:about="http://owl4agents.org/test/exact-consistency/existential-with-witness#C"/>
+    <owl:Class rdf:about="http://owl4agents.org/test/exact-consistency/existential-with-witness#D"/>
+    <owl:ObjectProperty rdf:about="http://owl4agents.org/test/exact-consistency/existential-with-witness#r"/>
+    <owl:NamedIndividual rdf:about="http://owl4agents.org/test/exact-consistency/existential-with-witness#b"/>
+    <owl:Class rdf:about="http://owl4agents.org/test/exact-consistency/existential-with-witness#C">
+        <rdfs:subClassOf>
+            <owl:Restriction>
+                <owl:onProperty rdf:resource="http://owl4agents.org/test/exact-consistency/existential-with-witness#r"/>
+                <owl:someValuesFrom>
+                    <owl:Class>
+                        <owl:oneOf rdf:parseType="Collection">
+                            <owl:NamedIndividual rdf:about="http://owl4agents.org/test/exact-consistency/existential-with-witness#b"/>
+                        </owl:oneOf>
+                    </owl:Class>
+                </owl:someValuesFrom>
+            </owl:Restriction>
+        </rdfs:subClassOf>
+    </owl:Class>
+    <owl:Class rdf:about="http://owl4agents.org/test/exact-consistency/existential-with-witness#D">
+        <rdfs:subClassOf>
+            <owl:Restriction>
+                <owl:onProperty rdf:resource="http://owl4agents.org/test/exact-consistency/existential-with-witness#r"/>
+                <owl:allValuesFrom>
+                    <owl:Class>
+                        <owl:complementOf>
+                            <owl:Class>
+                                <owl:oneOf rdf:parseType="Collection">
+                                    <owl:NamedIndividual rdf:about="http://owl4agents.org/test/exact-consistency/existential-with-witness#b"/>
+                                </owl:oneOf>
+                            </owl:Class>
+                        </owl:complementOf>
+                    </owl:Class>
+                </owl:allValuesFrom>
+            </owl:Restriction>
+        </rdfs:subClassOf>
+    </owl:Class>
+    <owl:NamedIndividual rdf:about="http://owl4agents.org/test/exact-consistency/existential-with-witness#a">
+        <rdf:type rdf:resource="http://owl4agents.org/test/exact-consistency/existential-with-witness#C"/>
+    </owl:NamedIndividual>
+</rdf:RDF>

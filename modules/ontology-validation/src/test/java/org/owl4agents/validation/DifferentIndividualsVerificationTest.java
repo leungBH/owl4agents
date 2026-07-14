@@ -97,10 +97,14 @@ class DifferentIndividualsVerificationTest {
     }
 
     @Test
-    @DisplayName("TC-11: SameIndividual entailment yields CONTRADICTED")
-    void sameIndividualContradictsDifferentFrom() {
+    @DisplayName("TC-11: exact consistency check (O ∪ {α} inconsistent) yields CONTRADICTED")
+    void exactConsistencyInconsistentYieldsContradicted() {
+        // v0.8.5: In the 5-stage flow, CONTRADICTED is determined by the exact
+        // consistency check (stage 4: O ∪ {α} inconsistent), not by SameIndividual
+        // counter-evidence. Configure: DifferentIndividuals NOT_ENTAILED (stage 3)
+        // + O ∪ {α} inconsistent (stage 4) → CONTRADICTED.
         stubReasoner.withEntailmentResult("DifferentIndividuals", EntailmentResult.NOT_ENTAILED);
-        stubReasoner.withEntailmentResult("SameIndividual", EntailmentResult.ENTAILED);
+        stubReasoner.withConsistencyAfterAdditionStatus(ConsistencyAfterAdditionStatus.INCONSISTENT);
 
         Claim claim = buildClaim("c3", ClaimType.DIFFERENT_INDIVIDUALS, FRANCE, GERMANY);
         ServiceResult<ClaimVerificationResult> result = service.verify(claim);
@@ -108,7 +112,7 @@ class DifferentIndividualsVerificationTest {
         assertTrue(result.isSuccess());
         ClaimVerificationResult data = ((ServiceResult.Success<ClaimVerificationResult>) result).data();
         assertEquals(Verdict.CONTRADICTED, data.verdict(),
-            "DifferentIndividuals NOT_ENTAILED + SameIndividual ENTAILED should yield CONTRADICTED");
+            "DifferentIndividuals NOT_ENTAILED + O ∪ {α} inconsistent should yield CONTRADICTED");
     }
 
     @Test
@@ -136,9 +140,9 @@ class DifferentIndividualsVerificationTest {
         service.verify(claim);
 
         var log = stubReasoner.getCallLog();
-        assertTrue(log.contains("checkEntailment:DifferentIndividuals"),
-            "Should call checkEntailment with DifferentIndividuals (got: " + log + ")");
-        assertFalse(log.contains("checkEntailment:DisjointClasses"),
+        assertTrue(log.contains("checkAxiomEntailment:DifferentIndividuals"),
+            "Should call checkAxiomEntailment with DifferentIndividuals (got: " + log + ")");
+        assertFalse(log.contains("checkAxiomEntailment:DisjointClasses"),
             "Should NOT call DisjointClasses for a different_individuals claim (got: " + log + ")");
     }
 
@@ -155,10 +159,10 @@ class DifferentIndividualsVerificationTest {
 
         var log = stubReasoner.getCallLog();
         long differentFromCalls = log.stream()
-            .filter(s -> s.equals("checkEntailment:DifferentIndividuals"))
+            .filter(s -> s.equals("checkAxiomEntailment:DifferentIndividuals"))
             .count();
         long sameIndividualCalls = log.stream()
-            .filter(s -> s.equals("checkEntailment:SameIndividual"))
+            .filter(s -> s.equals("checkAxiomEntailment:SameIndividual"))
             .count();
         assertEquals(1, differentFromCalls,
             "DifferentIndividuals should be checked exactly once on the asserted path");

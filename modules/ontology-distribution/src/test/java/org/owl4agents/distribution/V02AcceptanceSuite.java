@@ -589,7 +589,7 @@ class V02AcceptanceSuite {
 
             // ReasonerCapability
             ReasonerCapability cap = new ReasonerCapability(
-                "HermiT", List.of("OWL 2 DL"), List.of("classify"), false);
+                "HermiT", List.of("OWL 2 DL"), List.of("classify"), false, true, true);
             assertEquals("HermiT", cap.name());
 
             // ClassRestrictionsResult

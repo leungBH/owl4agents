@@ -91,17 +91,32 @@ public class EvidenceContextCommand implements Callable<Integer> {
             int totalAvailableChars = estimateTotalChars(report);
             System.out.println(jsonlSerializer.serializeToJsonl(context, budgetCharsUsed, totalAvailableChars));
         } else if (jsonOutput) {
-            System.out.println(gson.toJson(context));
+            // v0.8.5: wrap with schemaVersion for schema v2 parity
+            Map<String, Object> output = new java.util.LinkedHashMap<>();
+            output.put("schemaVersion", "claim-verification-result/2");
+            output.put("evidenceContext", context);
+            System.out.println(gson.toJson(output));
         } else {
             System.out.println("Evidence context for answer '" + context.answerId() + "':");
             System.out.println("  Status: " + context.status().jsonName());
             System.out.println("  Claims: " + context.claims().size());
             System.out.println("  Omitted claims: " + context.omittedClaimCount());
             for (EvidenceContext.ClaimContextEntry entry : context.claims()) {
-                System.out.println("  Claim " + entry.id() + ": " + entry.verdict().jsonName()
+                // v0.8.5: null-safe verdict display (ClaimWorkflowResult.verdict
+                // may be null for errored claims wrapped as UNKNOWN).
+                String verdictStr = entry.verdict() != null ? entry.verdict().jsonName() : "(null)";
+                System.out.println("  Claim " + entry.id() + ": " + verdictStr
                     + " — " + entry.claimText()
                     + " (evidence: " + entry.evidence().size()
                     + ", omitted: " + entry.omittedEvidenceCount() + ")");
+                // v0.8.5: surface new evidence kinds (CONSISTENCY_REPORT,
+                // INCONSISTENCY_JUSTIFICATION, STRUCTURAL_CONFLICT_HINT) so
+                // reviewers can distinguish exact-consistency evidence from
+                // structural hints without parsing JSON.
+                for (WorkflowEvidenceEntry ev : entry.evidence()) {
+                    System.out.println("    [" + ev.kind() + "] " + ev.summary()
+                        + (ev.source() != null && !ev.source().isBlank() ? " (source: " + ev.source() + ")" : ""));
+                }
             }
             System.out.println("  Agent instructions:");
             for (String instruction : context.agentInstructions()) {

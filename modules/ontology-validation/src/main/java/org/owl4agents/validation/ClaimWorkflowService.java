@@ -116,6 +116,34 @@ public class ClaimWorkflowService {
             ClaimVerificationResult v03Result = ((ServiceResult.Success<ClaimVerificationResult>) verifyResult).data();
             Verdict verdict = v03Result.verdict();
 
+            // v0.8.5: handle errored ClaimVerificationResult (semanticVerdict
+            // is empty when executionStatus != COMPLETED). The 5-stage flow
+            // wraps errored results in ServiceResult.success(...), so
+            // isSuccess() is true but verdict() returns null. Treat as
+            // UNKNOWN with a diagnostic message.
+            if (verdict == null) {
+                String errorDetail = v03Result.errorCode().isPresent()
+                    ? v03Result.errorCode().get().code()
+                        + " (executionStatus=" + v03Result.executionStatus().jsonName() + ")"
+                    : "executionStatus=" + v03Result.executionStatus().jsonName();
+                ClaimWorkflowResult errorResult = new ClaimWorkflowResult(
+                    batchClaim.id(),
+                    batchClaim.type(),
+                    batchClaim.required(),
+                    Verdict.UNKNOWN,
+                    List.of(),
+                    Optional.of(UnknownReason.INSUFFICIENT_AXIOMS.jsonName()),
+                    Optional.empty(),
+                    Optional.empty(),
+                    Optional.of("Verification errored: " + errorDetail)
+                );
+                claimResults.add(errorResult);
+                unknownCount++;
+                if (batchClaim.required()) requiredCount++;
+                else optionalCount++;
+                continue;
+            }
+
             // Convert v0.3 evidence to workflow evidence entries
             List<WorkflowEvidenceEntry> workflowEvidence = convertEvidence(v03Result.evidence());
 

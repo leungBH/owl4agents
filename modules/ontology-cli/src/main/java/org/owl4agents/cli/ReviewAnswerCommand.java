@@ -177,8 +177,22 @@ public class ReviewAnswerCommand implements Callable<Integer> {
         // Add policy-dependent handling guidance
         java.util.List<String> handlingGuidance = buildHandlingGuidance(report.aggregateStatus(), policy);
 
+        // v0.8.5: per-claim diagnostics for errored claims (schema v2 parity).
+        // ClaimWorkflowService now wraps errored ClaimVerificationResult as
+        // UNKNOWN with a diagnostics message, so cr.diagnostics() carries
+        // the executionStatus/errorCode detail for the CLI display.
+        if (!jsonOutput && (outputPath == null || outputPath.isBlank())) {
+            for (ClaimWorkflowResult cr : report.claimResults()) {
+                String verdictStr = cr.verdict() != null ? cr.verdict().jsonName() : "(null)";
+                System.out.println("  Claim " + cr.claimId() + ": " + verdictStr
+                    + (cr.required() ? " (required)" : " (optional)")
+                    + (cr.diagnostics().isPresent() ? " — " + cr.diagnostics().get() : ""));
+            }
+        }
+
         if (jsonOutput) {
             Map<String, Object> output = new java.util.LinkedHashMap<>();
+            output.put("schemaVersion", "claim-verification-result/2");
             output.put("report", report);
             output.put("evidenceContext", context);
             output.put("policy", policy);
@@ -204,6 +218,7 @@ public class ReviewAnswerCommand implements Callable<Integer> {
             // When --out is specified in non-JSON mode, write JSON to file and print summary
             if (outputPath != null && !outputPath.isBlank()) {
                 Map<String, Object> output = new java.util.LinkedHashMap<>();
+                output.put("schemaVersion", "claim-verification-result/2");
                 output.put("report", report);
                 output.put("evidenceContext", context);
                 output.put("policy", policy);

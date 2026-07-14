@@ -540,9 +540,9 @@ class CliClaimVerificationTest {
         }
 
         @Test
-        @DisplayName("All 8 evidence kinds are defined")
+        @DisplayName("All 11 evidence kinds are defined (8 original + 3 v0.8.5 consistency kinds)")
         void allEvidenceKindsDefined() {
-            assertEquals(8, EvidenceKind.values().length);
+            assertEquals(11, EvidenceKind.values().length);
         }
 
         @Test

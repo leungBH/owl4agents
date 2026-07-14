@@ -86,10 +86,11 @@ class ComplexClassExpressionTest {
             ClaimVerificationResult data = ((ServiceResult.Success<ClaimVerificationResult>) result).data();
             assertEquals(Verdict.SUPPORTED, data.verdict());
 
-            // The complex-expression path is taken (calls checkEquivalentClassesEntailment).
+            // v0.8.5: the 5-stage flow calls checkAxiomEntailment (unified path)
+            // instead of the old checkEquivalentClassesEntailment special-case.
             List<String> calls = stubReasoner.getCallLog();
-            assertTrue(calls.contains("checkEquivalentClassesEntailment"),
-                "Should dispatch to checkEquivalentClassesEntailment; calls=" + calls);
+            assertTrue(calls.contains("checkAxiomEntailment:EquivalentClasses"),
+                "Should dispatch to checkAxiomEntailment:EquivalentClasses; calls=" + calls);
             assertTrue(calls.stream().noneMatch(c -> c.equals("checkEntailment:EquivalentClasses")),
                 "Should NOT take the simple checkEntailment:EquivalentClasses path; calls=" + calls);
         }
@@ -203,10 +204,19 @@ class ComplexClassExpressionTest {
 
             ServiceResult<ClaimVerificationResult> result = verify(claim);
 
-            assertFalse(result.isSuccess(),
-                "Expression depth > 3 should be rejected; got success: " + result);
-            ServiceError err = ((ServiceResult.Error<ClaimVerificationResult>) result).error();
-            assertEquals(ErrorCode.INVALID_CLAIM_SCHEMA, err.code());
+            // v0.8.5: expression depth > 3 causes CLAIM_AXIOM_BUILD_FAILED
+            // (errored ClaimVerificationResult wrapped in ServiceResult.success).
+            assertTrue(result.isSuccess(),
+                "ServiceResult should be success (wrapping errored ClaimVerificationResult): " + result);
+            ClaimVerificationResult data = ((ServiceResult.Success<ClaimVerificationResult>) result).data();
+            assertNull(data.verdict(),
+                "Errored result must have null verdict (no semantic verdict)");
+            assertEquals(ExecutionStatus.ERROR, data.executionStatus(),
+                "Expression depth > 3 must yield ERROR execution status");
+            assertTrue(data.errorCode().isPresent(),
+                "Errored result must have error code");
+            assertEquals(ErrorCode.CLAIM_AXIOM_BUILD_FAILED, data.errorCode().get(),
+                "Depth violation must yield CLAIM_AXIOM_BUILD_FAILED");
         }
     }
 

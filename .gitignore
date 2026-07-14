@@ -138,3 +138,6 @@ v*-final-*/
 
 # Temporary extraction directories
 /temp_jar_check/
+
+# CLI integration test workspace
+/test-workspace/

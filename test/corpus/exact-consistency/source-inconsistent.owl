@@ -1,0 +1,24 @@
+<?xml version="1.0"?>
+<rdf:RDF xmlns="http://owl4agents.org/test/exact-consistency/source-inconsistent#"
+     xml:base="http://owl4agents.org/test/exact-consistency/source-inconsistent"
+     xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+     xmlns:owl="http://www.w3.org/2002/07/owl#"
+     xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#"
+     xmlns:xsd="http://www.w3.org/2001/XMLSchema#">
+    <owl:Ontology rdf:about="http://owl4agents.org/test/exact-consistency/source-inconsistent"/>
+    <owl:Class rdf:about="http://owl4agents.org/test/exact-consistency/source-inconsistent#C"/>
+    <owl:Class rdf:about="http://owl4agents.org/test/exact-consistency/source-inconsistent#D"/>
+    <owl:AllDisjointClasses>
+        <owl:members rdf:parseType="Collection">
+            <owl:Class rdf:about="http://owl4agents.org/test/exact-consistency/source-inconsistent#C"/>
+            <owl:Class rdf:about="http://owl4agents.org/test/exact-consistency/source-inconsistent#D"/>
+        </owl:members>
+    </owl:AllDisjointClasses>
+    <owl:Class rdf:about="http://owl4agents.org/test/exact-consistency/source-inconsistent#E">
+        <rdfs:subClassOf rdf:resource="http://owl4agents.org/test/exact-consistency/source-inconsistent#C"/>
+        <rdfs:subClassOf rdf:resource="http://owl4agents.org/test/exact-consistency/source-inconsistent#D"/>
+    </owl:Class>
+    <owl:NamedIndividual rdf:about="http://owl4agents.org/test/exact-consistency/source-inconsistent#e">
+        <rdf:type rdf:resource="http://owl4agents.org/test/exact-consistency/source-inconsistent#E"/>
+    </owl:NamedIndividual>
+</rdf:RDF>

@@ -67,6 +67,26 @@ public interface OWLReasonerAdapter {
     boolean supportsExplanation();
 
     /**
+     * v0.8.5: Check whether this adapter supports consistency checking
+     * via {@link #checkConsistency(String)} on an arbitrary ontology.
+     * All current adapters return {@code true}.
+     */
+    default boolean supportsConsistency() {
+        return true;
+    }
+
+    /**
+     * v0.8.5: Check whether this adapter can be initialized against an
+     * arbitrary in-memory {@link OWLOntology} (i.e., a temporary ontology
+     * created by {@code TemporaryOntologyFactory}) without catalog
+     * registration. All current adapters return {@code true} since
+     * {@link #initialize(OWLOntology)} accepts any OWLOntology.
+     */
+    default boolean supportsTemporaryOntology() {
+        return true;
+    }
+
+    /**
      * Get the list of OWL profiles this adapter supports.
      */
     java.util.List<String> getSupportedProfiles();

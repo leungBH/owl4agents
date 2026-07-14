@@ -19,6 +19,7 @@ import org.owl4agents.core.model.ClaimEntity;
 import org.owl4agents.core.model.ClaimType;
 import org.owl4agents.core.model.ClaimVerificationResult;
 import org.owl4agents.core.model.EntailmentResult;
+import org.owl4agents.core.model.ExecutionStatus;
 import org.owl4agents.core.model.Verdict;
 import org.owl4agents.owlapi.SemanticDeepeningService;
 import org.owl4agents.reasoner.ReasonerLifecycleManager;
@@ -137,14 +138,12 @@ class ClaimVerificationServiceTest {
         }
 
         @Test
-        @DisplayName("DATA_PROPERTY_DOMAIN: NOT_ENTAILED → UNKNOWN, not CONTRADICTED")
-        void dataPropertyDomainNotEntailedYieldsUnknown() {
+        @DisplayName("DATA_PROPERTY_DOMAIN: invalid subject (class, not data_property) → CLAIM_AXIOM_BUILD_FAILED")
+        void dataPropertyDomainInvalidSubjectYieldsBuildError() {
             stubReasoner.withEntailmentResult(EntailmentResult.NOT_ENTAILED);
-            // xsd:string is in the built-in namespace whitelist so it passes
-            // the v0.8.1 pre-check (Task 4.2). Pizza has no data properties, so
-            // we use the class kind for the subject IRI; the test focus is the
-            // verdict mapping (NOT_ENTAILED → UNKNOWN), not the data property
-            // declaration.
+            // v0.8.5: The 5-stage flow uses ClaimAxiomBuilder which validates
+            // entity kinds strictly. PIZZA is a class, not a data property, so
+            // axiom construction fails with CLAIM_AXIOM_BUILD_FAILED.
             Claim claim = new Claim("c5", ClaimType.DATA_PROPERTY_DOMAIN, ONTOLOGY_ID,
                 new ClaimEntity("class", PIZZA), null,
                 new ClaimEntity("datatype", "http://www.w3.org/2001/XMLSchema#string"),
@@ -153,14 +152,20 @@ class ClaimVerificationServiceTest {
             ServiceResult<ClaimVerificationResult> result = service.verify(claim);
             assertTrue(result.isSuccess());
             ClaimVerificationResult data = ((ServiceResult.Success<ClaimVerificationResult>) result).data();
-            assertEquals(Verdict.UNKNOWN, data.verdict());
-            assertNotEquals(Verdict.CONTRADICTED, data.verdict());
+            assertEquals(ExecutionStatus.ERROR, data.executionStatus());
+            assertTrue(data.errorCode().isPresent());
+            assertEquals(ErrorCode.CLAIM_AXIOM_BUILD_FAILED, data.errorCode().get());
+            assertNull(data.verdict(), "Error results must have null semanticVerdict");
         }
 
         @Test
-        @DisplayName("DATA_PROPERTY_ASSERTION: NOT_ENTAILED → UNKNOWN, not CONTRADICTED")
-        void dataPropertyAssertionNotEntailedYieldsUnknown() {
+        @DisplayName("DATA_PROPERTY_ASSERTION: non-existent property → CLAIM_AXIOM_BUILD_FAILED")
+        void dataPropertyAssertionInvalidPropertyYieldsBuildError() {
             stubReasoner.withEntailmentResult(EntailmentResult.NOT_ENTAILED);
+            // v0.8.5: The 5-stage flow uses ClaimAxiomBuilder which resolves
+            // property IRIs against the ontology. "http://ex.org/age" is not
+            // a data property in the pizza ontology, so axiom construction
+            // fails with CLAIM_AXIOM_BUILD_FAILED.
             Claim claim = new Claim("c6", ClaimType.DATA_PROPERTY_ASSERTION, ONTOLOGY_ID,
                 new ClaimEntity("individual", PIZZA_NS + "America"), "http://ex.org/age",
                 new ClaimEntity("literal", "42"),
@@ -169,8 +174,10 @@ class ClaimVerificationServiceTest {
             ServiceResult<ClaimVerificationResult> result = service.verify(claim);
             assertTrue(result.isSuccess());
             ClaimVerificationResult data = ((ServiceResult.Success<ClaimVerificationResult>) result).data();
-            assertEquals(Verdict.UNKNOWN, data.verdict());
-            assertNotEquals(Verdict.CONTRADICTED, data.verdict());
+            assertEquals(ExecutionStatus.ERROR, data.executionStatus());
+            assertTrue(data.errorCode().isPresent());
+            assertEquals(ErrorCode.CLAIM_AXIOM_BUILD_FAILED, data.errorCode().get());
+            assertNull(data.verdict(), "Error results must have null semanticVerdict");
         }
     }
 

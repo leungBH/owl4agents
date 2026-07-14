@@ -12,6 +12,7 @@ import java.util.concurrent.Callable;
 import java.util.Map;
 
 import com.google.gson.Gson;
+import com.google.gson.JsonObject;
 import com.google.gson.reflect.TypeToken;
 
 /**
@@ -120,7 +121,16 @@ public class VerifyAnswerCommand implements Callable<Integer> {
 
         if (result.isSuccess()) {
             AnswerVerificationReport report = ((ServiceResult.Success<AnswerVerificationReport>) result).data();
-            String reportJson = gson.toJson(report);
+
+            // v0.8.5: add schemaVersion to JSON output
+            String reportJson;
+            if (jsonOutput || outputPath != null) {
+                JsonObject reportJsonObj = gson.toJsonTree(report).getAsJsonObject();
+                reportJsonObj.addProperty("schemaVersion", "claim-verification-result/2");
+                reportJson = gson.toJson(reportJsonObj);
+            } else {
+                reportJson = null;
+            }
 
             // Output: write to file (--out) or stdout
             if (outputPath != null && !outputPath.isBlank()) {
@@ -139,10 +149,12 @@ public class VerifyAnswerCommand implements Callable<Integer> {
                 System.out.println("  Answer ID: " + report.answerId());
                 System.out.println("  Aggregate status: " + report.aggregateStatus().jsonName());
                 for (ClaimWorkflowResult cr : report.claimResults()) {
+                    String verdictStr = cr.verdict() != null ? cr.verdict().jsonName() : "(null)";
                     System.out.println("  Claim " + cr.claimId() + ": "
-                        + cr.claimType().jsonName() + " → " + cr.verdict().jsonName()
+                        + cr.claimType().jsonName() + " → " + verdictStr
                         + (cr.required() ? " (required)" : " (optional)")
-                        + (cr.unknownReason().isPresent() ? " reason: " + cr.unknownReason().get() : ""));
+                        + (cr.unknownReason().isPresent() ? " reason: " + cr.unknownReason().get() : "")
+                        + (cr.diagnostics().isPresent() ? " diagnostics: " + cr.diagnostics().get() : ""));
                     System.out.println("    Evidence items: " + cr.evidence().size());
                 }
                 if (report.summary().isPresent()) {

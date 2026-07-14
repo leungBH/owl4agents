@@ -1,0 +1,94 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://owl4agents.org/schemas/claim-verification-result-2.schema.json",
+  "title": "Claim Verification Result Schema v2",
+  "description": "Schema for exact-consistency-verification result output (schema version 2)",
+  "type": "object",
+  "required": ["schemaVersion", "executionStatus", "semanticVerdict"],
+  "properties": {
+    "schemaVersion": {
+      "type": "string",
+      "const": "claim-verification-result/2"
+    },
+    "executionStatus": {
+      "type": "string",
+      "enum": ["completed", "timeout", "error"]
+    },
+    "semanticVerdict": {
+      "type": ["string", "null"],
+      "enum": ["supported", "contradicted", "unknown", "out_of_scope", null]
+    },
+    "errorCode": {
+      "type": ["string", "null"],
+      "enum": [
+        "SOURCE_ONTOLOGY_INCONSISTENT",
+        "REASONER_TIMEOUT",
+        "CLAIM_AXIOM_BUILD_FAILED",
+        "CLAIM_CONSISTENCY_CHECK_FAILED",
+        "TEMPORARY_ONTOLOGY_CREATION_FAILED",
+        "TRANSIENT_REASONER_INIT_FAILED",
+        "PROFILE_NOT_SUPPORTED",
+        null
+      ]
+    },
+    "claimId": { "type": "string" },
+    "ontologyId": { "type": "string" },
+    "claimType": { "type": "string" },
+    "evidence": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "explicit_axiom", "inferred_axiom", "explicit_triple",
+              "inferred_triple", "reasoning_report", "scope_statement",
+              "literal_validation", "counterexample",
+              "consistency_report", "inconsistency_justification",
+              "structural_conflict_hint"
+            ]
+          },
+          "description": { "type": "string" },
+          "axioms": { "type": "array", "items": { "type": "string" } }
+        }
+      }
+    },
+    "metadata": {
+      "type": "object",
+      "properties": {
+        "reasonerName": { "type": ["string", "null"] },
+        "reasonerVersion": { "type": ["string", "null"] },
+        "ontologyProfile": { "type": ["string", "null"] },
+        "timeout": { "type": ["string", "null"] },
+        "elapsedMillis": { "type": ["integer", "null"] },
+        "ontologyFingerprint": { "type": ["string", "null"] },
+        "perStageTiming": {
+          "type": "object",
+          "properties": {
+            "axiomBuildMs": { "type": ["integer", "null"] },
+            "sourceConsistencyMs": { "type": ["integer", "null"] },
+            "entailmentMs": { "type": ["integer", "null"] },
+            "temporaryCopyMs": { "type": ["integer", "null"] },
+            "reasonerInitMs": { "type": ["integer", "null"] },
+            "consistencyCheckMs": { "type": ["integer", "null"] },
+            "explanationMs": { "type": ["integer", "null"] },
+            "totalMs": { "type": ["integer", "null"] }
+          }
+        }
+      }
+    },
+    "claimAxiom": { "type": ["string", "null"], "description": "Manchester syntax representation of the claim axiom" },
+    "sourceOntologyConsistent": { "type": ["boolean", "null"] },
+    "entailed": { "type": ["boolean", "null"] },
+    "consistencyAfterAddition": {
+      "type": ["string", "null"],
+      "enum": ["consistent", "inconsistent", "not-checked", null]
+    },
+    "graphScope": { "type": ["string", "null"] },
+    "unknownReason": { "type": ["string", "null"] },
+    "unknownExplanation": { "type": ["string", "null"] },
+    "truncated": { "type": "boolean" },
+    "totalEvidenceAvailable": { "type": "integer" }
+  }
+}

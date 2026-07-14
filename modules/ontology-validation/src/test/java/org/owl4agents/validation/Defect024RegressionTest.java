@@ -61,36 +61,36 @@ class Defect024RegressionTest {
     class MapErrorBlankIriTests {
 
         @Test
-        @DisplayName("CLASS_NOT_FOUND with blank entityIRI → UNKNOWN (v0.8.1 graceful degrade), not IAE")
+        @DisplayName("CLASS_NOT_FOUND with blank entityIRI → error (no IAE), v0.8.5 mapError guard")
         void classNotFoundBlankEntityIriNoCrash() {
-            // Simulate the exact crash scenario from DEFECT-024:
-            // checkClassCompatibility returns CLASS_NOT_FOUND with no/blank entityIRI
+            // DEFECT-024 scenario: checkClassCompatibility returns CLASS_NOT_FOUND
+            // with no/blank entityIRI in error details. mapError() must not throw
+            // IllegalArgumentException when constructing error response.
+            //
+            // v0.8.5: CLASS_COMPATIBILITY claims go through verifyClassCompatibility
+            // → checkClassCompatibility → mapError. The old DISJOINT_CLASSES path
+            // no longer calls checkClassCompatibility (5-stage flow replaces it).
             stubConsistency.withCompatibilityError(
                 ServiceError.of(ErrorCode.CLASS_NOT_FOUND, "Class not found", Map.of())
             );
 
-            Claim claim = new Claim("d024-1", ClaimType.DISJOINT_CLASSES, "test-ontology",
-                new ClaimEntity("class", "http://ex.org/A"), "disjointWith",
+            Claim claim = new Claim("d024-1", ClaimType.CLASS_COMPATIBILITY, "test-ontology",
+                new ClaimEntity("class", "http://ex.org/A"), "compatibleWith",
                 new ClaimEntity("class", "http://ex.org/B"),
                 Optional.empty(), Optional.empty(), Optional.empty());
 
-            // Before DEFECT-024 fix: this threw IllegalArgumentException("Entity IRI must not be null or blank")
-            // After DEFECT-024 fix: v0.8.1 degrade path catches CLASS_NOT_FOUND (and
-            // PROPERTY_NOT_FOUND / INDIVIDUAL_NOT_FOUND) and returns UNKNOWN +
-            // INSUFFICIENT_AXIOMS instead of an Error — the 4-value verdict model
-            // is preferred over a hard error in this scenario.
+            // Before DEFECT-024 fix: mapError threw IllegalArgumentException("Entity IRI must not be null or blank")
+            // After fix: mapError returns ServiceResult.error with CLASS_NOT_FOUND code, no IAE.
             ServiceResult<ClaimVerificationResult> result = service.verify(claim);
-            assertTrue(result.isSuccess(),
-                "v0.8.1: CLASS_NOT_FOUND is degraded to UNKNOWN verdict, not propagated as Error");
-            ClaimVerificationResult data = ((ServiceResult.Success<ClaimVerificationResult>) result).data();
-            assertEquals(org.owl4agents.core.model.Verdict.UNKNOWN, data.verdict(),
-                "Degraded verdict must be UNKNOWN");
-            assertTrue(data.unknownReason().isPresent(), "unknownReason must be set");
+            assertFalse(result.isSuccess(),
+                "CLASS_NOT_FOUND is propagated as Error (v0.8.5: no degrade to UNKNOWN)");
+            ServiceError error = ((ServiceResult.Error<ClaimVerificationResult>) result).error();
+            assertEquals(ErrorCode.CLASS_NOT_FOUND, error.code());
             // Must NOT throw IllegalArgumentException
         }
 
         @Test
-        @DisplayName("CLASS_NOT_FOUND with empty-string entityIRI → UNKNOWN, not IAE")
+        @DisplayName("CLASS_NOT_FOUND with empty-string entityIRI → error (no IAE), v0.8.5 mapError guard")
         void classNotFoundEmptyStringEntityIriNoCrash() {
             // Entity IRI in details is empty string — would have created EntityId("")
             stubConsistency.withCompatibilityError(
@@ -98,19 +98,17 @@ class Defect024RegressionTest {
                     Map.of("entityIRI", ""))
             );
 
-            Claim claim = new Claim("d024-2", ClaimType.DISJOINT_CLASSES, "test-ontology",
-                new ClaimEntity("class", "http://ex.org/A"), "disjointWith",
+            Claim claim = new Claim("d024-2", ClaimType.CLASS_COMPATIBILITY, "test-ontology",
+                new ClaimEntity("class", "http://ex.org/A"), "compatibleWith",
                 new ClaimEntity("class", "http://ex.org/B"),
                 Optional.empty(), Optional.empty(), Optional.empty());
 
-            // v0.8.1: same graceful degrade path. The DEFECT-024 fix in
-            // ConsistencyAnalysisService now also catches IAE from blank IRI
-            // construction in mapError, AND v0.8.1 returns UNKNOWN verdict.
+            // v0.8.5: mapError catches blank entityIRI and returns error without IAE.
             ServiceResult<ClaimVerificationResult> result = service.verify(claim);
-            assertTrue(result.isSuccess(),
-                "v0.8.1: blank-entityIRI CLASS_NOT_FOUND is degraded to UNKNOWN");
-            ClaimVerificationResult data = ((ServiceResult.Success<ClaimVerificationResult>) result).data();
-            assertEquals(org.owl4agents.core.model.Verdict.UNKNOWN, data.verdict());
+            assertFalse(result.isSuccess(),
+                "blank-entityIRI CLASS_NOT_FOUND is propagated as Error");
+            ServiceError error = ((ServiceResult.Error<ClaimVerificationResult>) result).error();
+            assertEquals(ErrorCode.CLASS_NOT_FOUND, error.code());
             // Must NOT throw IllegalArgumentException
         }
 
@@ -142,35 +140,28 @@ class Defect024RegressionTest {
         }
 
         @Test
-        @DisplayName("CLASS_NOT_FOUND with valid entityIRI → UNKNOWN with IRI in explanation")
+        @DisplayName("CLASS_NOT_FOUND with valid entityIRI → error with IRI in message (v0.8.5 mapError)")
         void classNotFoundValidEntityIriReturnsProperError() {
-            // When entityIRI IS present and non-blank, the v0.8.1 degrade path
-            // still kicks in (returning UNKNOWN) and includes the IRI in the
-            // explanation for traceability.
+            // When entityIRI IS present and non-blank, mapError includes the
+            // IRI in the error message for traceability.
             stubConsistency.withCompatibilityError(
                 ServiceError.of(ErrorCode.CLASS_NOT_FOUND, "Class not found",
                     Map.of("entityIRI", "http://ex.org/OutOfScopeClass"))
             );
 
-            Claim claim = new Claim("d024-5", ClaimType.DISJOINT_CLASSES, "test-ontology",
-                new ClaimEntity("class", "http://ex.org/A"), "disjointWith",
+            Claim claim = new Claim("d024-5", ClaimType.CLASS_COMPATIBILITY, "test-ontology",
+                new ClaimEntity("class", "http://ex.org/A"), "compatibleWith",
                 new ClaimEntity("class", "http://ex.org/B"),
                 Optional.empty(), Optional.empty(), Optional.empty());
 
-            // v0.8.1: degraded to UNKNOWN verdict (not Error)
+            // v0.8.5: error propagated with IRI in message
             ServiceResult<ClaimVerificationResult> result = service.verify(claim);
-            assertTrue(result.isSuccess());
-            ClaimVerificationResult data = ((ServiceResult.Success<ClaimVerificationResult>) result).data();
-            assertEquals(org.owl4agents.core.model.Verdict.UNKNOWN, data.verdict());
-            // IRI must appear in the explanation for traceability
-            String explanation = data.unknownReason().isPresent()
-                ? data.unknownReason().get().toString()
-                : "";
-            String detail = data.unknownExplanation().orElse("");
-            assertTrue(explanation.contains("CLASS") || detail.contains("http://ex.org/OutOfScopeClass")
-                    || detail.contains("not declared"),
-                "Valid entity IRI must appear in unknownExplanation for traceability: "
-                    + detail);
+            assertFalse(result.isSuccess());
+            ServiceError error = ((ServiceResult.Error<ClaimVerificationResult>) result).error();
+            assertEquals(ErrorCode.CLASS_NOT_FOUND, error.code());
+            // IRI must appear in the error message for traceability
+            assertTrue(error.message().contains("http://ex.org/OutOfScopeClass"),
+                "Valid entity IRI must appear in error message for traceability: " + error.message());
         }
     }
 
@@ -193,6 +184,18 @@ class Defect024RegressionTest {
 
         @Override
         public ServiceResult<ClassCompatibilityResult> checkClassCompatibility(
+                OntologyId ontologyId, String class1IRI, String class2IRI) {
+            return checkCompat(ontologyId, class1IRI, class2IRI);
+        }
+
+        @Override
+        public ServiceResult<ClassCompatibilityResult> checkClassCompatibility(
+                org.semanticweb.owlapi.model.OWLOntology ontology,
+                OntologyId ontologyId, String class1IRI, String class2IRI) {
+            return checkCompat(ontologyId, class1IRI, class2IRI);
+        }
+
+        private ServiceResult<ClassCompatibilityResult> checkCompat(
                 OntologyId ontologyId, String class1IRI, String class2IRI) {
             if (compatibilityError != null) {
                 return ServiceResult.error(compatibilityError);

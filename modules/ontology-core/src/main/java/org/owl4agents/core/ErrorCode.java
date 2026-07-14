@@ -1,8 +1,37 @@
 package org.owl4agents.core;
 
 /**
- * Structured error codes for owl4agents v0.1 through v0.3.
+ * Structured error codes for owl4agents v0.1 through v0.8.5.
  * Each error code corresponds to a specific failure condition in the service layer.
+ *
+ * <h3>v0.8.5 Exact Consistency Verification Error Codes</h3>
+ * <p>These codes are returned by the 5-stage claim verification pipeline
+ * ({@code ClaimVerificationService.verify()}) when errors occur during exact
+ * consistency checking. All v0.8.5 error codes produce
+ * {@code ExecutionStatus.ERROR} or {@code ExecutionStatus.TIMEOUT} with
+ * {@code semanticVerdict = null}.
+ *
+ * <ul>
+ *   <li>{@code SOURCE_ONTOLOGY_INCONSISTENT} — Stage 2: the source ontology
+ *       is inconsistent. Claim verification cannot proceed. Distinct from
+ *       {@code ONTOLOGY_INCONSISTENT} (reserved for direct
+ *       {@code ReasonerService.checkConsistency} calls).</li>
+ *   <li>{@code REASONER_TIMEOUT} — Stage 4: the exact consistency check
+ *       ({@code O ∪ {α} is consistent?}) exceeded the configured timeout.
+ *       Produces {@code ExecutionStatus.TIMEOUT} with {@code semanticVerdict = null}.</li>
+ *   <li>{@code CLAIM_AXIOM_BUILD_FAILED} — Stage 3a: {@code ClaimAxiomBuilder}
+ *       could not construct an OWL axiom from the structured claim (invalid IRI,
+ *       entity kind mismatch, or missing required field).</li>
+ *   <li>{@code CLAIM_CONSISTENCY_CHECK_FAILED} — Stage 4: the exact consistency
+ *       check threw an unexpected exception (not timeout). Indicates a reasoner
+ *       or ontology processing failure.</li>
+ *   <li>{@code TEMPORARY_ONTOLOGY_CREATION_FAILED} — Stage 4:
+ *       {@code TemporaryOntologyFactory} failed to create an isolated in-memory
+ *       copy of the source ontology with the claim axiom added.</li>
+ *   <li>{@code TRANSIENT_REASONER_INIT_FAILED} — Stage 4:
+ *       {@code TransientReasonerSession.create()} failed to initialize a
+ *       transient reasoner (e.g. reasoner not on classpath, profile mismatch).</li>
+ * </ul>
  */
 public enum ErrorCode {
     // v0.1 error codes
@@ -111,7 +140,21 @@ public enum ErrorCode {
     EMPTY_RESULTS("EMPTY_RESULTS",
         "The benchmark result JSONL file contains no result lines."),
     INVALID_QUESTION_SET("INVALID_QUESTION_SET",
-        "The question set line has missing required fields or invalid structure.");
+        "The question set line has missing required fields or invalid structure."),
+
+    // v0.8.5 exact consistency verification error codes
+    SOURCE_ONTOLOGY_INCONSISTENT("SOURCE_ONTOLOGY_INCONSISTENT",
+        "The source ontology is inconsistent; claim verification cannot proceed."),
+    REASONER_TIMEOUT("REASONER_TIMEOUT",
+        "The reasoner exceeded the configured timeout during consistency check."),
+    CLAIM_AXIOM_BUILD_FAILED("CLAIM_AXIOM_BUILD_FAILED",
+        "Failed to construct an OWL axiom from the structured claim."),
+    CLAIM_CONSISTENCY_CHECK_FAILED("CLAIM_CONSISTENCY_CHECK_FAILED",
+        "The exact consistency check failed due to an unexpected error."),
+    TEMPORARY_ONTOLOGY_CREATION_FAILED("TEMPORARY_ONTOLOGY_CREATION_FAILED",
+        "Failed to create an isolated temporary ontology for the consistency check."),
+    TRANSIENT_REASONER_INIT_FAILED("TRANSIENT_REASONER_INIT_FAILED",
+        "Failed to initialize a transient reasoner session for the consistency check.");
 
     private final String code;
     private final String defaultMessage;

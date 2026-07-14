@@ -126,6 +126,8 @@ public class ELKAdapter implements OWLReasonerAdapter {
     @Override
     public ConsistencyResult checkConsistency(String ontologyId) {
         checkActive();
+        // v0.8.5 P1: flush pending ontology changes before querying consistency.
+        reasoner.flush();
         boolean consistent = reasoner.isConsistent();
         List<String> unsatIRIs = new ArrayList<>();
         if (!consistent) {

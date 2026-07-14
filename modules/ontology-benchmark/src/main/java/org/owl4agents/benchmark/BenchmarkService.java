@@ -185,12 +185,33 @@ public class BenchmarkService {
                     edgeCase = false;
                 }
 
+                // v0.8.5: determine executionStatus and errorCode (task 13.1)
+                org.owl4agents.core.model.ExecutionStatus execStatus;
+                Optional<String> errorCode = Optional.empty();
+                if (errorStr != null && "TIMEOUT".equals(errorStr)) {
+                    execStatus = org.owl4agents.core.model.ExecutionStatus.TIMEOUT;
+                    errorCode = Optional.of("REASONER_TIMEOUT");
+                } else if (errorStr != null) {
+                    execStatus = org.owl4agents.core.model.ExecutionStatus.ERROR;
+                    // Map common error messages to error codes
+                    if (errorStr.contains("ontology not found") || errorStr.contains("ONTOLOGY_NOT_FOUND")) {
+                        errorCode = Optional.of("ONTOLOGY_NOT_FOUND");
+                    } else {
+                        errorCode = Optional.of("CLAIM_CONSISTENCY_CHECK_FAILED");
+                    }
+                } else {
+                    execStatus = org.owl4agents.core.model.ExecutionStatus.COMPLETED;
+                }
+
                 lines.add(new BenchmarkResultLine(
                     questionId, ontologyId, reasoner, claimsVerified,
                     actualVerdict, question.expectedVerdict(),
                     verdictMatch, elapsedMs, reviewStatus,
                     Optional.ofNullable(errorStr),
-                    edgeCase
+                    edgeCase,
+                    execStatus,
+                    errorCode,
+                    org.owl4agents.core.model.PerStageTiming.empty()
                 ));
 
                 // Update counts
@@ -233,6 +254,22 @@ public class BenchmarkService {
         double unknownRate = totalClaims > 0 ? (double) unknownCount / totalClaims : 0.0;
         double outOfScopeRate = totalClaims > 0 ? (double) outOfScopeCount / totalClaims : 0.0;
 
+        // v0.8.5: compute performance percentiles (task 13.4)
+        List<Long> elapsedSorted = lines.stream()
+            .filter(l -> l.executionStatus() == org.owl4agents.core.model.ExecutionStatus.COMPLETED)
+            .map(BenchmarkResultLine::elapsedMs)
+            .sorted()
+            .toList();
+        long p50Ms = percentile(elapsedSorted, 50);
+        long p95Ms = percentile(elapsedSorted, 95);
+        long p99Ms = percentile(elapsedSorted, 99);
+        long maxMs = elapsedSorted.isEmpty() ? 0 : elapsedSorted.get(elapsedSorted.size() - 1);
+        int timeoutCount = (int) lines.stream()
+            .filter(l -> l.executionStatus() == org.owl4agents.core.model.ExecutionStatus.TIMEOUT).count();
+        int errorCount = (int) lines.stream()
+            .filter(l -> l.executionStatus() == org.owl4agents.core.model.ExecutionStatus.ERROR).count();
+        long peakHeapBytes = Runtime.getRuntime().totalMemory() - Runtime.getRuntime().freeMemory();
+
         BenchmarkResultSummary summary = new BenchmarkResultSummary(
             BenchmarkResultSummary.TYPE,
             totalEvaluated,
@@ -245,7 +282,9 @@ public class BenchmarkService {
             unknownRate,
             outOfScopeRate,
             perVerdictCounts,
-            perReasonerTiming
+            perReasonerTiming,
+            p50Ms, p95Ms, p99Ms, maxMs,
+            timeoutCount, errorCount, peakHeapBytes
         );
 
         return new BenchmarkRunResult(lines, summary);
@@ -281,5 +320,15 @@ public class BenchmarkService {
             BenchmarkResultSummary.TYPE, 0, 0.0, 0.0, 0, 0.0, 0, 0.0, 0.0, 0.0,
             Map.of(), Map.of()
         );
+    }
+
+    /**
+     * v0.8.5: Compute percentile from a sorted list of values (task 13.4).
+     */
+    private long percentile(List<Long> sorted, int percentile) {
+        if (sorted.isEmpty()) return 0;
+        int index = (int) Math.ceil(percentile / 100.0 * sorted.size()) - 1;
+        index = Math.max(0, Math.min(index, sorted.size() - 1));
+        return sorted.get(index);
     }
 }

@@ -211,8 +211,8 @@ class ClaimVerificationScopePrecheckTest {
             assertEquals(Verdict.SUPPORTED, data.verdict(),
                 "ENTAILED with in-signature entities should yield SUPPORTED");
             assertTrue(stubReasoner.getCallLog().stream()
-                .anyMatch(c -> c.equals("checkEntailment:SubClassOf")),
-                "Type-specific verify should have invoked checkEntailment:SubClassOf");
+                .anyMatch(c -> c.equals("checkAxiomEntailment:SubClassOf")),
+                "Type-specific verify should have invoked checkAxiomEntailment:SubClassOf");
         }
     }
 
