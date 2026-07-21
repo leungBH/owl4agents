@@ -33,7 +33,16 @@ application {
 tasks.jar {
     archiveBaseName.set("ontology-cli")
     manifest {
-        attributes["Main-Class"] = "org.owl4agents.cli.Owl4AgentsCli"
+        attributes(
+            "Main-Class" to "org.owl4agents.cli.Owl4AgentsCli",
+            // v0.8.6 D9 / task 4.2: Implementation-Version is read by
+            // Package.getImplementationVersion() so McpServerAdapter
+            // can resolve SERVER_VERSION from the jar manifest in
+            // non-shadowJar runs (e.g. plain `gradle jar`).
+            // Use rootProject.version because the subproject's own version
+            // defaults to "unspecified" unless explicitly set.
+            "Implementation-Version" to rootProject.version.toString()
+        )
     }
 }
 
@@ -42,7 +51,21 @@ tasks.shadowJar {
     archiveBaseName.set("owl4agents")
     archiveClassifier.set("")
     manifest {
-        attributes["Main-Class"] = "org.owl4agents.cli.Owl4AgentsCli"
+        attributes(
+            "Main-Class" to "org.owl4agents.cli.Owl4AgentsCli",
+            // v0.8.6 D9 / task 8.3: Implementation-Version is read by
+            // Package.getImplementationVersion() so McpServerAdapter
+            // can resolve SERVER_VERSION from the shadow jar manifest
+            // in production runs.
+            // Use rootProject.version because the subproject's own version
+            // defaults to "unspecified" unless explicitly set.
+            "Implementation-Version" to rootProject.version.toString(),
+            // v0.8.6 D5 / task 4.1: JVM-Args is a documentation-only
+            // manifest attribute. `java -jar` does NOT read this; the
+            // launch scripts (owl4agents.bat / owl4agents.ps1) hardcode
+            // the same flags directly.
+            "JVM-Args" to "-XX:+ExitOnOutOfMemoryError -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=./owl4agents-heapdump.hprof"
+        )
     }
     mergeServiceFiles()
 }

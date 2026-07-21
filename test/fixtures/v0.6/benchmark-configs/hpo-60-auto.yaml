@@ -1,0 +1,9 @@
+name: hpo-60-auto
+description: HPO ontology benchmark with 60 claims (auto reasoner - v0.8.6 P0-2 verification)
+ontologyIds:
+  - hpo
+questionSetPath: test/fixtures/v0.6/question-sets/hpo-60.jsonl
+reasoners:
+  - auto
+outputPath: results/hpo-60-auto-output.jsonl
+timeoutPerQuestion: 60

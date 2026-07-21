@@ -256,8 +256,9 @@ public class ClaimVerificationService {
                 List.of(claim.subject().iri()),
                 EvidenceItem.CONFIDENCE_EXPLICIT
             );
+            // Stage 1 short-circuit → metadata = null (no reasoner call)
             return buildResult(claim, ontId, Verdict.CONTRADICTED, List.of(counter),
-                Optional.empty(), Optional.empty());
+                Optional.empty(), Optional.empty(), null);
         }
 
         long pipelineStart = System.nanoTime();
@@ -265,24 +266,39 @@ public class ClaimVerificationService {
         Long sourceConsistencyMs = null;
         Long entailmentMs = null;
 
+        // v0.8.6 task 3.10b: Track metadata from each stage's reasoner call.
+        // Priority: Stage 4 > Stage 3 > Stage 2; null until a stage produces non-null.
+        ReasonerCallMetadata stage2Meta = null;
+        ReasonerCallMetadata stage3Meta = null;
+        ReasonerCallMetadata stage4Meta = null;
+
         // ── Stage 2: source ontology consistency ──
         long stage2Start = System.nanoTime();
         ServiceResult<Boolean> sourceResult =
             reasonerService.checkSourceOntologyConsistency(ontId, claim.reasoner());
         sourceConsistencyMs = msSince(stage2Start);
 
+        // Extract Stage 2 metadata (populated by ReasonerCallWrapper)
+        if (sourceResult instanceof ServiceResult.Success<Boolean> s2) {
+            stage2Meta = s2.reasonerMetadata();
+        } else if (sourceResult instanceof ServiceResult.Error<Boolean> e2) {
+            stage2Meta = e2.reasonerMetadata();
+        }
+
         if (!sourceResult.isSuccess()) {
             return buildErroredResult(claim, ontId, ExecutionStatus.ERROR,
                 extractErrorCode(sourceResult),
                 new PerStageTiming(null, sourceConsistencyMs, null, null, null, null, null,
-                    sourceConsistencyMs));
+                    sourceConsistencyMs),
+                stage2Meta);
         }
         Boolean sourceConsistent = ((ServiceResult.Success<Boolean>) sourceResult).data();
         if (Boolean.FALSE.equals(sourceConsistent)) {
             return buildErroredResult(claim, ontId, ExecutionStatus.ERROR,
                 ErrorCode.SOURCE_ONTOLOGY_INCONSISTENT,
                 new PerStageTiming(null, sourceConsistencyMs, null, null, null, null, null,
-                    sourceConsistencyMs));
+                    sourceConsistencyMs),
+                stage2Meta);
         }
 
         // ── Stage 3a: build claim axiom (design D2: single axiom for both checks) ──
@@ -297,12 +313,14 @@ public class ClaimVerificationService {
             // expression references an IRI not in the ontology signature)
             // → OUT_OF_SCOPE, not a hard error.
             if (errorMsg != null && errorMsg.contains("Entity not found")) {
+                // Axiom building doesn't invoke the reasoner → preserve Stage 2 metadata
                 return buildResult(claim, ontId, Verdict.OUT_OF_SCOPE, List.of(),
-                    Optional.of(UnknownReason.MISSING_ENTITY), Optional.of(errorMsg));
+                    Optional.of(UnknownReason.MISSING_ENTITY), Optional.of(errorMsg), stage2Meta);
             }
             long total = sumMs(sourceConsistencyMs, axiomBuildMs);
             return buildErroredResult(claim, ontId, ExecutionStatus.ERROR, code,
-                new PerStageTiming(axiomBuildMs, sourceConsistencyMs, null, null, null, null, null, total));
+                new PerStageTiming(axiomBuildMs, sourceConsistencyMs, null, null, null, null, null, total),
+                stage2Meta);
         }
         OWLAxiom claimAxiom = ((ServiceResult.Success<OWLAxiom>) axiomResult).data();
 
@@ -312,11 +330,21 @@ public class ClaimVerificationService {
             reasonerService.checkAxiomEntailment(ontology, ontId, claimAxiom, claim.reasoner());
         entailmentMs = msSince(entailStart);
 
+        // Extract Stage 3 metadata (null when asserted-axiom fast-path is taken)
+        if (entailResult instanceof ServiceResult.Success<EntailmentResult> s3) {
+            stage3Meta = s3.reasonerMetadata();
+        } else if (entailResult instanceof ServiceResult.Error<EntailmentResult> e3) {
+            stage3Meta = e3.reasonerMetadata();
+        }
+        // "Last non-null wins": Stage 3 > Stage 2
+        ReasonerCallMetadata metaAfterStage3 = stage3Meta != null ? stage3Meta : stage2Meta;
+
         if (!entailResult.isSuccess()) {
             ErrorCode code = extractErrorCode(entailResult);
             long total = sumMs(sourceConsistencyMs, axiomBuildMs, entailmentMs);
             return buildErroredResult(claim, ontId, ExecutionStatus.ERROR, code,
-                new PerStageTiming(axiomBuildMs, sourceConsistencyMs, entailmentMs, null, null, null, null, total));
+                new PerStageTiming(axiomBuildMs, sourceConsistencyMs, entailmentMs, null, null, null, null, total),
+                metaAfterStage3);
         }
 
         EntailmentResult entailment = ((ServiceResult.Success<EntailmentResult>) entailResult).data();
@@ -325,9 +353,11 @@ public class ClaimVerificationService {
         if (EntailmentResult.ENTAILED.equals(entailment.result())) {
             List<EvidenceItem> evidence = buildEntailedEvidence(claim, entailment);
             long total = sumMs(sourceConsistencyMs, axiomBuildMs, entailmentMs);
+            // For asserted-axiom fast-path, stage3Meta is null → Stage 2's metadata preserved
             return buildCompletedResult(claim, ontId, Verdict.SUPPORTED, evidence,
                 Optional.empty(), Optional.empty(),
-                new PerStageTiming(axiomBuildMs, sourceConsistencyMs, entailmentMs, null, null, null, null, total));
+                new PerStageTiming(axiomBuildMs, sourceConsistencyMs, entailmentMs, null, null, null, null, total),
+                metaAfterStage3);
         }
 
         // ── Stage 4: exact consistency check (only for non-entailed claims) ──
@@ -342,11 +372,18 @@ public class ClaimVerificationService {
             ErrorCode code = extractErrorCode(exactResult);
             long total = sumMs(sourceConsistencyMs, axiomBuildMs, entailmentMs, exactElapsed);
             return buildErroredResult(claim, ontId, ExecutionStatus.ERROR, code,
-                new PerStageTiming(axiomBuildMs, sourceConsistencyMs, entailmentMs, null, null, null, null, total));
+                new PerStageTiming(axiomBuildMs, sourceConsistencyMs, entailmentMs, null, null, null, null, total),
+                metaAfterStage3);
         }
 
         ConsistencyAfterAdditionResult exact =
             ((ServiceResult.Success<ConsistencyAfterAdditionResult>) exactResult).data();
+
+        // v0.8.6: Extract Stage 4 metadata from ConsistencyAfterAdditionResult.metadata
+        // (populated by ReasonerCallWrapper in checkConsistencyAfterAdding).
+        stage4Meta = exact.metadata();
+        // "Last non-null wins": Stage 4 > Stage 3 > Stage 2
+        ReasonerCallMetadata metaAfterStage4 = stage4Meta != null ? stage4Meta : metaAfterStage3;
 
         // Propagate per-stage timing from the exact check result
         PerStageTiming exactTiming = exact.perStageTiming();
@@ -367,7 +404,7 @@ public class ClaimVerificationService {
                 List<EvidenceItem> contradictedEvidence =
                     buildContradictedEvidence(claim, exact, entailment);
                 return buildCompletedResult(claim, ontId, Verdict.CONTRADICTED,
-                    contradictedEvidence, Optional.empty(), Optional.empty(), finalTiming);
+                    contradictedEvidence, Optional.empty(), Optional.empty(), finalTiming, metaAfterStage4);
 
             case CONSISTENT:
                 // not-entailed + consistent → UNKNOWN
@@ -377,16 +414,16 @@ public class ClaimVerificationService {
                     ? Optional.of(UnknownReason.UNSUPPORTED_CLAIM_TYPE)
                     : Optional.of(UnknownReason.INSUFFICIENT_AXIOMS);
                 return buildCompletedResult(claim, ontId, Verdict.UNKNOWN,
-                    unknownEvidence, reason, Optional.empty(), finalTiming);
+                    unknownEvidence, reason, Optional.empty(), finalTiming, metaAfterStage4);
 
             case TIMEOUT:
                 return buildErroredResult(claim, ontId, ExecutionStatus.TIMEOUT,
-                    ErrorCode.REASONER_TIMEOUT, finalTiming);
+                    ErrorCode.REASONER_TIMEOUT, finalTiming, metaAfterStage4);
 
             case ERROR:
             default:
                 return buildErroredResult(claim, ontId, ExecutionStatus.ERROR,
-                    ErrorCode.CLAIM_CONSISTENCY_CHECK_FAILED, finalTiming);
+                    ErrorCode.CLAIM_CONSISTENCY_CHECK_FAILED, finalTiming, metaAfterStage4);
         }
     }
 
@@ -550,6 +587,19 @@ public class ClaimVerificationService {
                                                                 List<EvidenceItem> evidence,
                                                                 Optional<UnknownReason> unknownReason,
                                                                 Optional<String> unknownExplanation) {
+        return buildResult(claim, ontId, verdict, evidence, unknownReason, unknownExplanation, null);
+    }
+
+    /**
+     * v0.8.6 task 3.10b: Overload that accepts reasoner call metadata.
+     * Used by {@code verifyWith5StageFlow} to propagate the LAST stage's
+     * metadata into {@code ClaimVerificationResult.metadata}.
+     */
+    private ServiceResult<ClaimVerificationResult> buildResult(Claim claim, OntologyId ontId, Verdict verdict,
+                                                                List<EvidenceItem> evidence,
+                                                                Optional<UnknownReason> unknownReason,
+                                                                Optional<String> unknownExplanation,
+                                                                ReasonerCallMetadata metadata) {
         return ServiceResult.success(
             ClaimVerificationResult.completed(
                 claim.claimId(),
@@ -562,7 +612,8 @@ public class ClaimVerificationService {
                 claim.reasoner(),
                 claim.graphScope(),
                 false,
-                evidence.size()
+                evidence.size(),
+                metadata
             ),
             ResultMetadata.empty()
         );
@@ -574,6 +625,20 @@ public class ClaimVerificationService {
             Optional<UnknownReason> unknownReason,
             Optional<String> unknownExplanation,
             PerStageTiming perStageTiming) {
+        return buildCompletedResult(claim, ontId, verdict, evidence, unknownReason, unknownExplanation,
+            perStageTiming, null);
+    }
+
+    /**
+     * v0.8.6 task 3.10b: Overload that accepts reasoner call metadata.
+     */
+    private ServiceResult<ClaimVerificationResult> buildCompletedResult(
+            Claim claim, OntologyId ontId, Verdict verdict,
+            List<EvidenceItem> evidence,
+            Optional<UnknownReason> unknownReason,
+            Optional<String> unknownExplanation,
+            PerStageTiming perStageTiming,
+            ReasonerCallMetadata metadata) {
         return ServiceResult.success(
             new ClaimVerificationResult(
                 claim.claimId(),
@@ -589,7 +654,8 @@ public class ClaimVerificationService {
                 evidence.size(),
                 ExecutionStatus.COMPLETED,
                 Optional.empty(),
-                perStageTiming
+                perStageTiming,
+                metadata
             ),
             ResultMetadata.empty()
         );
@@ -599,6 +665,17 @@ public class ClaimVerificationService {
             Claim claim, OntologyId ontId,
             ExecutionStatus executionStatus, ErrorCode errorCode,
             PerStageTiming perStageTiming) {
+        return buildErroredResult(claim, ontId, executionStatus, errorCode, perStageTiming, null);
+    }
+
+    /**
+     * v0.8.6 task 3.10b: Overload that accepts reasoner call metadata.
+     */
+    private ServiceResult<ClaimVerificationResult> buildErroredResult(
+            Claim claim, OntologyId ontId,
+            ExecutionStatus executionStatus, ErrorCode errorCode,
+            PerStageTiming perStageTiming,
+            ReasonerCallMetadata metadata) {
         return ServiceResult.success(
             ClaimVerificationResult.errored(
                 claim.claimId(),
@@ -608,7 +685,8 @@ public class ClaimVerificationService {
                 errorCode,
                 claim.reasoner(),
                 claim.graphScope(),
-                perStageTiming
+                perStageTiming,
+                metadata
             ),
             ResultMetadata.empty()
         );

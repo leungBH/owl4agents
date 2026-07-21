@@ -90,8 +90,42 @@ public class HttpMcpServer implements AutoCloseable {
     /**
      * Default session TTL. A session that is not touched for this long is
      * eligible for eviction by the background sweeper.
+     *
+     * <p>v0.8.6 task 5.9: Reduced from 30 minutes to 5 minutes to bound
+     * memory growth from abandoned sessions in long-running stability
+     * scenarios. The 30-minute TTL allowed hundreds of stale sessions to
+     * accumulate under sustained load; 5 minutes ensures the sweeper
+     * reclaims session state (and any per-session resources) promptly.
+     * Operators can override via the
+     * {@code owl4agents.mcp.session.ttl.seconds} system property (default
+     * 300). Values below 60 seconds are rejected by the constructor
+     * validation (must be {@code >= 1 minute}).</p>
      */
-    public static final Duration DEFAULT_SESSION_TTL = Duration.ofMinutes(30);
+    public static final Duration DEFAULT_SESSION_TTL = Duration.ofMinutes(5);
+
+    /**
+     * v0.8.6 task 5.9: Resolve the session TTL from the
+     * {@code owl4agents.mcp.session.ttl.seconds} system property (default
+     * 300 = 5 minutes). Used by the single-arg constructor and by CLI
+     * callers that do not explicitly pass a TTL.
+     *
+     * @return the resolved session TTL duration (never {@code null})
+     */
+    public static Duration resolveSessionTtl() {
+        String raw = System.getProperty("owl4agents.mcp.session.ttl.seconds", "300");
+        try {
+            long seconds = Long.parseLong(raw.trim());
+            if (seconds < 60) {
+                // Clamp to the constructor's minimum (1 minute) to avoid
+                // IllegalArgumentException from a misconfigured property.
+                return Duration.ofMinutes(1);
+            }
+            return Duration.ofSeconds(seconds);
+        } catch (NumberFormatException e) {
+            // Misconfigured property — fall back to the default 5 minutes.
+            return DEFAULT_SESSION_TTL;
+        }
+    }
 
     /**
      * Default SSE heartbeat interval. The server writes an SSE comment
@@ -137,10 +171,15 @@ public class HttpMcpServer implements AutoCloseable {
 
     /**
      * Backward-compatible constructor. Uses default SSE config
-     * (100 connections, 30 min TTL, 15 s heartbeat).
+     * (100 connections, 5 min TTL via {@link #resolveSessionTtl()},
+     * 15 s heartbeat).
+     *
+     * <p>v0.8.6 task 5.9: The default TTL is now resolved from the
+     * {@code owl4agents.mcp.session.ttl.seconds} system property (default
+     * 300 = 5 minutes) instead of being hardcoded to 30 minutes.</p>
      */
     public HttpMcpServer(McpServerAdapter adapter) {
-        this(adapter, DEFAULT_MAX_SSE_CONNECTIONS, DEFAULT_SESSION_TTL, DEFAULT_HEARTBEAT_INTERVAL);
+        this(adapter, DEFAULT_MAX_SSE_CONNECTIONS, resolveSessionTtl(), DEFAULT_HEARTBEAT_INTERVAL);
     }
 
     /**

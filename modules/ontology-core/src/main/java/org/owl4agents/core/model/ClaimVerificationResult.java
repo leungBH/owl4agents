@@ -16,6 +16,13 @@ import org.owl4agents.core.GraphScope;
  * {@code executionStatus}, {@code errorCode}, and {@code perStageTiming}
  * are added. The convenience accessor {@link #verdict()} is retained for
  * backward compatibility and returns {@code semanticVerdict.orElse(null)}.
+ *
+ * <p>v0.8.6: New nullable {@code metadata} field of type
+ * {@link ReasonerCallMetadata}, populated from the LAST stage's
+ * {@code ServiceResult.reasonerMetadata} that invoked a reasoner
+ * (Stage 4 > Stage 3 > Stage 2; Stage 1 short-circuit -> ?null).
+ * Existing callers reading {@code semanticVerdict}, {@code errorCode},
+ * {@code evidence} are NOT affected -> ?the field is additive.</p>
  */
 public record ClaimVerificationResult(
     String claimId,
@@ -31,7 +38,8 @@ public record ClaimVerificationResult(
     int totalEvidenceAvailable,
     ExecutionStatus executionStatus,
     Optional<ErrorCode> errorCode,
-    PerStageTiming perStageTiming
+    PerStageTiming perStageTiming,
+    ReasonerCallMetadata metadata
 ) {
     /**
      * Backward-compatible accessor that returns the verdict or {@code null}
@@ -55,7 +63,26 @@ public record ClaimVerificationResult(
             claimId, ontologyId, claimType, Optional.ofNullable(verdict),
             evidence, unknownReason, unknownExplanation, reasonerName, graphScope,
             truncated, totalEvidenceAvailable,
-            ExecutionStatus.COMPLETED, Optional.empty(), PerStageTiming.empty()
+            ExecutionStatus.COMPLETED, Optional.empty(), PerStageTiming.empty(), null
+        );
+    }
+
+    /**
+     * v0.8.6: Canonical factory for COMPLETED case with reasoner call metadata.
+     */
+    public static ClaimVerificationResult completed(
+        String claimId, String ontologyId, ClaimType claimType,
+        Verdict verdict, List<EvidenceItem> evidence,
+        Optional<UnknownReason> unknownReason, Optional<String> unknownExplanation,
+        Optional<String> reasonerName, Optional<GraphScope> graphScope,
+        boolean truncated, int totalEvidenceAvailable,
+        ReasonerCallMetadata metadata
+    ) {
+        return new ClaimVerificationResult(
+            claimId, ontologyId, claimType, Optional.ofNullable(verdict),
+            evidence, unknownReason, unknownExplanation, reasonerName, graphScope,
+            truncated, totalEvidenceAvailable,
+            ExecutionStatus.COMPLETED, Optional.empty(), PerStageTiming.empty(), metadata
         );
     }
 
@@ -72,7 +99,24 @@ public record ClaimVerificationResult(
             claimId, ontologyId, claimType, Optional.empty(),
             List.of(), Optional.empty(), Optional.empty(), reasonerName, graphScope,
             false, 0,
-            executionStatus, Optional.of(errorCode), perStageTiming
+            executionStatus, Optional.of(errorCode), perStageTiming, null
+        );
+    }
+
+    /**
+     * v0.8.6: Canonical factory for TIMEOUT/ERROR case with reasoner call metadata.
+     */
+    public static ClaimVerificationResult errored(
+        String claimId, String ontologyId, ClaimType claimType,
+        ExecutionStatus executionStatus, ErrorCode errorCode,
+        Optional<String> reasonerName, Optional<GraphScope> graphScope,
+        PerStageTiming perStageTiming, ReasonerCallMetadata metadata
+    ) {
+        return new ClaimVerificationResult(
+            claimId, ontologyId, claimType, Optional.empty(),
+            List.of(), Optional.empty(), Optional.empty(), reasonerName, graphScope,
+            false, 0,
+            executionStatus, Optional.of(errorCode), perStageTiming, metadata
         );
     }
 }

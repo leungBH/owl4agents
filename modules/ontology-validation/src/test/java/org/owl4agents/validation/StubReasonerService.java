@@ -284,7 +284,7 @@ class StubReasonerService implements ReasonerService {
             java.time.Duration timeout) {
         callLog.add("checkConsistencyAfterAdding:" + claimId);
         org.owl4agents.core.model.ConsistencyAfterAdditionResult result =
-            new org.owl4agents.core.model.ConsistencyAfterAdditionResult(
+            org.owl4agents.core.model.ConsistencyAfterAdditionResult.create(
                 ontologyId, claimId,
                 reasonerName.orElse("HermiT"),
                 consistencyAfterAdditionStatus,

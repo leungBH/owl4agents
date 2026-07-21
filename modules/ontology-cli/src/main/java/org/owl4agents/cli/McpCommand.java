@@ -162,8 +162,8 @@ public class McpCommand implements Callable<Integer> {
         // D-001 fix: wire the three v0.8 CLI options into the HttpMcpServer
         // constructor. Previously the CLI parsed these flags but discarded
         // them, so the server always started with the defaults
-        // (max_sse=100, session_ttl_min=30, heartbeat_sec=15) regardless of
-        // what the user passed on the command line.
+        // (max_sse=100, session_ttl_min=5 (v0.8.6), heartbeat_sec=15)
+        // regardless of what the user passed on the command line.
         HttpMcpServer server;
         try {
             server = new HttpMcpServer(

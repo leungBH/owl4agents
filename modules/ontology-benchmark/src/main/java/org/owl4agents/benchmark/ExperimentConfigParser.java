@@ -39,8 +39,41 @@ public class ExperimentConfigParser {
     /**
      * Parse a YAML config file into an ExperimentConfig.
      * Returns ParseResult with either a valid config or a ConfigError.
+     *
+     * @deprecated v0.8.6 D8: use {@link #parse(String, String)} to supply a
+     * {@code questionSetPathOverride} when the question set content is
+     * provided inline (e.g. via the MCP {@code question_set_content} arg).
+     * This 1-arg overload delegates to {@code parse(configPath, null)}.
      */
+    @Deprecated
     public ParseResult parse(String configPath) {
+        return parse(configPath, null);
+    }
+
+    /**
+     * Parse a YAML config file into an ExperimentConfig, optionally
+     * overriding the {@code questionSetPath} field.
+     *
+     * <p>v0.8.6 D8: when {@code questionSetPathOverride} is non-null, it
+     * replaces the parsed {@code questionSetPath} value <em>before
+     * validation</em>. This lets callers pass inline question set content
+     * (written to a temp file by the MCP adapter) without fragile string
+     * replacement of the YAML. The override applies to:</p>
+     * <ul>
+     *   <li>The required-field check (a missing YAML {@code questionSetPath}
+     *       is acceptable when an override is supplied).</li>
+     *   <li>The {@link #checkQuestionSetFormat(String)} call (the override
+     *       path is validated, not the YAML value).</li>
+     *   <li>The returned {@link ExperimentConfig#questionSetPath()}.</li>
+     * </ul>
+     *
+     * @param configPath path to the YAML config file (file must exist)
+     * @param questionSetPathOverride when non-null, replaces the parsed
+     *        {@code questionSetPath} before validation; when {@code null},
+     *        the YAML value is used (existing behavior)
+     * @return ParseResult with either a valid config or a ConfigError
+     */
+    public ParseResult parse(String configPath, String questionSetPathOverride) {
         Path path = Path.of(configPath);
 
         // 1. File existence check
@@ -93,6 +126,13 @@ public class ExperimentConfigParser {
         String outputPath = requireString(map, "outputPath");
         List<String> ontologyIds = requireList(map, "ontologyIds");
         List<String> reasoners = requireList(map, "reasoners");
+
+        // v0.8.6 D8: Apply questionSetPath override before the missing-field
+        // check so a YAML without questionSetPath is acceptable when an
+        // override is supplied.
+        if (questionSetPathOverride != null) {
+            questionSetPath = questionSetPathOverride;
+        }
 
         if (name == null) return missingField("name");
         if (description == null) return missingField("description");

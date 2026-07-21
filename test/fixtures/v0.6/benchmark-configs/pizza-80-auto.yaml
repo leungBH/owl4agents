@@ -1,0 +1,9 @@
+name: pizza-80-auto
+description: Pizza ontology benchmark with 80 claims (auto reasoner - v0.8.6 verification)
+ontologyIds:
+  - pizza
+questionSetPath: test/fixtures/v0.6/question-sets/pizza-80.jsonl
+reasoners:
+  - auto
+outputPath: results/pizza-80-auto-output.jsonl
+timeoutPerQuestion: 60

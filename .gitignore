@@ -141,3 +141,10 @@ v*-final-*/
 
 # CLI integration test workspace
 /test-workspace/
+
+# v0.8.6 stability test artifacts
+/owl4agents-heapdump.hprof
+*.hprof
+/workspaces/
+/results/
+/config.yaml

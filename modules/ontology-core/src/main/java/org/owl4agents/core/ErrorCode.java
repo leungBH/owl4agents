@@ -154,7 +154,19 @@ public enum ErrorCode {
     TEMPORARY_ONTOLOGY_CREATION_FAILED("TEMPORARY_ONTOLOGY_CREATION_FAILED",
         "Failed to create an isolated temporary ontology for the consistency check."),
     TRANSIENT_REASONER_INIT_FAILED("TRANSIENT_REASONER_INIT_FAILED",
-        "Failed to initialize a transient reasoner session for the consistency check.");
+        "Failed to initialize a transient reasoner session for the consistency check."),
+
+    // v0.8.6 reasoner call wrapper error codes
+    REASONER_BUSY("REASONER_BUSY",
+        "The reasoner executor rejected the task; another reasoner call is in progress."),
+    REASONER_REJECTED_ONTOLOGY("REASONER_REJECTED_ONTOLOGY",
+        "The reasoner rejected the ontology (e.g. ELK rejecting non-EL axioms). Retry with a different reasoner."),
+    REASONER_INTERNAL_ERROR("REASONER_INTERNAL_ERROR",
+        "The reasoner threw an unexpected internal error."),
+    REASONER_INTERRUPTED("REASONER_INTERRUPTED",
+        "The reasoner call was interrupted before completion."),
+    REASONER_EXPLANATION_UNSUPPORTED_FOR_LARGE_ONTOLOGY("REASONER_EXPLANATION_UNSUPPORTED_FOR_LARGE_ONTOLOGY",
+        "Explanation requested on large ontology (classCount > 20K). Openllet would OOM. Disable explanation, use a smaller ontology, or explicitly specify reasoner=openllet (accepting OOM risk).");
 
     private final String code;
     private final String defaultMessage;
@@ -170,5 +182,22 @@ public enum ErrorCode {
 
     public String defaultMessage() {
         return defaultMessage;
+    }
+
+    /**
+     * v0.8.6: Look up an ErrorCode by its string code (case-insensitive).
+     * Used by {@code executeBenchmarkRun} to preserve the parser's error code
+     * (e.g. QUESTION_SET_NOT_FOUND) instead of always wrapping as
+     * INVALID_EXPERIMENT_CONFIG.
+     *
+     * @param code the string code to look up (case-insensitive, e.g. "QUESTION_SET_NOT_FOUND")
+     * @return the matching ErrorCode, or empty Optional if no match
+     */
+    public static java.util.Optional<ErrorCode> fromCode(String code) {
+        if (code == null) return java.util.Optional.empty();
+        for (ErrorCode ec : values()) {
+            if (ec.code.equalsIgnoreCase(code)) return java.util.Optional.of(ec);
+        }
+        return java.util.Optional.empty();
     }
 }

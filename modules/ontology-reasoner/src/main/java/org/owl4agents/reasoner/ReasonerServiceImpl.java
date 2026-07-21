@@ -8,6 +8,7 @@ import org.owl4agents.owlapi.OntologyCache;
 import org.owl4agents.owlapi.OntologyImporter;
 import org.owl4agents.owlapi.OntologyIriResolver;
 import org.owl4agents.storage.CatalogStore;
+import org.owl4agents.reasoner.wrapper.ReasonerCallWrapper;
 import org.semanticweb.owlapi.apibinding.OWLManager;
 import org.semanticweb.owlapi.model.*;
 import org.semanticweb.owlapi.model.parameters.Imports;
@@ -41,17 +42,28 @@ public class ReasonerServiceImpl implements ReasonerService, org.owl4agents.owla
     // v0.8.5 D5/D7: Source ontology consistency cache.
     // Key = "<ontologyId>|<fingerprint>|<reasonerName>|<importsState>"
     // Value = Boolean (true = consistent, false = inconsistent).
-    // Bounded LRU cache (max 256 entries) with synchronized access.
-    private final java.util.LinkedHashMap<String, Boolean> sourceConsistencyCache =
-        new java.util.LinkedHashMap<>(64, 0.75f, true);
-    private static final int SOURCE_CONSISTENCY_CACHE_MAX = 256;
-    private long sourceConsistencyCacheHits = 0;
-    private long sourceConsistencyCacheMisses = 0;
-    private long sourceConsistencyCacheEvictions = 0;
+    // v0.8.6 D4 task 5.8: Migrated from LinkedHashMap with manual LRU eviction
+    // (256 entries) to Caffeine Cache with maximumSize(200),
+    // expireAfterAccess(2h), recordStats(). Caffeine's W-TinyLFU policy
+    // provides better hit rates than LRU and the stats() API exposes
+    // hit/miss/eviction counts for monitoring.
+    private final com.github.benmanes.caffeine.cache.Cache<String, Boolean> sourceConsistencyCache =
+        com.github.benmanes.caffeine.cache.Caffeine.newBuilder()
+            .maximumSize(200)
+            .expireAfterAccess(java.time.Duration.ofHours(2))
+            .recordStats()
+            .build();
+    private final java.util.concurrent.atomic.AtomicLong sourceConsistencyCacheHits =
+        new java.util.concurrent.atomic.AtomicLong(0);
+    private final java.util.concurrent.atomic.AtomicLong sourceConsistencyCacheMisses =
+        new java.util.concurrent.atomic.AtomicLong(0);
 
     // v0.8.5 D7: Platform-thread ExecutorService for exact consistency checks.
     // NOT virtual threads (HermiT/Openllet use synchronized blocks that pin
     // virtual thread carriers, preventing unmount on timeout).
+    // v0.8.6: Retained for backward compatibility but new reasoner calls
+    // route through {@link #reasonerCallWrapper} which enforces strict
+    // serial execution via single-thread SynchronousQueue executor.
     private final java.util.concurrent.ExecutorService exactCheckExecutor =
         java.util.concurrent.Executors.newCachedThreadPool(r -> {
             Thread t = new Thread(r, "owl4agents-exact-check");
@@ -61,6 +73,38 @@ public class ReasonerServiceImpl implements ReasonerService, org.owl4agents.owla
 
     // v0.8.5 D3/D4: TemporaryOntologyFactory + TransientReasonerSession collaborators.
     private final TemporaryOntologyFactory temporaryOntologyFactory = new TemporaryOntologyFactory();
+
+    // v0.8.6 D1: Unified ReasonerCallWrapper with single-thread SynchronousQueue executor.
+    // Provides timeout enforcement, ELK fallback, executor recovery for ALL reasoner calls.
+    // Strict serial execution (no queueing) prevents thundering-herd OOM on large ontologies.
+    private final ReasonerCallWrapper reasonerCallWrapper = createReasonerCallWrapper();
+    private final long reasonerTimeoutSec = resolveReasonerTimeoutSec();
+
+    private static long resolveReasonerTimeoutSec() {
+        String raw = System.getProperty("owl4agents.reasoner.timeout.seconds", "30");
+        try {
+            long parsed = Long.parseLong(raw.trim());
+            return parsed < 1 ? 1 : parsed;
+        } catch (NumberFormatException e) {
+            java.util.logging.Logger.getLogger(ReasonerServiceImpl.class.getName())
+                .warning("Invalid owl4agents.reasoner.timeout.seconds='" + raw + "'; using default 30");
+            return 30;
+        }
+    }
+
+    private static ReasonerCallWrapper createReasonerCallWrapper() {
+        long timeoutSec = resolveReasonerTimeoutSec();
+        java.util.concurrent.ExecutorService reasonerExecutor = new java.util.concurrent.ThreadPoolExecutor(
+            1, 1, 0L, java.util.concurrent.TimeUnit.MILLISECONDS,
+            new java.util.concurrent.SynchronousQueue<>(),
+            r -> {
+                Thread t = new Thread(r, "owl4agents-reasoner-wrapper");
+                t.setDaemon(true);
+                return t;
+            },
+            new java.util.concurrent.ThreadPoolExecutor.AbortPolicy());
+        return new ReasonerCallWrapper(reasonerExecutor, timeoutSec);
+    }
 
     // v0.8.5 P1 fix: Cached exact-check session per (ontologyId, reasonerName).
     // The base ontology copy (without claim axiom) and reasoner are created once
@@ -165,17 +209,24 @@ public class ReasonerServiceImpl implements ReasonerService, org.owl4agents.owla
         invalidateSourceConsistencyCache(ontologyId.id());
         // v0.8.5 P1: invalidate cached exact-check session for this ontology
         invalidateExactCheckSessionCache(ontologyId.id());
+        // v0.8.6 D4 task 5.3: invalidate the global EntitySignatureCache so
+        // stale entity IRIs from the old ontology version do not produce
+        // false-positive contains() results after reload.
+        EntitySignatureCache.invalidateAll();
     }
 
     @Override
     public void onAllOntologiesReloaded() {
         inferredHierarchyCache.clear();
         // v0.8.5 D5: clear all source consistency cache entries
-        synchronized (sourceConsistencyCache) {
-            sourceConsistencyCache.clear();
-        }
+        // v0.8.6 task 5.8: Caffeine cache — invalidateAll() replaces manual clear.
+        sourceConsistencyCache.invalidateAll();
         // v0.8.5 P1: close all cached exact-check sessions
         closeAllExactCheckSessionCache();
+        // v0.8.6 D4 task 5.3: invalidate the global EntitySignatureCache so
+        // stale entity IRIs from the old ontologies do not produce
+        // false-positive contains() results after a full reload.
+        EntitySignatureCache.invalidateAll();
     }
 
     @Override
@@ -186,14 +237,16 @@ public class ReasonerServiceImpl implements ReasonerService, org.owl4agents.owla
     @Override
     public ServiceResult<ReasoningReport> runReasoner(OntologyId ontologyId, Optional<String> reasonerName) {
         long totalStart = System.currentTimeMillis();
+        OWLReasonerAdapter adapter = null;
+        String effectiveReasonerName = null;
         try {
             OWLOntology ontology = loadOntology(ontologyId);
             String detectedProfile = detectProfile(ontologyId, ontology);
             boolean explanationRequested = reasonerName.map("openllet"::equalsIgnoreCase).orElse(false);
-            String effectiveReasonerName = resolveReasonerName(reasonerName, detectedProfile, explanationRequested);
+            effectiveReasonerName = resolveReasonerName(reasonerName, detectedProfile, explanationRequested, ontology);
 
             long initStart = System.currentTimeMillis();
-            OWLReasonerAdapter adapter = lifecycleManager.getOrCreateReasoner(
+            adapter = lifecycleManager.getOrCreateReasoner(
                 ontologyId, effectiveReasonerName, ontology, detectedProfile, explanationRequested);
             long initTime = System.currentTimeMillis() - initStart;
 
@@ -250,18 +303,27 @@ public class ReasonerServiceImpl implements ReasonerService, org.owl4agents.owla
                 new ReasoningReport.ErrorDetails("reasoner-initialization-failed", e.getMessage(), null));
             lifecycleManager.storeReasoningReport(ontologyId, report);
             return ServiceResult.error(ErrorCode.CLASSIFICATION_FAILED, e.getMessage());
+        } finally {
+            // v0.8.6 D3: Release the reference count acquired by getOrCreateReasoner.
+            // The adapter stays in the LRU map (eligible for reuse) but can now be
+            // evicted if MAX_ACTIVE_REASONERS is exceeded.
+            if (adapter != null && effectiveReasonerName != null) {
+                lifecycleManager.releaseReasoner(ontologyId, effectiveReasonerName);
+            }
         }
     }
 
     @Override
     public ServiceResult<ClassificationResult> classify(OntologyId ontologyId, Optional<String> reasonerName) {
+        OWLReasonerAdapter adapter = null;
+        String effectiveReasonerName = null;
         try {
             OWLOntology ontology = loadOntology(ontologyId);
             String detectedProfile = detectProfile(ontologyId, ontology);
             boolean explanationRequested = false;
-            String effectiveReasonerName = resolveReasonerName(reasonerName, detectedProfile, explanationRequested);
+            effectiveReasonerName = resolveReasonerName(reasonerName, detectedProfile, explanationRequested, ontology);
 
-            OWLReasonerAdapter adapter = lifecycleManager.getOrCreateReasoner(
+            adapter = lifecycleManager.getOrCreateReasoner(
                 ontologyId, effectiveReasonerName, ontology, detectedProfile, explanationRequested);
 
             ClassificationResult result = adapter.classify(ontologyId.id());
@@ -269,17 +331,23 @@ public class ReasonerServiceImpl implements ReasonerService, org.owl4agents.owla
             return ServiceResult.success(result, ResultMetadata.empty());
         } catch (Exception e) {
             return ServiceResult.error(ErrorCode.CLASSIFICATION_FAILED, e.getMessage());
+        } finally {
+            if (adapter != null && effectiveReasonerName != null) {
+                lifecycleManager.releaseReasoner(ontologyId, effectiveReasonerName);
+            }
         }
     }
 
     @Override
     public ServiceResult<RealizationResult> realize(OntologyId ontologyId, Optional<String> reasonerName) {
+        OWLReasonerAdapter adapter = null;
+        String effectiveReasonerName = null;
         try {
             OWLOntology ontology = loadOntology(ontologyId);
             String detectedProfile = detectProfile(ontologyId, ontology);
-            String effectiveReasonerName = resolveReasonerName(reasonerName, detectedProfile, false);
+            effectiveReasonerName = resolveReasonerName(reasonerName, detectedProfile, false, ontology);
 
-            OWLReasonerAdapter adapter = lifecycleManager.getOrCreateReasoner(
+            adapter = lifecycleManager.getOrCreateReasoner(
                 ontologyId, effectiveReasonerName, ontology, detectedProfile, false);
 
             RealizationResult result = adapter.realize(ontologyId.id());
@@ -287,17 +355,23 @@ public class ReasonerServiceImpl implements ReasonerService, org.owl4agents.owla
             return ServiceResult.success(result, ResultMetadata.empty());
         } catch (Exception e) {
             return ServiceResult.error(ErrorCode.CLASSIFICATION_FAILED, e.getMessage());
+        } finally {
+            if (adapter != null && effectiveReasonerName != null) {
+                lifecycleManager.releaseReasoner(ontologyId, effectiveReasonerName);
+            }
         }
     }
 
     @Override
     public ServiceResult<ConsistencyResult> checkConsistency(OntologyId ontologyId, Optional<String> reasonerName) {
+        OWLReasonerAdapter adapter = null;
+        String effectiveReasonerName = null;
         try {
             OWLOntology ontology = loadOntology(ontologyId);
             String detectedProfile = detectProfile(ontologyId, ontology);
-            String effectiveReasonerName = resolveReasonerName(reasonerName, detectedProfile, false);
+            effectiveReasonerName = resolveReasonerName(reasonerName, detectedProfile, false, ontology);
 
-            OWLReasonerAdapter adapter = lifecycleManager.getOrCreateReasoner(
+            adapter = lifecycleManager.getOrCreateReasoner(
                 ontologyId, effectiveReasonerName, ontology, detectedProfile, false);
 
             ConsistencyResult result = adapter.checkConsistency(ontologyId.id());
@@ -305,6 +379,10 @@ public class ReasonerServiceImpl implements ReasonerService, org.owl4agents.owla
             return ServiceResult.success(result, ResultMetadata.empty());
         } catch (Exception e) {
             return ServiceResult.error(ErrorCode.CLASSIFICATION_FAILED, e.getMessage());
+        } finally {
+            if (adapter != null && effectiveReasonerName != null) {
+                lifecycleManager.releaseReasoner(ontologyId, effectiveReasonerName);
+            }
         }
     }
 
@@ -325,14 +403,16 @@ public class ReasonerServiceImpl implements ReasonerService, org.owl4agents.owla
 
     @Override
     public ServiceResult<InconsistencyExplanation> explainInconsistency(OntologyId ontologyId, Optional<String> reasonerName) {
+        OWLReasonerAdapter adapter = null;
+        String effectiveReasonerName = null;
         try {
             // For explanation, prefer Openllet
             boolean explanationRequested = true;
             OWLOntology ontology = loadOntology(ontologyId);
             String detectedProfile = detectProfile(ontologyId, ontology);
-            String effectiveReasonerName = reasonerName.orElse("openllet");
+            effectiveReasonerName = reasonerName.orElse("openllet");
 
-            OWLReasonerAdapter adapter = lifecycleManager.getOrCreateReasoner(
+            adapter = lifecycleManager.getOrCreateReasoner(
                 ontologyId, effectiveReasonerName, ontology, detectedProfile, explanationRequested);
 
             InconsistencyExplanation explanation = adapter.explainInconsistency(ontologyId.id());
@@ -347,18 +427,24 @@ public class ReasonerServiceImpl implements ReasonerService, org.owl4agents.owla
             return ServiceResult.error(ErrorCode.EXPLANATION_NOT_SUPPORTED, e.getMessage());
         } catch (Exception e) {
             return ServiceResult.error(ErrorCode.EXPLANATION_FAILED, e.getMessage());
+        } finally {
+            if (adapter != null && effectiveReasonerName != null) {
+                lifecycleManager.releaseReasoner(ontologyId, effectiveReasonerName);
+            }
         }
     }
 
     @Override
     public ServiceResult<UnsatClassExplanation> explainUnsatClass(OntologyId ontologyId, String classIRI, Optional<String> reasonerName) {
+        OWLReasonerAdapter adapter = null;
+        String effectiveReasonerName = null;
         try {
             boolean explanationRequested = true;
             OWLOntology ontology = loadOntology(ontologyId);
             String detectedProfile = detectProfile(ontologyId, ontology);
-            String effectiveReasonerName = reasonerName.orElse("openllet");
+            effectiveReasonerName = reasonerName.orElse("openllet");
 
-            OWLReasonerAdapter adapter = lifecycleManager.getOrCreateReasoner(
+            adapter = lifecycleManager.getOrCreateReasoner(
                 ontologyId, effectiveReasonerName, ontology, detectedProfile, explanationRequested);
 
             UnsatClassExplanation explanation = adapter.explainUnsatClass(ontologyId.id(), classIRI);
@@ -373,6 +459,10 @@ public class ReasonerServiceImpl implements ReasonerService, org.owl4agents.owla
             return ServiceResult.error(ErrorCode.EXPLANATION_NOT_SUPPORTED, e.getMessage());
         } catch (Exception e) {
             return ServiceResult.error(ErrorCode.EXPLANATION_FAILED, e.getMessage());
+        } finally {
+            if (adapter != null && effectiveReasonerName != null) {
+                lifecycleManager.releaseReasoner(ontologyId, effectiveReasonerName);
+            }
         }
     }
 
@@ -488,53 +578,60 @@ public class ReasonerServiceImpl implements ReasonerService, org.owl4agents.owla
             org.semanticweb.owlapi.model.OWLClassExpression object,
             Optional<String> reasonerName) throws Exception {
         String detectedProfile = detectProfile(ontologyId, ontology);
-        String effectiveReasonerName = resolveReasonerName(reasonerName, detectedProfile, false);
+        String effectiveReasonerName = resolveReasonerName(reasonerName, detectedProfile, false, ontology);
 
         OWLReasonerAdapter adapter = lifecycleManager.getOrCreateReasoner(
             ontologyId, effectiveReasonerName, ontology, detectedProfile, false);
 
-        if (!adapter.isActive()) {
-            return ServiceResult.error(ErrorCode.REASONING_NOT_RUN,
-                "Reasoner is not active after initialization for ontology: " + ontologyId.id());
-        }
-
-        if (!lifecycleManager.isClassified(ontologyId)) {
-            try {
-                adapter.getUnderlyingReasoner().precomputeInferences(InferenceType.CLASS_HIERARCHY);
-            } catch (Exception ignored) {
+        try {
+            if (!adapter.isActive()) {
+                return ServiceResult.error(ErrorCode.REASONING_NOT_RUN,
+                    "Reasoner is not active after initialization for ontology: " + ontologyId.id());
             }
-            lifecycleManager.markClassified(ontologyId);
-        }
 
-        OWLDataFactory df = ontology.getOWLOntologyManager().getOWLDataFactory();
-        org.semanticweb.owlapi.model.OWLEquivalentClassesAxiom axiom =
-            df.getOWLEquivalentClassesAxiom(subject, object);
+            if (!lifecycleManager.isClassified(ontologyId)) {
+                try {
+                    adapter.getUnderlyingReasoner().precomputeInferences(InferenceType.CLASS_HIERARCHY);
+                } catch (Exception ignored) {
+                }
+                lifecycleManager.markClassified(ontologyId);
+            }
 
-        // Asserted check (rare for complex expressions but possible)
-        boolean asserted = ontology.getAxioms(AxiomType.EQUIVALENT_CLASSES, Imports.INCLUDED).stream()
-            .anyMatch(ax -> ax.getClassExpressions().size() == 2
-                && ax.getClassExpressions().contains(subject)
-                && ax.getClassExpressions().contains(object));
-        if (asserted) {
+            OWLDataFactory df = ontology.getOWLOntologyManager().getOWLDataFactory();
+            org.semanticweb.owlapi.model.OWLEquivalentClassesAxiom axiom =
+                df.getOWLEquivalentClassesAxiom(subject, object);
+
+            // Asserted check (rare for complex expressions but possible)
+            boolean asserted = ontology.getAxioms(AxiomType.EQUIVALENT_CLASSES, Imports.INCLUDED).stream()
+                .anyMatch(ax -> ax.getClassExpressions().size() == 2
+                    && ax.getClassExpressions().contains(subject)
+                    && ax.getClassExpressions().contains(object));
+            if (asserted) {
+                return ServiceResult.success(
+                    new EntailmentResult(ontologyId.id(), "EquivalentClasses",
+                        EntailmentResult.ENTAILED, "asserted", effectiveReasonerName, null),
+                    ResultMetadata.empty());
+            }
+
+            boolean entailed;
+            try {
+                entailed = adapter.getUnderlyingReasoner().isEntailed(axiom);
+            } catch (Exception e) {
+                return ServiceResult.error(ErrorCode.CLASSIFICATION_FAILED,
+                    "isEntailed failed for EquivalentClasses: " + e.getMessage());
+            }
+
             return ServiceResult.success(
                 new EntailmentResult(ontologyId.id(), "EquivalentClasses",
-                    EntailmentResult.ENTAILED, "asserted", effectiveReasonerName, null),
+                    entailed ? EntailmentResult.ENTAILED : EntailmentResult.NOT_ENTAILED,
+                    entailed ? "inferred" : null, effectiveReasonerName, null),
                 ResultMetadata.empty());
+        } finally {
+            // v0.8.6 D3: Release the reference count acquired by getOrCreateReasoner.
+            if (effectiveReasonerName != null) {
+                lifecycleManager.releaseReasoner(ontologyId, effectiveReasonerName);
+            }
         }
-
-        boolean entailed;
-        try {
-            entailed = adapter.getUnderlyingReasoner().isEntailed(axiom);
-        } catch (Exception e) {
-            return ServiceResult.error(ErrorCode.CLASSIFICATION_FAILED,
-                "isEntailed failed for EquivalentClasses: " + e.getMessage());
-        }
-
-        return ServiceResult.success(
-            new EntailmentResult(ontologyId.id(), "EquivalentClasses",
-                entailed ? EntailmentResult.ENTAILED : EntailmentResult.NOT_ENTAILED,
-                entailed ? "inferred" : null, effectiveReasonerName, null),
-            ResultMetadata.empty());
     }
 
     @Deprecated
@@ -609,18 +706,25 @@ public class ReasonerServiceImpl implements ReasonerService, org.owl4agents.owla
         Optional<OWLReasonerAdapter> adapter = lifecycleManager.getActiveReasoner(ontologyId);
         if (adapter.isEmpty()) {
             String detectedProfile = detectProfile(ontologyId, ontology);
-            String effectiveReasonerName = resolveReasonerName(reasonerName, detectedProfile, false);
+            String effectiveReasonerName = resolveReasonerName(reasonerName, detectedProfile, false, ontology);
             OWLReasonerAdapter newAdapter = lifecycleManager.getOrCreateReasoner(
                 ontologyId, effectiveReasonerName, ontology, detectedProfile, false);
 
-            boolean entailed = checkAxiomEntailmentByType(newAdapter, ontologyId, ontology, axiomType, parameters);
-            String source = determineSource(ontologyId, ontology, axiomType, parameters);
+            try {
+                boolean entailed = checkAxiomEntailmentByType(newAdapter, ontologyId, ontology, axiomType, parameters);
+                String source = determineSource(ontologyId, ontology, axiomType, parameters);
 
-            return ServiceResult.success(
-                new EntailmentResult(ontologyId.id(), axiomType,
-                    entailed ? EntailmentResult.ENTAILED : EntailmentResult.NOT_ENTAILED,
-                    source, effectiveReasonerName, null),
-                ResultMetadata.empty());
+                return ServiceResult.success(
+                    new EntailmentResult(ontologyId.id(), axiomType,
+                        entailed ? EntailmentResult.ENTAILED : EntailmentResult.NOT_ENTAILED,
+                        source, effectiveReasonerName, null),
+                    ResultMetadata.empty());
+            } finally {
+                // v0.8.6 D3: Release the reference count acquired by getOrCreateReasoner.
+                if (effectiveReasonerName != null) {
+                    lifecycleManager.releaseReasoner(ontologyId, effectiveReasonerName);
+                }
+            }
         }
 
         boolean entailed = checkAxiomEntailmentByType(adapter.get(), ontologyId, ontology, axiomType, parameters);
@@ -693,12 +797,61 @@ public class ReasonerServiceImpl implements ReasonerService, org.owl4agents.owla
         }
     }
 
-    private String resolveReasonerName(Optional<String> reasonerName, String detectedProfile, boolean explanationRequested) {
-        if (reasonerName.isPresent() && !"auto".equalsIgnoreCase(reasonerName.get())) {
+    /**
+     * v0.8.6 D2: Resolve the effective reasoner name, passing the ontology's
+     * class count and the explicit-override flag to the size-aware
+     * {@link AutoReasonerSelector#select(String, boolean, int, boolean)}.
+     *
+     * <p>Behavior:</p>
+     * <ul>
+     *   <li>When the user explicitly specified a non-{@code "auto"} reasoner
+     *       ({@code explicitOverride=true}): honor the user's choice and
+     *       return it directly. If the ontology is large ({@code classCount
+     *       > 20K}), emit a {@code WARN} log — the user accepts the OOM risk.
+     *       The size-aware branch in {@code select()} is bypassed by the
+     *       early return; the explicitOverride parameter on {@code select()}
+     *       exists for unit-testability of the bypass behavior.</li>
+     *   <li>When {@code explicitOverride=false}: call the 4-arg
+     *       {@code select()} with the ontology's class count. The size-aware
+     *       branch may select ELK for large non-EL ontologies, or return an
+     *       error result (carried on {@code ReasonerSelectionResult.errorCode()})
+     *       when explanation is requested on a large non-EL ontology.</li>
+     * </ul>
+     *
+     * @param reasonerName         the user-specified reasoner name (Optional, may be empty or "auto")
+     * @param detectedProfile      the detected OWL profile of the ontology
+     * @param explanationRequested whether explanation is requested (true only for explain* paths)
+     * @param ontology             the loaded ontology (may be {@code null} — classCount=0, no WARN)
+     * @return the effective reasoner name, or {@code null} if the selector returned an error result
+     *         (caller is responsible for propagating the error if needed)
+     */
+    private String resolveReasonerName(Optional<String> reasonerName, String detectedProfile,
+                                        boolean explanationRequested, OWLOntology ontology) {
+        boolean explicitOverride = reasonerName.isPresent()
+            && !"auto".equalsIgnoreCase(reasonerName.get());
+        int classCount = (ontology != null) ? ontology.getClassesInSignature().size() : 0;
+
+        if (explicitOverride) {
+            // Honor the user's explicit reasoner choice; bypass size-aware branch.
+            // Log WARN on large ontologies (OOM risk accepted by the user).
+            if (classCount > AutoReasonerSelector.LARGE_ONTOLOGY_CLASS_THRESHOLD) {
+                java.util.logging.Logger.getLogger(ReasonerServiceImpl.class.getName())
+                    .warning("User explicitly selected " + reasonerName.get()
+                        + " on large ontology (classCount=" + classCount
+                        + "); OOM risk accepted");
+            }
             return reasonerName.get();
         }
+
         AutoReasonerSelector selector = new AutoReasonerSelector();
-        ReasonerSelectionResult selection = selector.select(detectedProfile, explanationRequested);
+        ReasonerSelectionResult selection = selector.select(
+            detectedProfile, explanationRequested, classCount, false);
+        // v0.8.6 D2: when the size-aware branch returns an error result
+        // (e.g. explanation requested on a large non-EL ontology), reasonerName
+        // is null and errorCode is set. Callers of resolveReasonerName always
+        // pass explanationRequested=false today, so this branch is not hit in
+        // production; the null is surfaced for future callers that may need
+        // to propagate the error via ServiceResult.
         return selection.reasonerName();
     }
 
@@ -1646,10 +1799,12 @@ public class ReasonerServiceImpl implements ReasonerService, org.owl4agents.owla
                 "Claim axiom must not be null.");
         }
         java.time.Duration effectiveTimeout = (timeout != null) ? timeout : java.time.Duration.ofSeconds(60);
+        // v0.8.6: Pass Duration directly to wrapper to support sub-second timeouts
+        // (e.g., Duration.ZERO for immediate timeout in v0.8.5 acceptance test).
 
         // Resolve reasoner name (auto-select if not specified)
         String detectedProfile = detectProfile(ontologyId, sourceOntology);
-        String effectiveReasoner = resolveReasonerName(reasonerName, detectedProfile, false);
+        String effectiveReasoner = resolveReasonerName(reasonerName, detectedProfile, false, sourceOntology);
 
         // v0.8.5 P1: get or create cached exact-check session (base copy + reasoner).
         // On cache hit, temporaryCopyMs and reasonerInitMs are 0 (reused).
@@ -1666,7 +1821,7 @@ public class ReasonerServiceImpl implements ReasonerService, org.owl4agents.owla
                 ? "Temporary ontology creation failed"
                 : "Transient reasoner init failed";
             return ServiceResult.success(
-                new org.owl4agents.core.model.ConsistencyAfterAdditionResult(
+                org.owl4agents.core.model.ConsistencyAfterAdditionResult.create(
                     ontologyId, claimId, effectiveReasoner,
                     org.owl4agents.core.model.ConsistencyAfterAdditionStatus.ERROR,
                     claimAxiom.toString(), totalMs, false, (reasonerInitMs > 0 || temporaryCopyMs == 0),
@@ -1689,26 +1844,84 @@ public class ReasonerServiceImpl implements ReasonerService, org.owl4agents.owla
             tempManager.applyChange(new org.semanticweb.owlapi.model.AddAxiom(tempOntology, claimAxiom));
 
             try {
-                // Run consistency check wrapped in Future.get(timeout) (D7)
                 long consistencyCheckStart = System.nanoTime();
-                java.util.concurrent.Future<org.owl4agents.core.model.ConsistencyResult> future =
-                    exactCheckExecutor.submit(() -> cached.session.checkConsistency());
 
-                org.owl4agents.core.model.ConsistencyResult cr;
-                org.owl4agents.core.model.ConsistencyAfterAdditionStatus status;
-                Optional<String> diagnostic = Optional.empty();
-                java.util.List<String> explanationAxioms = java.util.List.of();
+                // v0.8.6 D1: Route through ReasonerCallWrapper with ELK fallback.
+                // The wrapper handles timeout, ELK fallback, executor recovery.
+                // The primarySupplier uses the cached session (fast path).
+                // The elkSupplier creates a fresh ELK session (slow path, fallback only).
+                final CachedExactCheckSession cachedFinal = cached;
+                java.util.function.Supplier<ServiceResult<Boolean>> primarySupplier = () -> {
+                    try {
+                        org.owl4agents.core.model.ConsistencyResult cr = cachedFinal.session.checkConsistency();
+                        return ServiceResult.success(cr.consistent(), ResultMetadata.empty());
+                    } catch (Exception e) {
+                        return ServiceResult.error(ErrorCode.CLAIM_CONSISTENCY_CHECK_FAILED, e.getMessage());
+                    }
+                };
+                java.util.function.Supplier<ServiceResult<Boolean>> elkSupplier = () -> {
+                    // Slow path: create fresh temp ontology + ELK session for fallback.
+                    // This is only invoked when the primary reasoner times out.
+                    try {
+                        ServiceResult<TemporaryOntologyHandle> baseHandle =
+                            temporaryOntologyFactory.createBase(sourceOntology,
+                                new TemporaryOntologyOptions(true, "elk-fallback"));
+                        if (!baseHandle.isSuccess()) {
+                            return ServiceResult.error(ErrorCode.TEMPORARY_ONTOLOGY_CREATION_FAILED,
+                                "ELK fallback: failed to create temporary ontology");
+                        }
+                        TemporaryOntologyHandle handle =
+                            ((ServiceResult.Success<TemporaryOntologyHandle>) baseHandle).data();
+                        OWLOntology elkTempOntology = handle.ontology();
+                        elkTempOntology.getOWLOntologyManager().applyChange(
+                            new org.semanticweb.owlapi.model.AddAxiom(elkTempOntology, claimAxiom));
+                        try {
+                            ServiceResult<TransientReasonerSession> sessionResult =
+                                TransientReasonerSession.create(elkTempOntology, "ELK", effectiveTimeout);
+                            if (!sessionResult.isSuccess()) {
+                                return ServiceResult.error(ErrorCode.TRANSIENT_REASONER_INIT_FAILED,
+                                    "ELK fallback: failed to create transient session");
+                            }
+                            TransientReasonerSession elkSession =
+                                ((ServiceResult.Success<TransientReasonerSession>) sessionResult).data();
+                            org.owl4agents.core.model.ConsistencyResult cr = elkSession.checkConsistency();
+                            return ServiceResult.success(cr.consistent(), ResultMetadata.empty());
+                        } finally {
+                            handle.close();
+                        }
+                    } catch (Exception e) {
+                        return ServiceResult.error(ErrorCode.CLAIM_CONSISTENCY_CHECK_FAILED,
+                            "ELK fallback failed: " + e.getMessage());
+                    }
+                };
 
-                try {
-                    cr = future.get(effectiveTimeout.toNanos(), java.util.concurrent.TimeUnit.NANOSECONDS);
-                    long consistencyCheckMs = msSince(consistencyCheckStart);
+                ServiceResult<Boolean> wrapperResult = reasonerCallWrapper.callWithElkFallback(
+                    effectiveReasoner, ontologyId, primarySupplier, elkSupplier, effectiveTimeout);
 
-                    if (cr.consistent()) {
+                long consistencyCheckMs = msSince(consistencyCheckStart);
+                long totalMs = msSince(totalStart);
+
+                // Extract metadata from wrapper result
+                org.owl4agents.core.model.ReasonerCallMetadata metadata = null;
+                if (wrapperResult.isSuccess()) {
+                    metadata = ((ServiceResult.Success<Boolean>) wrapperResult).reasonerMetadata();
+                } else {
+                    metadata = ((ServiceResult.Error<Boolean>) wrapperResult).reasonerMetadata();
+                }
+
+                // Map wrapper result to ConsistencyAfterAdditionResult
+                if (wrapperResult.isSuccess()) {
+                    ServiceResult.Success<Boolean> success = (ServiceResult.Success<Boolean>) wrapperResult;
+                    boolean consistent = success.data();
+                    org.owl4agents.core.model.ConsistencyAfterAdditionStatus status;
+                    Optional<String> diagnostic = Optional.empty();
+                    java.util.List<String> explanationAxioms = java.util.List.of();
+
+                    if (consistent) {
                         status = org.owl4agents.core.model.ConsistencyAfterAdditionStatus.CONSISTENT;
                     } else {
                         status = org.owl4agents.core.model.ConsistencyAfterAdditionStatus.INCONSISTENT;
                         // Attempt explanation if supported (Openllet)
-                        long explanationStart = System.nanoTime();
                         if (cached.session.supportsExplanation()) {
                             try {
                                 org.owl4agents.core.model.InconsistencyExplanation expl =
@@ -1718,75 +1931,48 @@ public class ReasonerServiceImpl implements ReasonerService, org.owl4agents.owla
                                 // explanation is best-effort
                             }
                         }
-                        @SuppressWarnings("unused")
-                        long explanationMs = msSince(explanationStart);
                     }
 
-                    long totalMs = msSince(totalStart);
                     return ServiceResult.success(
-                        new org.owl4agents.core.model.ConsistencyAfterAdditionResult(
+                        org.owl4agents.core.model.ConsistencyAfterAdditionResult.create(
                             ontologyId, claimId, effectiveReasoner, status,
                             claimAxiom.toString(), totalMs, true, true,
                             diagnostic, explanationAxioms,
                             new org.owl4agents.core.model.PerStageTiming(
                                 null, null, null, temporaryCopyMs, reasonerInitMs,
-                                consistencyCheckMs, null, totalMs)),
+                                consistencyCheckMs, null, totalMs),
+                            metadata),
                         ResultMetadata.empty());
+                } else {
+                    ServiceResult.Error<Boolean> error = (ServiceResult.Error<Boolean>) wrapperResult;
+                    org.owl4agents.core.model.ConsistencyAfterAdditionStatus status;
+                    Optional<String> diagnostic;
 
-                } catch (java.util.concurrent.TimeoutException te) {
-                    future.cancel(true);
-                    long consistencyCheckMs = msSince(consistencyCheckStart);
-                    long totalMs = msSince(totalStart);
-                    status = org.owl4agents.core.model.ConsistencyAfterAdditionStatus.TIMEOUT;
-                    diagnostic = Optional.of("Reasoner exceeded timeout of " + effectiveTimeout.toMillis() + "ms (precision: nanos)");
-                    // On timeout, the reasoner may be in a corrupted state —
-                    // invalidate the cache entry and close the session.
-                    invalidateExactCheckSessionCache(ontologyId.id());
+                    if (error.error().code() == ErrorCode.REASONER_TIMEOUT) {
+                        status = org.owl4agents.core.model.ConsistencyAfterAdditionStatus.TIMEOUT;
+                        diagnostic = Optional.of("Reasoner exceeded timeout of "
+                            + effectiveTimeout.toMillis() + "ms (wrapper-enforced)");
+                        // On timeout, invalidate the cached session (reasoner may be corrupted)
+                        invalidateExactCheckSessionCache(ontologyId.id());
+                    } else if (error.error().code() == ErrorCode.REASONER_BUSY) {
+                        status = org.owl4agents.core.model.ConsistencyAfterAdditionStatus.ERROR;
+                        diagnostic = Optional.of("Reasoner executor busy: " + error.error().message());
+                    } else {
+                        status = org.owl4agents.core.model.ConsistencyAfterAdditionStatus.ERROR;
+                        diagnostic = Optional.of("Reasoner error: " + error.error().message());
+                        // On internal error, invalidate the cached session
+                        invalidateExactCheckSessionCache(ontologyId.id());
+                    }
+
                     return ServiceResult.success(
-                        new org.owl4agents.core.model.ConsistencyAfterAdditionResult(
+                        org.owl4agents.core.model.ConsistencyAfterAdditionResult.create(
                             ontologyId, claimId, effectiveReasoner, status,
                             claimAxiom.toString(), totalMs, false, true,
-                            diagnostic, explanationAxioms,
+                            diagnostic, java.util.List.of(),
                             new org.owl4agents.core.model.PerStageTiming(
                                 null, null, null, temporaryCopyMs, reasonerInitMs,
-                                consistencyCheckMs, null, totalMs)),
-                        ResultMetadata.empty());
-
-                } catch (java.util.concurrent.ExecutionException ee) {
-                    long consistencyCheckMs = msSince(consistencyCheckStart);
-                    long totalMs = msSince(totalStart);
-                    Throwable cause = ee.getCause() != null ? ee.getCause() : ee;
-                    status = org.owl4agents.core.model.ConsistencyAfterAdditionStatus.ERROR;
-                    diagnostic = Optional.of("Reasoner threw exception: " +
-                        cause.getClass().getSimpleName() + ": " + cause.getMessage());
-                    // On exception, the reasoner may be in a corrupted state —
-                    // invalidate the cache entry and close the session.
-                    invalidateExactCheckSessionCache(ontologyId.id());
-                    return ServiceResult.success(
-                        new org.owl4agents.core.model.ConsistencyAfterAdditionResult(
-                            ontologyId, claimId, effectiveReasoner, status,
-                            claimAxiom.toString(), totalMs, false, true,
-                            diagnostic, explanationAxioms,
-                            new org.owl4agents.core.model.PerStageTiming(
-                                null, null, null, temporaryCopyMs, reasonerInitMs,
-                                consistencyCheckMs, null, totalMs)),
-                        ResultMetadata.empty());
-
-                } catch (InterruptedException ie) {
-                    Thread.currentThread().interrupt();
-                    long consistencyCheckMs = msSince(consistencyCheckStart);
-                    long totalMs = msSince(totalStart);
-                    status = org.owl4agents.core.model.ConsistencyAfterAdditionStatus.ERROR;
-                    diagnostic = Optional.of("Consistency check interrupted");
-                    invalidateExactCheckSessionCache(ontologyId.id());
-                    return ServiceResult.success(
-                        new org.owl4agents.core.model.ConsistencyAfterAdditionResult(
-                            ontologyId, claimId, effectiveReasoner, status,
-                            claimAxiom.toString(), totalMs, false, true,
-                            diagnostic, explanationAxioms,
-                            new org.owl4agents.core.model.PerStageTiming(
-                                null, null, null, temporaryCopyMs, reasonerInitMs,
-                                consistencyCheckMs, null, totalMs)),
+                                consistencyCheckMs, null, totalMs),
+                            metadata),
                         ResultMetadata.empty());
                 }
             } finally {
@@ -1812,7 +1998,7 @@ public class ReasonerServiceImpl implements ReasonerService, org.owl4agents.owla
         try {
             OWLOntology ontology = loadOntology(ontologyId);
             String detectedProfile = detectProfile(ontologyId, ontology);
-            String effectiveReasoner = resolveReasonerName(reasonerName, detectedProfile, false);
+            String effectiveReasoner = resolveReasonerName(reasonerName, detectedProfile, false, ontology);
 
             // D5: check cache first
             String fingerprint = computeFingerprint(ontologyId, ontology);
@@ -1821,21 +2007,147 @@ public class ReasonerServiceImpl implements ReasonerService, org.owl4agents.owla
 
             Boolean cached = getSourceConsistencyCacheEntry(cacheKey);
             if (cached != null) {
-                sourceConsistencyCacheHits++;
+                sourceConsistencyCacheHits.incrementAndGet();
                 return ServiceResult.success(cached, ResultMetadata.empty());
             }
-            sourceConsistencyCacheMisses++;
+            sourceConsistencyCacheMisses.incrementAndGet();
 
-            // Run consistency check via the lifecycle manager (reuses the cached adapter)
-            OWLReasonerAdapter adapter = lifecycleManager.getOrCreateReasoner(
-                ontologyId, effectiveReasoner, ontology, detectedProfile, false);
-            org.owl4agents.core.model.ConsistencyResult cr = adapter.checkConsistency(ontologyId.id());
-            boolean consistent = cr.consistent();
+            // v0.8.6 D1: Route through ReasonerCallWrapper with ELK fallback.
+            // The wrapper enforces timeout (reasonerTimeoutSec), handles ELK fallback
+            // when primary times out, and recovers the executor on stuck threads.
+            // Reference count release: caller (this method) releases in finally block
+            // based on metadata (primary only, or primary + ELK on fallback).
+            final OWLOntology ontologyFinal = ontology;
+            final String detectedProfileFinal = detectedProfile;
+            java.util.function.Supplier<ServiceResult<Boolean>> primarySupplier = () -> {
+                try {
+                    OWLReasonerAdapter adapter = lifecycleManager.getOrCreateReasoner(
+                        ontologyId, effectiveReasoner, ontologyFinal, detectedProfileFinal, false);
+                    org.owl4agents.core.model.ConsistencyResult cr = adapter.checkConsistency(ontologyId.id());
+                    return ServiceResult.success(cr.consistent(), ResultMetadata.empty());
+                } catch (Exception e) {
+                    return ServiceResult.error(ErrorCode.CLASSIFICATION_FAILED, e.getMessage());
+                }
+            };
+            java.util.function.Supplier<ServiceResult<Boolean>> elkSupplier = () -> {
+                try {
+                    OWLReasonerAdapter elkAdapter = lifecycleManager.getOrCreateReasoner(
+                        ontologyId, "ELK", ontologyFinal, detectedProfileFinal, false);
+                    org.owl4agents.core.model.ConsistencyResult cr = elkAdapter.checkConsistency(ontologyId.id());
+                    return ServiceResult.success(cr.consistent(), ResultMetadata.empty());
+                } catch (Exception e) {
+                    return ServiceResult.error(ErrorCode.CLASSIFICATION_FAILED, e.getMessage());
+                }
+            };
 
-            // Cache the result
-            putSourceConsistencyCacheEntry(cacheKey, consistent);
+            ServiceResult<Boolean> result = reasonerCallWrapper.callWithElkFallback(
+                effectiveReasoner, ontologyId, primarySupplier, elkSupplier, reasonerTimeoutSec);
 
-            return ServiceResult.success(consistent, ResultMetadata.empty());
+            // Release reasoner references based on metadata
+            // (per D1: caller-only responsibility)
+            try {
+                if (result.isSuccess()) {
+                    ServiceResult.Success<Boolean> success = (ServiceResult.Success<Boolean>) result;
+                    org.owl4agents.core.model.ReasonerCallMetadata meta = success.reasonerMetadata();
+                    if (meta != null) {
+                        if (meta.fallbackFrom() != null) {
+                            lifecycleManager.releaseReasoner(ontologyId, meta.fallbackFrom());
+                        }
+                        lifecycleManager.releaseReasoner(ontologyId, meta.reasonerName());
+                    } else {
+                        lifecycleManager.releaseReasoner(ontologyId, effectiveReasoner);
+                    }
+                    // Cache successful result
+                    putSourceConsistencyCacheEntry(cacheKey, success.data());
+                } else {
+                    ServiceResult.Error<Boolean> error = (ServiceResult.Error<Boolean>) result;
+                    org.owl4agents.core.model.ReasonerCallMetadata meta = error.reasonerMetadata();
+                    if (meta != null) {
+                        if (meta.fallbackFrom() != null) {
+                            lifecycleManager.releaseReasoner(ontologyId, meta.fallbackFrom());
+                        }
+                        // Release the fallback reasoner (ELK) even on timeout
+                        if (error.error().code() == ErrorCode.REASONER_TIMEOUT) {
+                            lifecycleManager.releaseReasoner(ontologyId, "ELK");
+                        } else {
+                            lifecycleManager.releaseReasoner(ontologyId, meta.reasonerName());
+                        }
+                    } else {
+                        // REASONER_BUSY — no reasoner was acquired
+                    }
+                }
+            } catch (Exception releaseEx) {
+                // Release failures are best-effort; log and continue
+                java.util.logging.Logger.getLogger(ReasonerServiceImpl.class.getName())
+                    .warning("Reasoner release failed: " + releaseEx.getMessage());
+            }
+
+            // v0.8.6 task 3.11a: REASONER_REJECTED_ONTOLOGY retry.
+            // When ELK was selected as primary (size-aware branch for a large
+            // non-EL ontology) and the wrapper returned REASONER_REJECTED_ONTOLOGY
+            // (ELK rejected non-EL axioms — per D1's always-returns contract,
+            // the wrapper catches UnsupportedAxiomException and maps it to this
+            // code), retry with HermiT via call() — NOT callWithElkFallback —
+            // to avoid a futile ELK retry loop (ELK already rejected the ontology).
+            // ELK's reasoner was released above (acquired but now unusable).
+            // HermiT's 30s timeout still applies via call(). If HermiT also
+            // returns REASONER_REJECTED_ONTOLOGY, propagate the error to the
+            // caller (no further fallback).
+            if (!result.isSuccess() && "ELK".equalsIgnoreCase(effectiveReasoner)) {
+                ServiceResult.Error<Boolean> rejectedError = (ServiceResult.Error<Boolean>) result;
+                if (rejectedError.error().code() == ErrorCode.REASONER_REJECTED_ONTOLOGY) {
+                    java.util.function.Supplier<ServiceResult<Boolean>> hermitSupplier = () -> {
+                        try {
+                            OWLReasonerAdapter hermitAdapter = lifecycleManager.getOrCreateReasoner(
+                                ontologyId, "HermiT", ontologyFinal, detectedProfileFinal, false);
+                            org.owl4agents.core.model.ConsistencyResult cr =
+                                hermitAdapter.checkConsistency(ontologyId.id());
+                            return ServiceResult.success(cr.consistent(), ResultMetadata.empty());
+                        } catch (Exception e) {
+                            return ServiceResult.error(ErrorCode.CLASSIFICATION_FAILED, e.getMessage());
+                        }
+                    };
+
+                    ServiceResult<Boolean> hermitResult = reasonerCallWrapper.call(
+                        "HermiT", ontologyId, hermitSupplier, reasonerTimeoutSec);
+
+                    // Release HermiT based on metadata
+                    try {
+                        if (hermitResult.isSuccess()) {
+                            ServiceResult.Success<Boolean> hermitSuccess =
+                                (ServiceResult.Success<Boolean>) hermitResult;
+                            org.owl4agents.core.model.ReasonerCallMetadata hermitMeta =
+                                hermitSuccess.reasonerMetadata();
+                            if (hermitMeta != null) {
+                                lifecycleManager.releaseReasoner(ontologyId, hermitMeta.reasonerName());
+                            } else {
+                                lifecycleManager.releaseReasoner(ontologyId, "HermiT");
+                            }
+                            // Cache successful HermiT result (replaces the would-be ELK entry)
+                            putSourceConsistencyCacheEntry(cacheKey, hermitSuccess.data());
+                        } else {
+                            ServiceResult.Error<Boolean> hermitError =
+                                (ServiceResult.Error<Boolean>) hermitResult;
+                            org.owl4agents.core.model.ReasonerCallMetadata hermitMeta =
+                                hermitError.reasonerMetadata();
+                            if (hermitMeta != null) {
+                                lifecycleManager.releaseReasoner(ontologyId, hermitMeta.reasonerName());
+                            } else {
+                                lifecycleManager.releaseReasoner(ontologyId, "HermiT");
+                            }
+                            // If HermiT also rejected the ontology, propagate (no further fallback).
+                            // Otherwise (timeout, internal error, etc.), also propagate.
+                        }
+                    } catch (Exception releaseEx) {
+                        java.util.logging.Logger.getLogger(ReasonerServiceImpl.class.getName())
+                            .warning("HermiT retry release failed: " + releaseEx.getMessage());
+                    }
+
+                    result = hermitResult;
+                }
+            }
+
+            return result;
         } catch (OWLOntologyCreationException e) {
             return ServiceResult.error(ErrorCode.CLASSIFICATION_FAILED, e.getMessage());
         } catch (IllegalArgumentException e) {
@@ -1896,30 +2208,107 @@ public class ReasonerServiceImpl implements ReasonerService, org.owl4agents.owla
 
         // Resolve reasoner
         String detectedProfile = detectProfile(ontologyId, ontology);
-        String effectiveReasoner = resolveReasonerName(reasonerName, detectedProfile, false);
+        String effectiveReasoner = resolveReasonerName(reasonerName, detectedProfile, false, ontology);
+
+        // v0.8.6 D1: Route through ReasonerCallWrapper with ELK fallback.
+        final OWLOntology ontologyFinal = ontology;
+        final String detectedProfileFinal = detectedProfile;
+        final OWLAxiom axiomFinal = axiom;
+        java.util.function.Supplier<ServiceResult<EntailmentResult>> primarySupplier = () -> {
+            try {
+                OWLReasonerAdapter adapter = lifecycleManager.getOrCreateReasoner(
+                    ontologyId, effectiveReasoner, ontologyFinal, detectedProfileFinal, false);
+                if (!adapter.isActive()) {
+                    adapter.initialize(ontologyFinal);
+                }
+                try {
+                    boolean entailed = adapter.getUnderlyingReasoner().isEntailed(axiomFinal);
+                    return ServiceResult.success(
+                        new EntailmentResult(ontologyId.id(), axiomFinal.getAxiomType().getName(),
+                            entailed ? EntailmentResult.ENTAILED : EntailmentResult.NOT_ENTAILED,
+                            "inferred", effectiveReasoner, ""),
+                        ResultMetadata.empty());
+                } catch (org.semanticweb.owlapi.model.OWLRuntimeException e) {
+                    // ELK throws on unsupported axiom types — return UNSUPPORTED_AXIOM_TYPE
+                    return ServiceResult.success(
+                        new EntailmentResult(ontologyId.id(), axiomFinal.getAxiomType().getName(),
+                            EntailmentResult.UNSUPPORTED_AXIOM_TYPE, "unsupported",
+                            effectiveReasoner, e.getClass().getSimpleName()),
+                        ResultMetadata.empty());
+                }
+            } catch (IllegalArgumentException e) {
+                if (e.getMessage() != null && (e.getMessage().contains("Unknown reasoner")
+                        || e.getMessage().contains("PROFILE_NOT_SUPPORTED"))) {
+                    return ServiceResult.error(ErrorCode.PROFILE_NOT_SUPPORTED, e.getMessage());
+                }
+                return ServiceResult.error(ErrorCode.CLASSIFICATION_FAILED, e.getMessage());
+            } catch (Exception e) {
+                return ServiceResult.error(ErrorCode.CLASSIFICATION_FAILED, e.getMessage());
+            }
+        };
+        java.util.function.Supplier<ServiceResult<EntailmentResult>> elkSupplier = () -> {
+            try {
+                OWLReasonerAdapter elkAdapter = lifecycleManager.getOrCreateReasoner(
+                    ontologyId, "ELK", ontologyFinal, detectedProfileFinal, false);
+                if (!elkAdapter.isActive()) {
+                    elkAdapter.initialize(ontologyFinal);
+                }
+                try {
+                    boolean entailed = elkAdapter.getUnderlyingReasoner().isEntailed(axiomFinal);
+                    return ServiceResult.success(
+                        new EntailmentResult(ontologyId.id(), axiomFinal.getAxiomType().getName(),
+                            entailed ? EntailmentResult.ENTAILED : EntailmentResult.NOT_ENTAILED,
+                            "inferred", "ELK", ""),
+                        ResultMetadata.empty());
+                } catch (org.semanticweb.owlapi.model.OWLRuntimeException e) {
+                    return ServiceResult.success(
+                        new EntailmentResult(ontologyId.id(), axiomFinal.getAxiomType().getName(),
+                            EntailmentResult.UNSUPPORTED_AXIOM_TYPE, "unsupported",
+                            "ELK", e.getClass().getSimpleName()),
+                        ResultMetadata.empty());
+                }
+            } catch (Exception e) {
+                return ServiceResult.error(ErrorCode.CLASSIFICATION_FAILED, e.getMessage());
+            }
+        };
 
         try {
-            OWLReasonerAdapter adapter = lifecycleManager.getOrCreateReasoner(
-                ontologyId, effectiveReasoner, ontology, detectedProfile, false);
-            if (!adapter.isActive()) {
-                adapter.initialize(ontology);
+            ServiceResult<EntailmentResult> result = reasonerCallWrapper.callWithElkFallback(
+                effectiveReasoner, ontologyId, primarySupplier, elkSupplier, reasonerTimeoutSec);
+
+            // Release reasoner references based on metadata
+            try {
+                if (result.isSuccess()) {
+                    ServiceResult.Success<EntailmentResult> success = (ServiceResult.Success<EntailmentResult>) result;
+                    org.owl4agents.core.model.ReasonerCallMetadata meta = success.reasonerMetadata();
+                    if (meta != null) {
+                        if (meta.fallbackFrom() != null) {
+                            lifecycleManager.releaseReasoner(ontologyId, meta.fallbackFrom());
+                        }
+                        lifecycleManager.releaseReasoner(ontologyId, meta.reasonerName());
+                    } else {
+                        lifecycleManager.releaseReasoner(ontologyId, effectiveReasoner);
+                    }
+                } else {
+                    ServiceResult.Error<EntailmentResult> error = (ServiceResult.Error<EntailmentResult>) result;
+                    org.owl4agents.core.model.ReasonerCallMetadata meta = error.reasonerMetadata();
+                    if (meta != null) {
+                        if (meta.fallbackFrom() != null) {
+                            lifecycleManager.releaseReasoner(ontologyId, meta.fallbackFrom());
+                        }
+                        if (error.error().code() == ErrorCode.REASONER_TIMEOUT) {
+                            lifecycleManager.releaseReasoner(ontologyId, "ELK");
+                        } else {
+                            lifecycleManager.releaseReasoner(ontologyId, meta.reasonerName());
+                        }
+                    }
+                }
+            } catch (Exception releaseEx) {
+                java.util.logging.Logger.getLogger(ReasonerServiceImpl.class.getName())
+                    .warning("Reasoner release failed: " + releaseEx.getMessage());
             }
 
-            try {
-                boolean entailed = adapter.getUnderlyingReasoner().isEntailed(axiom);
-                return ServiceResult.success(
-                    new EntailmentResult(ontologyId.id(), axiom.getAxiomType().getName(),
-                        entailed ? EntailmentResult.ENTAILED : EntailmentResult.NOT_ENTAILED,
-                        "inferred", effectiveReasoner, ""),
-                    ResultMetadata.empty());
-            } catch (org.semanticweb.owlapi.model.OWLRuntimeException e) {
-                // ELK throws on unsupported axiom types — return UNSUPPORTED_AXIOM_TYPE
-                return ServiceResult.success(
-                    new EntailmentResult(ontologyId.id(), axiom.getAxiomType().getName(),
-                        EntailmentResult.UNSUPPORTED_AXIOM_TYPE, "unsupported",
-                        effectiveReasoner, e.getClass().getSimpleName()),
-                    ResultMetadata.empty());
-            }
+            return result;
         } catch (IllegalArgumentException e) {
             if (e.getMessage() != null && (e.getMessage().contains("Unknown reasoner")
                     || e.getMessage().contains("PROFILE_NOT_SUPPORTED"))) {
@@ -2019,49 +2408,56 @@ public class ReasonerServiceImpl implements ReasonerService, org.owl4agents.owla
     }
 
     private Boolean getSourceConsistencyCacheEntry(String key) {
-        synchronized (sourceConsistencyCache) {
-            return sourceConsistencyCache.get(key);
-        }
+        // v0.8.6 task 5.8: Caffeine cache — getIfPresent is thread-safe,
+        // no explicit synchronization needed. Hit/miss counters are updated
+        // by the caller (checkSourceOntologyConsistency) based on the
+        // returned value (null = miss, non-null = hit).
+        return sourceConsistencyCache.getIfPresent(key);
     }
 
     private void putSourceConsistencyCacheEntry(String key, Boolean value) {
-        synchronized (sourceConsistencyCache) {
-            if (sourceConsistencyCache.size() >= SOURCE_CONSISTENCY_CACHE_MAX) {
-                // LRU eviction: remove the eldest entry (LinkedHashMap with
-                // accessOrder=true puts eldest at iteration head)
-                java.util.Iterator<String> it = sourceConsistencyCache.keySet().iterator();
-                if (it.hasNext()) {
-                    it.next();
-                    it.remove();
-                    sourceConsistencyCacheEvictions++;
-                }
-            }
-            sourceConsistencyCache.put(key, value);
-        }
+        // v0.8.6 task 5.8: Caffeine handles LRU eviction internally via
+        // W-TinyLFU policy. No manual eviction code needed (the previous
+        // LinkedHashMap-based code removed the eldest entry manually).
+        sourceConsistencyCache.put(key, value);
     }
 
     private void invalidateSourceConsistencyCache(String ontologyId) {
-        synchronized (sourceConsistencyCache) {
-            sourceConsistencyCache.entrySet().removeIf(e -> e.getKey().startsWith(ontologyId + "|"));
+        // v0.8.6 task 5.8: Caffeine does not support prefix-based
+        // invalidation directly. We iterate the keys and invalidate
+        // matches. This is O(n) but n is bounded by maximumSize(200).
+        String prefix = ontologyId + "|";
+        java.util.List<String> keysToInvalidate = new java.util.ArrayList<>();
+        for (String k : sourceConsistencyCache.asMap().keySet()) {
+            if (k.startsWith(prefix)) {
+                keysToInvalidate.add(k);
+            }
+        }
+        for (String k : keysToInvalidate) {
+            sourceConsistencyCache.invalidate(k);
         }
     }
 
     public long getSourceConsistencyCacheHits() {
-        return sourceConsistencyCacheHits;
+        // v0.8.6 task 5.8: Prefer Caffeine's recorded stats when available;
+        // fall back to the local counter for backward compatibility.
+        long caffeineHits = sourceConsistencyCache.stats().hitCount();
+        return Math.max(caffeineHits, sourceConsistencyCacheHits.get());
     }
 
     public long getSourceConsistencyCacheMisses() {
-        return sourceConsistencyCacheMisses;
+        long caffeineMisses = sourceConsistencyCache.stats().missCount();
+        return Math.max(caffeineMisses, sourceConsistencyCacheMisses.get());
     }
 
     public long getSourceConsistencyCacheEvictions() {
-        return sourceConsistencyCacheEvictions;
+        // v0.8.6 task 5.8: Caffeine records eviction count via stats().
+        return sourceConsistencyCache.stats().evictionCount();
     }
 
     public int getSourceConsistencyCacheSize() {
-        synchronized (sourceConsistencyCache) {
-            return sourceConsistencyCache.size();
-        }
+        long size = sourceConsistencyCache.estimatedSize();
+        return size > Integer.MAX_VALUE ? Integer.MAX_VALUE : (int) size;
     }
 
     /**

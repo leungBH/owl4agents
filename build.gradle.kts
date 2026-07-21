@@ -3,7 +3,7 @@ plugins {
 }
 
 group = "org.owl4agents"
-version = "0.8.4"
+version = "0.8.6"
 description = "Local OWL ontology reasoning and MCP server for LLM agents"
 
 allprojects {
@@ -46,6 +46,13 @@ subprojects {
         // Resolve corpus fixtures from root project directory
         val rootCorpusDir = rootProject.layout.projectDirectory.dir("test/corpus").asFile.absolutePath
         systemProperty("corpus.fixtures", rootCorpusDir)
+        // v0.8.6 D9: expose the project version to tests so
+        // VersionConsistencyTest can verify SERVER_VERSION matches the
+        // gradle version without requiring a shadow jar manifest.
+        // Use rootProject.version because subprojects inherit "unspecified"
+        // unless they explicitly set their own version; the canonical
+        // version lives at the root project level.
+        systemProperty("owl4agents.version", rootProject.version.toString())
     }
 
     tasks.withType<JavaCompile> {

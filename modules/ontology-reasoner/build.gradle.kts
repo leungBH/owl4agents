@@ -22,6 +22,9 @@ dependencies {
         exclude(group = "net.sourceforge.owlapi")
     }
 
+    // v0.8.6 D4: Caffeine for sourceConsistencyCache LRU (task 5.8).
+    implementation("com.github.ben-manes.caffeine:caffeine:3.1.8")
+
     testImplementation("org.junit.jupiter:junit-jupiter:5.10.2")
     testImplementation("net.sourceforge.owlapi:owlapi-distribution:5.1.20")
 }

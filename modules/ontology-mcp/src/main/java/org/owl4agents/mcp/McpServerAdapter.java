@@ -201,15 +201,52 @@ public class McpServerAdapter {
  public static final String PROTOCOL_VERSION = "2025-06-18";
 
  /**
- * Server version. Bumped to `0.8.4` in the v0.8.4 release (claim verification
- * performance optimization: 7 decisions covering reasoner classification
- * tracking, profile caching, per-request ontology single loading,
- * EntitySignatureCache, asserted axiom indexing, inferred hierarchy index,
- * and OntologyCache TTL window).
+ * Server version. v0.8.6 D9: sourced from a single place via
+ * {@link #loadVersion()} -> ?reads the jar manifest
+ * {@code Implementation-Version} attribute (production shadowJar),
+ * falls back to the {@code owl4agents.version} system property (gradle
+ * run, gradle test, IDE runs), then to the literal {@code "0.8.6-dev"}.
  * Single source of truth -> ?read by both stdio and HTTP transports
  * (including the `GET /mcp` SSE path).
  */
- public static final String SERVER_VERSION = "0.8.4";
+ public static final String SERVER_VERSION = loadVersion();
+
+ /**
+ * v0.8.6 D9: Load the server version from a single source of truth.
+ *
+ * <p>Lookup order:</p>
+ * <ol>
+ *   <li>JAR manifest {@code Implementation-Version} attribute (set by the
+ *       {@code shadowJar} and {@code jar} tasks in
+ *       {@code modules/ontology-cli/build.gradle.kts}). Works when running
+ *       from the production shadowJar.</li>
+ *   <li>{@code owl4agents.version} system property (set by the root
+ *       {@code build.gradle.kts} {@code test} task). Works for
+ *       {@code gradle run}, {@code gradle test}, and IDE runs where the
+ *       manifest is not set.</li>
+ *   <li>Literal {@code "0.8.6-dev"} fallback so the field is never null.</li>
+ * </ol>
+ */
+ private static String loadVersion() {
+ try {
+ Package pkg = McpServerAdapter.class.getPackage();
+ String implVersion = pkg != null ? pkg.getImplementationVersion() : null;
+ // v0.8.6 D9: filter out "unspecified" (the default manifest value when
+ // Implementation-Version is not explicitly set) so the fallback chain
+ // can proceed to the system property / literal.
+ if (implVersion != null && !implVersion.isBlank()
+ && !"unspecified".equalsIgnoreCase(implVersion)) {
+ return implVersion;
+ }
+ } catch (Exception ignored) {
+ // Fall through to system property / literal fallback.
+ }
+ String sysProp = System.getProperty("owl4agents.version");
+ if (sysProp != null && !sysProp.isBlank()) {
+ return sysProp;
+ }
+ return "0.8.6-dev";
+ }
 
  /**
  * Public JSON-RPC 2.0 entry point used by both the stdio transport
@@ -1223,12 +1260,20 @@ public class McpServerAdapter {
  private Map<String, Object> executeVerifyClaim(Map<String, Object> args) {
  String ontologyIdStr = (String) args.get("ontology_id");
  Object claimObj = args.get("claim");
- String reasonerName = (String) args.getOrDefault("reasoner", "auto");
+ // v0.8.6 D6: Resolve reasoner via shared helper so single-claim and batch
+ // paths use identical resolution logic (top-level > options > "auto").
+ String reasonerName = resolveReasonerFromArgs(args);
  if (ontologyIdStr == null || claimObj == null) {
  return errorResponse(ServiceError.of(ErrorCode.INVALID_CLAIM_SCHEMA, "ontology_id and claim are required"));
  }
 
- Claim claim = parseClaimFromMcpArgs(claimObj, reasonerName);
+ Claim claim;
+ try {
+ claim = parseClaimFromMcpArgs(claimObj, reasonerName);
+ } catch (IllegalArgumentException e) {
+ // v0.8.6 D7: Surface the clarifying claimId/id alias message.
+ return errorResponse(ServiceError.invalidClaimSchema(e.getMessage()));
+ }
  if (claim == null) {
  return errorResponse(ServiceError.invalidClaimSchema("Failed to parse claim from arguments."));
  }
@@ -1311,7 +1356,12 @@ public class McpServerAdapter {
  return errorResponse(ServiceError.of(ErrorCode.INVALID_CLAIM_SCHEMA, "ontology_id and claim are required"));
  }
 
- Claim claim = parseClaimFromMcpArgs(claimObj, null);
+ Claim claim;
+ try {
+ claim = parseClaimFromMcpArgs(claimObj, null);
+ } catch (IllegalArgumentException e) {
+ return errorResponse(ServiceError.invalidClaimSchema(e.getMessage()));
+ }
  if (claim == null) {
  return errorResponse(ServiceError.invalidClaimSchema("Failed to parse claim from arguments."));
  }
@@ -1365,7 +1415,12 @@ public class McpServerAdapter {
  return errorResponse(ServiceError.of(ErrorCode.INVALID_CLAIM_SCHEMA, "ontology_id and claim are required"));
  }
 
- Claim claim = parseClaimFromMcpArgs(claimObj, null);
+ Claim claim;
+ try {
+ claim = parseClaimFromMcpArgs(claimObj, null);
+ } catch (IllegalArgumentException e) {
+ return errorResponse(ServiceError.invalidClaimSchema(e.getMessage()));
+ }
  if (claim == null) {
  return errorResponse(ServiceError.invalidClaimSchema("Failed to parse claim from arguments."));
  }
@@ -1417,7 +1472,12 @@ public class McpServerAdapter {
  return errorResponse(ServiceError.of(ErrorCode.INVALID_CLAIM_SCHEMA, "ontology_id and claim are required"));
  }
 
- Claim claim = parseClaimFromMcpArgs(claimObj, null);
+ Claim claim;
+ try {
+ claim = parseClaimFromMcpArgs(claimObj, null);
+ } catch (IllegalArgumentException e) {
+ return errorResponse(ServiceError.invalidClaimSchema(e.getMessage()));
+ }
  if (claim == null) {
  return errorResponse(ServiceError.invalidClaimSchema("Failed to parse claim from arguments."));
  }
@@ -1467,7 +1527,11 @@ public class McpServerAdapter {
 
         Claim claim = null;
         if (claimObj != null) {
-            claim = parseClaimFromMcpArgs(claimObj, null);
+            try {
+                claim = parseClaimFromMcpArgs(claimObj, null);
+            } catch (IllegalArgumentException e) {
+                return errorResponse(ServiceError.invalidClaimSchema(e.getMessage()));
+            }
             if (claim != null) {
                 // Top-level ontology_id is authoritative — override any
                 // ontologyId embedded in the claim so the service never sees
@@ -1533,8 +1597,12 @@ public class McpServerAdapter {
  return errorResponse(ServiceError.of(ErrorCode.INVALID_CLAIM_SCHEMA, "ontology_id is required"));
  }
 
- // Parse claims batch from arguments
- Map<String, Object> batchMap = parseClaimsBatchFromArgs(args);
+ // v0.8.6 D6: Resolve reasoner override via shared helper
+ // (top-level reasoner > options.reasoner > "auto"). The override is
+ // injected into every parsed claim inside parseClaimsBatchFromArgs
+ // (single injection point - no post-parse loop).
+ String reasonerOverride = resolveReasonerFromArgs(args);
+ Map<String, Object> batchMap = parseClaimsBatchFromArgs(args, reasonerOverride);
  if (batchMap == null) {
  return Map.of("status", "error", "data", Map.of(
  "aggregateStatus", "invalid_input",
@@ -1612,7 +1680,9 @@ public class McpServerAdapter {
  "Either 'report' or 'ontology_id' is required."));
  }
 
- Map<String, Object> batchMap = parseClaimsBatchFromArgs(args);
+ // v0.8.6 D6: context_batch does not apply a reasoner override (callers
+ // cannot pass one); pass "auto" to preserve each claim's existing reasoner.
+ Map<String, Object> batchMap = parseClaimsBatchFromArgs(args, "auto");
  if (batchMap == null) {
  return Map.of("status", "error", "data", Map.of(
  "aggregateStatus", "invalid_input",
@@ -1705,7 +1775,10 @@ public class McpServerAdapter {
  }
 
  // Parse claims batch from arguments
- Map<String, Object> batchMap = parseClaimsBatchFromArgs(args);
+ // v0.8.6 D6: review_answer_claims does not apply a reasoner override
+ // (callers cannot pass one); pass "auto" to preserve each claim's
+ // existing per-claim reasoner field.
+ Map<String, Object> batchMap = parseClaimsBatchFromArgs(args, "auto");
  if (batchMap == null) {
  return Map.of("status", "error", "data", Map.of(
  "aggregateStatus", "invalid_input",
@@ -1789,17 +1862,46 @@ public class McpServerAdapter {
  }
  }
 
+ // v0.8.6 D8: If inline question_set_content is supplied, write it to a
+ // temp JSONL file and pass the path as questionSetPathOverride to the
+ // parser. This decouples the benchmark from server-local questionSetPath
+ // (the YAML's questionSetPath can be a placeholder).
+ String questionSetContent = (String) args.get("question_set_content");
+ java.nio.file.Path questionSetTempFile = null;
+ String questionSetPathOverride = null;
+ if (questionSetContent != null && !questionSetContent.isBlank()) {
+ try {
+ questionSetTempFile = java.nio.file.Files.createTempFile("owl4agents-qs-", ".jsonl");
+ java.nio.file.Files.writeString(questionSetTempFile, questionSetContent);
+ questionSetTempFile.toFile().deleteOnExit();
+ questionSetPathOverride = questionSetTempFile.toString();
+ } catch (java.io.IOException e) {
+ if (tempFile != null) {
+ try { java.nio.file.Files.deleteIfExists(tempFile); } catch (Exception ignored) {}
+ }
+ return errorResponse(ServiceError.of(ErrorCode.INVALID_EXPERIMENT_CONFIG,
+ "Cannot write temp question_set_content file: " + e.getMessage()));
+ }
+ }
+
  // Parse config
  ExperimentConfigParser parser = new ExperimentConfigParser();
- ExperimentConfigParser.ParseResult parseResult = parser.parse(configPath);
- // Clean up temp file if created
+ ExperimentConfigParser.ParseResult parseResult = parser.parse(configPath, questionSetPathOverride);
+ // Clean up temp config file if created (the question_set temp file is
+ // retained until JVM exit via deleteOnExit so the benchmark service can
+ // read it during run()).
  if (tempFile != null) {
  try { java.nio.file.Files.deleteIfExists(tempFile); } catch (Exception ignored) {}
  }
  if (!parseResult.isSuccess()) {
  ExperimentConfigParser.ConfigError error = parseResult.error();
- return errorResponse(ServiceError.of(ErrorCode.INVALID_EXPERIMENT_CONFIG,
- error.diagnostic()));
+ // v0.8.6 D8: Preserve the parser's structured error code (e.g.
+ // QUESTION_SET_NOT_FOUND) instead of always wrapping as
+ // INVALID_EXPERIMENT_CONFIG. ErrorCode.fromCode matches the
+ // parser's uppercase-under-score code format case-insensitively.
+ ErrorCode mappedCode = ErrorCode.fromCode(error.code())
+ .orElse(ErrorCode.INVALID_EXPERIMENT_CONFIG);
+ return errorResponse(ServiceError.of(mappedCode, error.diagnostic()));
  }
 
  ExperimentConfig config = parseResult.config();
@@ -1807,7 +1909,17 @@ public class McpServerAdapter {
  // Run benchmark
  BenchmarkQuestionSetValidator validator = new BenchmarkQuestionSetValidator();
  BenchmarkService benchmarkService = new BenchmarkService(claimWorkflowService(), validator);
- BenchmarkService.BenchmarkRunResult runResult = benchmarkService.run(config);
+ BenchmarkService.BenchmarkRunResult runResult;
+ try {
+ runResult = benchmarkService.run(config);
+ } finally {
+ // v0.8.6 D8: Clean up the question_set temp file as soon as the
+ // benchmark has finished reading it. deleteOnExit() is the safety
+ // net for early-return paths; this is the primary cleanup.
+ if (questionSetTempFile != null) {
+ try { java.nio.file.Files.deleteIfExists(questionSetTempFile); } catch (Exception ignored) {}
+ }
+ }
 
  // Serialize result lines
  List<Map<String, Object>> lines = runResult.lines().stream()
@@ -1964,23 +2076,96 @@ public class McpServerAdapter {
  /**
  * Parse claims batch from MCP arguments.
  * The claims can be a Map (from JSON-RPC) or a JSON string.
+ *
+ * <p>v0.8.6 D6: This is the single injection point for the reasoner
+ * override resolved by {@link #resolveReasonerFromArgs(Map)}. When
+ * {@code reasonerOverride} is non-null and not equal to {@code "auto"}
+ * (case-insensitive), every parsed claim's {@code reasoner} field is set
+ * to {@code reasonerOverride}, overriding any per-claim value. When
+ * {@code reasonerOverride} is {@code null} or {@code "auto"}, each claim's
+ * existing {@code reasoner} field is preserved as-is (priority order:
+ * top-level {@code reasoner} > {@code options.reasoner} > per-claim
+ * {@code reasoner} > {@code auto}).</p>
+ *
+ * @param args the MCP tool call arguments (must contain a {@code claims} key)
+ * @param reasonerOverride the resolved reasoner name (e.g. {@code "ELK"},
+ *                          {@code "HermiT"}) or {@code "auto"} to preserve
+ *                          per-claim values
+ * @return the parsed batch map, or {@code null} if parsing failed
  */
- private Map<String, Object> parseClaimsBatchFromArgs(Map<String, Object> args) {
+ private Map<String, Object> parseClaimsBatchFromArgs(Map<String, Object> args, String reasonerOverride) {
  Object claimsObj = args.get("claims");
  if (claimsObj == null) return null;
 
  try {
+ Map<String, Object> claimsMap;
  if (claimsObj instanceof Map) {
  @SuppressWarnings("unchecked")
- Map<String, Object> claimsMap = (Map<String, Object>) claimsObj;
- return claimsMap;
+ Map<String, Object> map = (Map<String, Object>) claimsObj;
+ claimsMap = map;
  } else if (claimsObj instanceof String) {
- return gson.fromJson((String) claimsObj, MAP_TYPE);
- }
+ claimsMap = gson.fromJson((String) claimsObj, MAP_TYPE);
+ } else {
  return null;
+ }
+
+ // v0.8.6 D6: Single injection point for the reasoner override.
+ // When the resolved reasoner is not "auto", set every claim's reasoner
+ // field to the override value (overriding any per-claim reasoner).
+ // When "auto", preserve each claim's existing reasoner field (if any).
+ if (reasonerOverride != null && !"auto".equalsIgnoreCase(reasonerOverride)) {
+ Object claimsListObj = claimsMap.get("claims");
+ if (claimsListObj instanceof List) {
+ @SuppressWarnings("unchecked")
+ List<Object> claimsList = (List<Object>) claimsListObj;
+ for (Object claimEntry : claimsList) {
+ if (claimEntry instanceof Map) {
+ @SuppressWarnings("unchecked")
+ Map<String, Object> claimMap = (Map<String, Object>) claimEntry;
+ claimMap.put("reasoner", reasonerOverride);
+ }
+ }
+ }
+ }
+ return claimsMap;
  } catch (Exception e) {
  return null;
  }
+ }
+
+ /**
+ * v0.8.6 D6: Resolve the reasoner name from MCP tool call arguments using
+ * the shared priority order: top-level {@code reasoner} >
+ * {@code options.reasoner} > {@code "auto"}. Both single-claim
+ * ({@code executeVerifyClaim}) and batch ({@code executeVerifyClaimsBatch})
+ * paths call this helper so the resolution logic cannot drift between them.
+ *
+ * <p>Null-safe: a missing or null top-level {@code reasoner} falls back to
+ * {@code options.reasoner}; a missing or null {@code options.reasoner}
+ * returns {@code "auto"}.</p>
+ *
+ * @param args the MCP tool call arguments
+ * @return the resolved reasoner name (never {@code null})
+ */
+ private String resolveReasonerFromArgs(Map<String, Object> args) {
+ Object topLevelRaw = args.get("reasoner");
+ String topLevel = topLevelRaw == null ? "auto" : topLevelRaw.toString();
+ if (!"auto".equalsIgnoreCase(topLevel)) {
+ return topLevel;
+ }
+ Object optionsObj = args.get("options");
+ if (optionsObj instanceof Map) {
+ @SuppressWarnings("unchecked")
+ Map<String, Object> options = (Map<String, Object>) optionsObj;
+ Object optionsReasoner = options.get("reasoner");
+ if (optionsReasoner != null) {
+ String optionsStr = optionsReasoner.toString();
+ if (!optionsStr.isBlank() && !"auto".equalsIgnoreCase(optionsStr)) {
+ return optionsStr;
+ }
+ }
+ }
+ return "auto";
  }
 
  /**
@@ -2130,7 +2315,19 @@ public class McpServerAdapter {
  if (claimObj instanceof Map) {
  @SuppressWarnings("unchecked")
  Map<String, Object> claimMap = (Map<String, Object>) claimObj;
+ // v0.8.6 D7: claimId / id alias. Question set files use "id",
+ // MCP single-claim uses "claimId". Both are accepted as aliases;
+ // claimId takes precedence when both are present.
  String claimId = (String) claimMap.getOrDefault("claimId", "");
+ if (claimId == null || claimId.isBlank()) {
+ claimId = (String) claimMap.getOrDefault("id", "");
+ }
+ if (claimId == null || claimId.isBlank()) {
+ throw new IllegalArgumentException(
+ "claimId (or id) is required and must not be blank. " +
+ "Note: question set files use 'id', MCP single-claim uses 'claimId'. " +
+ "Both fields are accepted as aliases.");
+ }
  String typeStr = (String) claimMap.getOrDefault("type", "");
  String ontologyId = (String) claimMap.getOrDefault("ontologyId", "");
  String predicate = (String) claimMap.getOrDefault("predicate", null);
@@ -2179,6 +2376,11 @@ public class McpServerAdapter {
  return parsed;
  }
  return null;
+ } catch (IllegalArgumentException e) {
+ // v0.8.6 D7: Propagate clarifying error messages (e.g. blank
+ // claimId/id, unsupported claim type) so callers can surface them
+ // to the user instead of receiving a generic "parse failed" error.
+ throw e;
  } catch (Exception e) {
  return null;
  }
