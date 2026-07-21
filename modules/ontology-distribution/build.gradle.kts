@@ -24,6 +24,13 @@ dependencies {
     testImplementation(project(":modules:ontology-validation"))
     testImplementation(project(":modules:ontology-cli"))
     testImplementation(project(":modules:ontology-mcp"))
+
+    // v0.8.6: Jena is required for the real ontology integration test
+    // (RealOntologyIntegrationTest) which directly references
+    // org.apache.jena.rdf.model.Model to run SPARQL SELECT queries via
+    // SparqlExecutor. Jena is `implementation` in ontology-query, so it
+    // is not transitively on the test compile classpath; expose it here.
+    testImplementation("org.apache.jena:apache-jena-libs:5.3.0")
 }
 
 application {
