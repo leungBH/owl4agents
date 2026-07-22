@@ -133,6 +133,13 @@ v*-final-*/
 /import_v03_claim_verification.log
 /import_v04_biomedical_grounding.log
 
+# Sensitive internal documents — MUST NOT be committed (contain internal IPs/paths)
+内网调用手册*.md
+*.pem
+*.key
+*.p12
+watchdog-*.ps1
+
 # Local runtime workspace (materialized from test/corpus)
 /data/
 
