@@ -202,7 +202,11 @@ public enum ErrorCode {
 
     // v0.8.7 cache governance error code (D16 / REL-003)
     SNAPSHOT_EXPIRED("SNAPSHOT_EXPIRED",
-        "The dynamic state snapshot exceeded its TTL window before pipeline entry.");
+        "The dynamic state snapshot exceeded its TTL window before pipeline entry."),
+
+    // v0.8.7 post-release fix: reasoner incompatible with ontology size
+    REASONER_INCOMPATIBLE_WITH_ONTOLOGY_SIZE("REASONER_INCOMPATIBLE_WITH_ONTOLOGY_SIZE",
+        "The explicitly selected reasoner is incompatible with the ontology size (classCount exceeds the safe threshold). Use 'auto' or a different reasoner.");
 
     private final String code;
     private final String defaultMessage;

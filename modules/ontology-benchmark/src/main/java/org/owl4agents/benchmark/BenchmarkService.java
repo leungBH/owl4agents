@@ -115,6 +115,11 @@ public class BenchmarkService {
             boolean excludeReviewPending = "pending".equals(validation.reviewStatus());
 
             // For each reasoner
+            // v0.8.6 Issue #2: defensive try-catch — if reasoners contains
+            // non-string elements (e.g. LinkedTreeMap from YAML), the for-each
+            // cast to String throws ClassCastException. Return an error result
+            // instead of crashing.
+            try {
             for (String reasoner : config.reasoners()) {
                 long startMs = System.currentTimeMillis();
 
@@ -236,6 +241,10 @@ public class BenchmarkService {
                     }
                     totalEvaluated++;
                 }
+            }
+            } catch (ClassCastException e) {
+                return new BenchmarkRunResult(List.of(), makeErrorSummary(
+                    "Invalid reasoners configuration: " + e.getMessage()));
             }
         }
 

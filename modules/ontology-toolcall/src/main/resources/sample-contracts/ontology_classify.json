@@ -1,0 +1,18 @@
+{
+  "toolName": "ontology_classify",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "ontology_id": {"type": "string"},
+      "reasoner": {"type": "string"}
+    },
+    "required": ["ontology_id"]
+  },
+  "targetClass": "",
+  "requiredCapabilities": [],
+  "requiredStates": [],
+  "effects": ["read-only"],
+  "riskLevel": "low",
+  "requiredPermission": "",
+  "shapeSetIds": []
+}

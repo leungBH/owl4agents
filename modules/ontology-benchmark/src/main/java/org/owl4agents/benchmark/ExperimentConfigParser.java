@@ -3,6 +3,7 @@ package org.owl4agents.benchmark;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -134,12 +135,42 @@ public class ExperimentConfigParser {
             questionSetPath = questionSetPathOverride;
         }
 
-        if (name == null) return missingField("name");
-        if (description == null) return missingField("description");
-        if (questionSetPath == null) return missingField("questionSetPath");
-        if (outputPath == null) return missingField("outputPath");
-        if (ontologyIds == null) return invalidField("ontologyIds", "must be an array of strings");
-        if (reasoners == null) return invalidField("reasoners", "must be an array of strings");
+        // v0.8.6 Issue #2: Collect ALL missing/invalid fields and report them
+        // in a single error message so users can fix everything at once instead
+        // of fixing one field, retrying, finding the next, etc.
+        List<String> missingFields = new ArrayList<>();
+        List<String> invalidFields = new ArrayList<>();
+
+        if (name == null) missingFields.add("name");
+        if (description == null) missingFields.add("description");
+        if (questionSetPath == null) missingFields.add("questionSetPath");
+        if (outputPath == null) missingFields.add("outputPath");
+        if (ontologyIds == null) invalidFields.add("ontologyIds (must be an array of strings)");
+        if (reasoners == null) invalidFields.add("reasoners (must be an array of strings)");
+
+        if (!missingFields.isEmpty() || !invalidFields.isEmpty()) {
+            StringBuilder messageBuilder = new StringBuilder();
+            if (!missingFields.isEmpty()) {
+                messageBuilder.append("Missing required fields: ").append(String.join(", ", missingFields));
+            }
+            if (!invalidFields.isEmpty()) {
+                if (messageBuilder.length() > 0) messageBuilder.append("; ");
+                messageBuilder.append("Invalid fields: ").append(String.join(", ", invalidFields));
+            }
+            StringBuilder diagnosticBuilder = new StringBuilder();
+            if (!missingFields.isEmpty()) {
+                diagnosticBuilder.append("Add the required fields: ").append(String.join(", ", missingFields));
+            }
+            if (!invalidFields.isEmpty()) {
+                if (diagnosticBuilder.length() > 0) diagnosticBuilder.append("; ");
+                diagnosticBuilder.append("Fix the invalid fields: ").append(String.join(", ", invalidFields));
+            }
+            return new ParseResult(null, new ConfigError(
+                "INVALID_EXPERIMENT_CONFIG",
+                messageBuilder.toString(),
+                diagnosticBuilder.toString()
+            ));
+        }
 
         // 5. Validate optional field types
         int timeoutPerQuestion = ExperimentConfig.DEFAULT_TIMEOUT_PER_QUESTION;

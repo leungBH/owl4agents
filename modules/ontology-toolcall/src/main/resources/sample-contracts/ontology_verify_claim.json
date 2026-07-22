@@ -1,0 +1,19 @@
+{
+  "toolName": "ontology_verify_claim",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "ontology_id": {"type": "string"},
+      "claim": {"type": "object"},
+      "reasoner": {"type": "string"}
+    },
+    "required": ["ontology_id", "claim"]
+  },
+  "targetClass": "",
+  "requiredCapabilities": [],
+  "requiredStates": [],
+  "effects": ["read-only"],
+  "riskLevel": "low",
+  "requiredPermission": "",
+  "shapeSetIds": []
+}

@@ -27,6 +27,14 @@ import java.util.stream.*;
  */
 public class ReasonerServiceImpl implements ReasonerService, org.owl4agents.owlapi.OntologyReloadListener {
 
+    /**
+     * v0.8.7 post-release fix: above this class count, ALL explicit reasoner
+     * selections are rejected (even ELK). v0.8.7's additional heap footprint
+     * (Jena SHACL + ToolCall pipeline + overlay) makes 4GB insufficient for
+     * >50K class ontologies regardless of reasoner choice.
+     */
+    static final int VERY_LARGE_ONTOLOGY_CLASS_THRESHOLD = 50_000;
+
     private final ReasonerLifecycleManager lifecycleManager;
     private final CatalogStore catalogStore;
     private final String workspaceBasePath;
@@ -289,6 +297,8 @@ public class ReasonerServiceImpl implements ReasonerService, org.owl4agents.owla
 
         } catch (OWLOntologyCreationException e) {
             return ServiceResult.error(ErrorCode.CLASSIFICATION_FAILED, e.getMessage());
+        } catch (ReasonerIncompatibleException e) {
+            return ServiceResult.error(e.errorCode(), e.getMessage());
         } catch (IllegalArgumentException e) {
             if (e.getMessage().contains("Unknown reasoner") || e.getMessage().contains("PROFILE_NOT_SUPPORTED")) {
                 return ServiceResult.error(ErrorCode.PROFILE_NOT_SUPPORTED, e.getMessage());
@@ -329,6 +339,8 @@ public class ReasonerServiceImpl implements ReasonerService, org.owl4agents.owla
             ClassificationResult result = adapter.classify(ontologyId.id());
             lifecycleManager.markClassified(ontologyId);
             return ServiceResult.success(result, ResultMetadata.empty());
+        } catch (ReasonerIncompatibleException e) {
+            return ServiceResult.error(e.errorCode(), e.getMessage());
         } catch (Exception e) {
             return ServiceResult.error(ErrorCode.CLASSIFICATION_FAILED, e.getMessage());
         } finally {
@@ -353,6 +365,8 @@ public class ReasonerServiceImpl implements ReasonerService, org.owl4agents.owla
             RealizationResult result = adapter.realize(ontologyId.id());
             lifecycleManager.markClassified(ontologyId);
             return ServiceResult.success(result, ResultMetadata.empty());
+        } catch (ReasonerIncompatibleException e) {
+            return ServiceResult.error(e.errorCode(), e.getMessage());
         } catch (Exception e) {
             return ServiceResult.error(ErrorCode.CLASSIFICATION_FAILED, e.getMessage());
         } finally {
@@ -377,6 +391,8 @@ public class ReasonerServiceImpl implements ReasonerService, org.owl4agents.owla
             ConsistencyResult result = adapter.checkConsistency(ontologyId.id());
             lifecycleManager.markClassified(ontologyId);
             return ServiceResult.success(result, ResultMetadata.empty());
+        } catch (ReasonerIncompatibleException e) {
+            return ServiceResult.error(e.errorCode(), e.getMessage());
         } catch (Exception e) {
             return ServiceResult.error(ErrorCode.CLASSIFICATION_FAILED, e.getMessage());
         } finally {
@@ -832,15 +848,31 @@ public class ReasonerServiceImpl implements ReasonerService, org.owl4agents.owla
         int classCount = (ontology != null) ? ontology.getClassesInSignature().size() : 0;
 
         if (explicitOverride) {
-            // Honor the user's explicit reasoner choice; bypass size-aware branch.
-            // Log WARN on large ontologies (OOM risk accepted by the user).
-            if (classCount > AutoReasonerSelector.LARGE_ONTOLOGY_CLASS_THRESHOLD) {
-                java.util.logging.Logger.getLogger(ReasonerServiceImpl.class.getName())
-                    .warning("User explicitly selected " + reasonerName.get()
-                        + " on large ontology (classCount=" + classCount
-                        + "); OOM risk accepted");
+            String requested = reasonerName.get();
+            // v0.8.7 post-release fix: reject hermit/openllet on large ontologies
+            // to prevent OOM/timeout. HermiT is OWL 2 DL complete — infeasible
+            // on >20K classes. Openllet (explanation) is even heavier.
+            // ELK is generally safe but >50K classes can OOM in v0.8.7 due to
+            // the additional heap footprint (Jena SHACL + ToolCall pipeline +
+            // overlay). Return a clear error instead of a 25s timeout or OOM.
+            if (classCount > VERY_LARGE_ONTOLOGY_CLASS_THRESHOLD) {
+                throw new ReasonerIncompatibleException(
+                    "Reasoner '" + requested + "' is not compatible with very large ontology"
+                    + " (classCount=" + classCount + " > " + VERY_LARGE_ONTOLOGY_CLASS_THRESHOLD
+                    + "). Use 'auto' or reduce ontology size.");
             }
-            return reasonerName.get();
+            if (classCount > AutoReasonerSelector.LARGE_ONTOLOGY_CLASS_THRESHOLD
+                    && ("hermit".equalsIgnoreCase(requested)
+                        || "openllet".equalsIgnoreCase(requested))) {
+                throw new ReasonerIncompatibleException(
+                    "Reasoner '" + requested + "' is not compatible with large ontology"
+                    + " (classCount=" + classCount + " > "
+                    + AutoReasonerSelector.LARGE_ONTOLOGY_CLASS_THRESHOLD
+                    + "). HermiT/Openllet perform full OWL 2 DL reasoning and will"
+                    + " timeout or OOM. Use reasoner='auto' (selects ELK) or"
+                    + " reasoner='elk' instead.");
+            }
+            return requested;
         }
 
         AutoReasonerSelector selector = new AutoReasonerSelector();
@@ -1987,6 +2019,8 @@ public class ReasonerServiceImpl implements ReasonerService, org.owl4agents.owla
                     invalidateExactCheckSessionCache(ontologyId.id());
                 }
             }
+        } catch (ReasonerIncompatibleException e) {
+            return ServiceResult.error(e.errorCode(), e.getMessage());
         } finally {
             cached.opLock.unlock();
         }
@@ -2148,6 +2182,8 @@ public class ReasonerServiceImpl implements ReasonerService, org.owl4agents.owla
             }
 
             return result;
+        } catch (ReasonerIncompatibleException e) {
+            return ServiceResult.error(e.errorCode(), e.getMessage());
         } catch (OWLOntologyCreationException e) {
             return ServiceResult.error(ErrorCode.CLASSIFICATION_FAILED, e.getMessage());
         } catch (IllegalArgumentException e) {
@@ -2309,6 +2345,8 @@ public class ReasonerServiceImpl implements ReasonerService, org.owl4agents.owla
             }
 
             return result;
+        } catch (ReasonerIncompatibleException e) {
+            return ServiceResult.error(e.errorCode(), e.getMessage());
         } catch (IllegalArgumentException e) {
             if (e.getMessage() != null && (e.getMessage().contains("Unknown reasoner")
                     || e.getMessage().contains("PROFILE_NOT_SUPPORTED"))) {

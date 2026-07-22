@@ -26,6 +26,8 @@ import org.owl4agents.shacl.FileShapeRegistry;
 import org.owl4agents.shacl.JenaShaclValidationService;
 import org.owl4agents.shacl.ShaclValidationService;
 import org.owl4agents.shacl.ShapeRegistry;
+import org.owl4agents.shacl.SampleShapeSeeder;
+import org.owl4agents.toolcall.SampleContractSeeder;
 import org.owl4agents.toolcall.ToolContractRegistry;
 
 import org.semanticweb.owlapi.apibinding.OWLManager;
@@ -345,6 +347,12 @@ public class CliServiceFactory {
     public ShapeRegistry getShapeRegistry() {
         if (shapeRegistry == null) {
             shapeRegistry = new FileShapeRegistry();
+            // Issue #4: seed a sample SHACL shape file on first startup
+            // so new users have a working starting point. The seeder does
+            // NOT auto-register the shape set; the user must run
+            // shacl-register to register it.
+            SampleShapeSeeder.seedIfEmpty(
+                Path.of(System.getProperty("user.home"), ".owl4agents", "shapes"));
         }
         return shapeRegistry;
     }
@@ -369,6 +377,13 @@ public class CliServiceFactory {
     public ToolContractRegistry getToolContractRegistry() {
         if (toolContractRegistry == null) {
             toolContractRegistry = new ToolContractRegistry();
+            // Issue #4: seed sample contracts on first startup so the
+            // pipeline has working defaults instead of an empty registry
+            // (which always returned decision=reject). Reload after
+            // seeding so the newly written files are loaded into the
+            // in-memory cache.
+            SampleContractSeeder.seedIfEmpty(toolContractRegistry.contractsDirectory());
+            toolContractRegistry.reloadAll();
         }
         return toolContractRegistry;
     }
