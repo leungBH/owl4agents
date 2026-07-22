@@ -140,7 +140,7 @@ class HttpDeploymentSmokeTest {
     @Test
     @DisplayName("initialize returns serverInfo.version matching the project version")
     void testInitializeReturnsCorrectVersion() {
-        String expectedVersion = System.getProperty("owl4agents.version", "0.8.6");
+        String expectedVersion = System.getProperty("owl4agents.version", "0.8.7");
         assertNotNull(initializeResponseBody,
             "initialize response must be captured in @BeforeAll");
         assertTrue(
@@ -161,15 +161,15 @@ class HttpDeploymentSmokeTest {
     }
 
     @Test
-    @DisplayName("tools/list returns exactly 56 readonly tools")
-    void testToolsListReturns56Tools() throws Exception {
+    @DisplayName("tools/list returns exactly 64 readonly tools (v0.8.7)")
+    void testToolsListReturns64Tools() throws Exception {
         HttpResponse resp = sendRequest(serverPort, mcpSessionId,
             "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"tools/list\",\"params\":{}}");
         assertEquals(200, resp.statusCode,
             "tools/list must return HTTP 200. Body: " + resp.body);
         int toolCount = countToolEntries(resp.body);
-        assertEquals(56, toolCount,
-            "tools/list must return exactly 56 tools (one per readonly MCP tool). "
+        assertEquals(64, toolCount,
+            "tools/list must return exactly 64 readonly tools (v0.8.7: 56 base + 3 SHACL + 2 ToolCall + 3 Pipeline). "
                 + "Got " + toolCount + ". Body snippet: "
                 + truncate(resp.body, 500));
     }
@@ -373,6 +373,16 @@ class HttpDeploymentSmokeTest {
      * Tries multiple known paths (gradle layout has shifted between versions).
      */
     private static Path locateShadowJar() {
+        return locateShadowJarPublic();
+    }
+
+    /**
+     * v0.8.7: Public version of {@link #locateShadowJar()} so other deployment
+     * tests in this package (e.g. {@link HttpWriteModeDeploymentTest}) can
+     * reuse the same jar-resolution logic without duplicating the candidate
+     * path list.
+     */
+    static Path locateShadowJarPublic() {
         List<Path> candidates = new ArrayList<>();
         // v0.8.x layout: build/modules/ontology-cli/libs/owl4agents.jar
         candidates.add(Paths.get("build/modules/ontology-cli/libs/owl4agents.jar"));

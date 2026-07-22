@@ -70,6 +70,35 @@ public class ClaimWorkflowService {
             return ServiceResult.error(ServiceError.ontologyNotFound(ontId));
         }
 
+        return verifyBatchAgainstOntology(batch, ontology, ontologyId);
+    }
+
+    /**
+     * v0.8.7 PL-001 pipeline support: verify a batch of claims against a
+     * pre-loaded {@link OWLOntology} (typically a transient overlay produced
+     * by {@code TransientOntologyOverlayService}). Skips the catalog lookup
+     * and {@code reasonerService.loadOntologyForClaim} call so the pipeline
+     * can pass its overlay ontology directly. Otherwise behaves identically
+     * to {@link #verifyBatch(ClaimBatchInput, String)}: shares the reasoner
+     * across all claims in the batch (CL-002).
+     *
+     * @param batch       validated ClaimBatchInput (non-null)
+     * @param ontology    pre-loaded OWLOntology to verify against (non-null;
+     *                    typically the pipeline's transient overlay)
+     * @param ontologyId  ontology ID used for diagnostics and report attribution
+     * @return ServiceResult containing the report or a structured error
+     */
+    public ServiceResult<AnswerVerificationReport> verifyBatchAgainstOntology(
+            ClaimBatchInput batch, OWLOntology ontology, String ontologyId) {
+        if (batch == null) {
+            return ServiceResult.error(ErrorCode.INVALID_CLAIM_SCHEMA,
+                "Claim batch must not be null.");
+        }
+        if (ontology == null) {
+            return ServiceResult.error(ErrorCode.INVALID_CLAIM_SCHEMA,
+                "Ontology must not be null for verifyBatchAgainstOntology.");
+        }
+
         // Resolve workflow options (reasoner override available for future use)
         batch.options()
             .flatMap(WorkflowOptions::reasoner)

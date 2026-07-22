@@ -14,6 +14,13 @@ dependencies {
     implementation(project(":modules:ontology-reasoner"))
     implementation(project(":modules:ontology-validation"))
     implementation(project(":modules:ontology-benchmark"))
+    // v0.8.7 SHACL CLI: shacl-validate and shacl-register commands.
+    implementation(project(":modules:ontology-shacl"))
+    // v0.8.7 Pipeline CLI: toolcall-validate command. The Pipeline reuses
+    // the overlay service for stage 4 (Build Overlay) and the toolcall
+    // module for the ToolCallValidationPipeline orchestrator.
+    implementation(project(":modules:ontology-toolcall"))
+    implementation(project(":modules:ontology-overlay"))
 
     // Apache Jena for SPARQL execution
     implementation("org.apache.jena:apache-jena-libs:5.3.0")

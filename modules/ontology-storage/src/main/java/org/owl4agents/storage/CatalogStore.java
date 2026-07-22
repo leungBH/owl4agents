@@ -114,6 +114,47 @@ public class CatalogStore {
     }
 
     /**
+     * v0.8.7 mcp-write-tools: Remove a catalog entry by ontology ID.
+     * Used by ontology_import with overwrite=true to replace an existing
+     * entry. Does NOT delete the on-disk ontology files; the caller is
+     * expected to re-import (which overwrites the source/canonical files).
+     *
+     * @return Success (with the removed entry, or null if not present) when
+     *         the catalog was successfully rewritten; Error when the catalog
+     *         could not be read or written.
+     */
+    public ServiceResult<CatalogEntry> removeEntry(WorkspaceId workspaceId, OntologyId ontologyId) {
+        Path catalogPath = homeResolver.resolveWorkspaceDirectory(workspaceId)
+            .resolve("catalog.json");
+
+        try {
+            List<CatalogEntry> entries = new ArrayList<>();
+            if (Files.exists(catalogPath)) {
+                entries.addAll(parseCatalogEntries(Files.readString(catalogPath), workspaceId));
+            }
+
+            Optional<CatalogEntry> existing = entries.stream()
+                .filter(e -> e.ontologyId().equals(ontologyId))
+                .findFirst();
+            if (existing.isEmpty()) {
+                // Nothing to remove — treat as success with null data.
+                return ServiceResult.success(null,
+                    org.owl4agents.core.ResultMetadata.explicit(ontologyId));
+            }
+
+            entries.removeIf(e -> e.ontologyId().equals(ontologyId));
+            writeCatalog(catalogPath, entries);
+
+            return ServiceResult.success(existing.get(),
+                org.owl4agents.core.ResultMetadata.explicit(ontologyId));
+        } catch (IOException e) {
+            return ServiceResult.error(
+                org.owl4agents.core.ErrorCode.IMPORT_FAILED,
+                "Failed to remove catalog entry: " + e.getMessage());
+        }
+    }
+
+    /**
      * Check if a file path is within the workspace catalog (safety check).
      */
     public boolean isCatalogedPath(WorkspaceId workspaceId, Path filePath) {

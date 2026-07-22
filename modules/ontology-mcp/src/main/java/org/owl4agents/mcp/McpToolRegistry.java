@@ -3,9 +3,16 @@ package org.owl4agents.mcp;
 import java.util.*;
 
 /**
- * Registry of v0.1, v0.2, v0.3, and v0.5 readonly MCP tools.
- * Lists available tools and their schemas.
- * Write-style tools are not included.
+ * Registry of v0.1, v0.2, v0.3, v0.5, and v0.6 readonly MCP tools,
+ * plus v0.8.7 write tools (ontology_import) and v0.8.7 newly-added
+ * readonly tools (SHACL + ToolCall, registered by their respective
+ * modules once implemented).
+ *
+ * <p>v0.8.7 mcp-write-tools D3: the registry exposes both a readonly
+ * tool set and a write tool set. {@link #listToolSchemas()} returns
+ * only readonly schemas (for backward compatibility with v0.8.6
+ * callers). {@link #listToolSchemas(boolean)} returns readonly
+ * schemas plus write schemas when {@code readonly=false}.</p>
  */
 public class McpToolRegistry {
 
@@ -74,7 +81,27 @@ public class McpToolRegistry {
         // v0.6 QA evaluation tools
         "ontology_eval_qa",
         // v0.6 context-batch tools
-        "ontology_context_batch"
+        "ontology_context_batch",
+        // v0.8.7 SHACL readonly tools (shacl-validation spec "Read-Only SHACL MCP Tools")
+        "ontology_validate_shacl",
+        "ontology_list_shape_sets",
+        "ontology_get_shape_set",
+        // v0.8.7 ToolCall readonly tools (toolcall-model spec "ToolContract Registry")
+        "ontology_get_tool_contract",
+        "ontology_list_tool_contracts",
+        // v0.8.7 Pipeline readonly tools (toolcall-validation-pipeline spec "Pipeline MCP Tools")
+        "ontology_validate_tool_call",
+        "ontology_explain_tool_call",
+        "ontology_preview_tool_call_effects"
+    );
+
+    /**
+     * v0.8.7 mcp-write-tools: write tools registered by the mcp-write-tools
+     * capability. Currently only ontology_import. In write mode
+     * (--readonly=false) these are added to the readonly set.
+     */
+    private static final List<String> WRITE_TOOLS = List.of(
+        "ontology_import"
     );
 
     /**
@@ -85,9 +112,54 @@ public class McpToolRegistry {
     }
 
     /**
-     * List all readonly tool schemas.
+     * v0.8.7 mcp-write-tools: Check if a tool name is a write tool
+     * registered by the mcp-write-tools capability.
+     */
+    public boolean isWriteTool(String toolName) {
+        return WRITE_TOOLS.contains(toolName);
+    }
+
+    /**
+     * List all readonly tool schemas (v0.8.6 behavior, backward compatible).
      */
     public List<Map<String, Object>> listToolSchemas() {
+        return listToolSchemas(true);
+    }
+
+    /**
+     * v0.8.7 mcp-write-tools: List tool schemas filtered by mode.
+     *
+     * @param readonly when true, return only readonly tool schemas;
+     *                 when false, return readonly + write tool schemas
+     */
+    public List<Map<String, Object>> listToolSchemas(boolean readonly) {
+        List<Map<String, Object>> schemas = new ArrayList<>(listReadonlySchemas());
+        if (!readonly) {
+            schemas.addAll(listWriteSchemas());
+        }
+        return schemas;
+    }
+
+    /**
+     * Build the list of write tool schemas (currently ontology_import only).
+     */
+    private List<Map<String, Object>> listWriteSchemas() {
+        List<Map<String, Object>> schemas = new ArrayList<>();
+        // v0.8.7 ontology_import: write tool for importing OWL/RDF content
+        // into the workspace catalog. Per mcp-write-tools spec, accepts
+        // ontology_id (required), content_base64 (optional), file_path
+        // (optional), overwrite (optional, default false).
+        Map<String, Object> importSchema = new LinkedHashMap<>();
+        importSchema.put("ontology_id", stringParam("Ontology ID to register in the catalog"));
+        importSchema.put("content_base64", stringParam("Base64-encoded OWL/RDF payload (alternative to file_path)"));
+        importSchema.put("file_path", stringParam("Server-local path to OWL/RDF file (alternative to content_base64)"));
+        importSchema.put("overwrite", Map.of("type", "boolean", "description", "If true and ontology_id exists, replace the existing entry (default false)", "default", false));
+        schemas.add(toolSchema("ontology_import", "Import an OWL/RDF ontology into the workspace catalog (write tool, requires --readonly=false)",
+            importSchema));
+        return schemas;
+    }
+
+    private List<Map<String, Object>> listReadonlySchemas() {
         List<Map<String, Object>> schemas = new ArrayList<>();
 
         // v0.1 Workspace and ontology tools
@@ -252,6 +324,74 @@ public class McpToolRegistry {
         contextBatchSchema.put("max_context_tokens", intParam("Maximum context tokens budget (0 = no truncation)", 0));
         schemas.add(toolSchema("ontology_context_batch", "Build per-question evidence context from a JSONL question set with truncation metadata (readonly)",
             contextBatchSchema));
+
+        // v0.8.7 SHACL readonly tools (shacl-validation spec "Read-Only SHACL MCP Tools")
+        // ontology_validate_shacl: accepts ONLY shape_set_id, data_graph, options.
+        // MUST NOT accept any shapes_graph / shapes / shapes_ttl parameter
+        // (shacl-validation spec "Agent Cannot Upload Arbitrary SHACL-SPARQL").
+        Map<String, Object> validateShaclSchema = new LinkedHashMap<>();
+        validateShaclSchema.put("shape_set_id", stringParam("Registered ShapeSet identifier (inline shapes are NOT accepted)"));
+        validateShaclSchema.put("data_graph", stringParam("Inline data graph (Turtle or JSON-LD) to validate"));
+        validateShaclSchema.put("options", objectParam("Optional: {includeWarnings: bool, includeInfos: bool, timeout: number(seconds) | ISO-8601}"));
+        schemas.add(toolSchema("ontology_validate_shacl",
+            "Validate an inline data graph against a registered SHACL ShapeSet (readonly). " +
+            "Inline shapes are rejected; only shape_set_id is accepted.",
+            validateShaclSchema));
+
+        schemas.add(toolSchema("ontology_list_shape_sets",
+            "List all registered SHACL ShapeSets (id, version, domain, trusted). " +
+            "Does NOT expose sourcePath or shapes Model content.",
+            Map.of()));
+
+        Map<String, Object> getShapeSetSchema = new LinkedHashMap<>();
+        getShapeSetSchema.put("shape_set_id", stringParam("Registered ShapeSet identifier"));
+        schemas.add(toolSchema("ontology_get_shape_set",
+            "Return metadata for a single registered ShapeSet (id, version, domain, checksum, enabled, trusted, requiresInference). " +
+            "Does NOT return the raw shapes Model content.",
+            getShapeSetSchema));
+
+        // v0.8.7 ToolCall readonly tools (toolcall-model spec "ToolContract Registry")
+        Map<String, Object> getToolContractSchema = new LinkedHashMap<>();
+        getToolContractSchema.put("toolName", stringParam("Tool name (matches the <toolName>.json file in ~/.owl4agents/contracts/)"));
+        schemas.add(toolSchema("ontology_get_tool_contract",
+            "Return the full ToolContract record (9 fields: toolName, inputSchema, targetClass, requiredCapabilities, " +
+            "requiredStates, effects, riskLevel, requiredPermission, shapeSetIds) for a registered tool name. " +
+            "Returns TOOL_CONTRACT_NOT_FOUND when no <toolName>.json exists. Hot-reloads from disk on file modification.",
+            getToolContractSchema));
+
+        schemas.add(toolSchema("ontology_list_tool_contracts",
+            "List metadata summaries (toolName, riskLevel, hasShacl, targetsEntity, shapeSetIds) for every registered tool contract. " +
+            "Excludes any contract whose file does not exist on disk.",
+            Map.of()));
+
+        // v0.8.7 Pipeline readonly tools (toolcall-validation-pipeline spec "Pipeline MCP Tools")
+        Map<String, Object> validateToolCallSchema = new LinkedHashMap<>();
+        validateToolCallSchema.put("ontology_id", stringParam("Base ontology ID to load for the overlay"));
+        validateToolCallSchema.put("call", objectParam("ToolCallCandidate JSON (callId, toolName, arguments, targetEntity, ...)"));
+        validateToolCallSchema.put("state", objectParam("Optional EnvironmentSnapshot JSON (devices, userContexts, pendingToolCalls)"));
+        schemas.add(toolSchema("ontology_validate_tool_call",
+            "Run the 10-stage validation pipeline (Parse → Load Contract → JSON Schema → Build Overlay → " +
+            "Claim Decomposition → OWL Batch → SHACL → Risk Eval → Decision → Report) and return a " +
+            "ToolCallValidationReport with decision (EXECUTE/AUTO_REPAIR/CLARIFY/REQUEST_CONFIRMATION/" +
+            "REJECT/RETRY_VALIDATION/SYSTEM_ERROR), per-stage timing, and repair space. Readonly.",
+            validateToolCallSchema));
+
+        Map<String, Object> explainToolCallSchema = new LinkedHashMap<>();
+        explainToolCallSchema.put("callId", stringParam("callId from a prior ontology_validate_tool_call response"));
+        schemas.add(toolSchema("ontology_explain_tool_call",
+            "Return the evidence triples, owlClaimResults, and shaclViolations for a prior validation " +
+            "(looked up by callId from the in-memory cache). Readonly.",
+            explainToolCallSchema));
+
+        Map<String, Object> previewToolCallEffectsSchema = new LinkedHashMap<>();
+        previewToolCallEffectsSchema.put("ontology_id", stringParam("Base ontology ID"));
+        previewToolCallEffectsSchema.put("call", objectParam("ToolCallCandidate JSON"));
+        previewToolCallEffectsSchema.put("state", objectParam("Optional EnvironmentSnapshot JSON"));
+        schemas.add(toolSchema("ontology_preview_tool_call_effects",
+            "Create a transient overlay, simulate the tool call's effects, return the simulated " +
+            "post-state as Turtle, and release the overlay. The workspace ontology is never modified. " +
+            "Readonly.",
+            previewToolCallEffectsSchema));
 
         return schemas;
     }

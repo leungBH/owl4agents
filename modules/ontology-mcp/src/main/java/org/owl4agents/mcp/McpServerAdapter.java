@@ -43,7 +43,10 @@ import java.util.stream.Collectors;
  * MCP server adapter over the shared ontology services.
  * Exposes readonly tools from v0.1 import/query/context, v0.2 reasoning,
  * v0.3 claim verification / evidence grounding, and v0.5 batch workflow.
- * Write-style tool calls are rejected with readonly-policy errors.
+ *
+ * <p>v0.8.7 mcp-write-tools: the adapter also exposes the {@code ontology_import}
+ * write tool when constructed with {@code readonly=false}. Write tool calls
+ * are routed through a dedicated {@link OntologyImportToolHandler}.</p>
  */
 public class McpServerAdapter {
 
@@ -56,6 +59,9 @@ public class McpServerAdapter {
  private final SparqlValidator sparqlValidator;
  private final SparqlExecutor sparqlExecutor;
  private final SparqlSafetyGuard sparqlSafetyGuard;
+ // v0.8.7 mcp-write-tools: readonly flag + write tool handler.
+ private final boolean readonly;
+ private final OntologyImportToolHandler importHandler;
 
  // v0.7.0: Services are eagerly initialized in the constructor in dependency
  // order (reasonerService -> ?consistencyAnalysisService -> ?semanticDeepeningService
@@ -76,6 +82,21 @@ public class McpServerAdapter {
  private final EvidenceContextBuilder evidenceContextBuilder;
  // v0.8.4: entity signature cache for O(1) entity lookups
  private final org.owl4agents.owlapi.EntitySignatureCacheManager entitySignatureCacheManager;
+ // v0.8.7 SHACL: lazy-initialized ShapeRegistry + ShaclValidationService
+    private org.owl4agents.shacl.ShapeRegistry shapeRegistry;
+    private org.owl4agents.shacl.ShaclValidationService shaclValidationService;
+    // v0.8.7 ToolCall: lazy-initialized ToolContractRegistry
+    private org.owl4agents.toolcall.ToolContractRegistry toolContractRegistry;
+    // v0.8.7 Pipeline: shared OntologyCache (saved as a field so the lazy-init
+    // overlayService() can reuse the same cache as the reasonerService).
+    private org.owl4agents.owlapi.OntologyCache ontologyCache;
+    // v0.8.7 Pipeline: lazy-initialized TransientOntologyOverlayService.
+    private org.owl4agents.overlay.TransientOntologyOverlayService overlayService;
+    // v0.8.7 Pipeline: lazy-initialized PipelineMcpTools (wraps the
+    // ToolCallValidationPipeline). The pipeline delegates to the lazy-init
+    // toolContractRegistry(), overlayService(), shaclService(), and the
+    // eagerly-initialized claimWorkflowService field.
+    private org.owl4agents.toolcall.pipeline.PipelineMcpTools pipelineMcpTools;
 
  /**
  * Accessors for the 7 eagerly-initialized services. These are package-private
@@ -94,10 +115,38 @@ public class McpServerAdapter {
  ClaimWorkflowService claimWorkflowService() { return claimWorkflowService; }
  EvidenceContextBuilder evidenceContextBuilder() { return evidenceContextBuilder; }
 
+ /**
+ * v0.8.6 baseline constructor: readonly mode with default 50 MB import limit.
+ * Kept for backward compatibility with existing tests and callers that
+ * do not opt into write mode. Equivalent to
+ * {@code this(serviceContext, logFilePath, true, 50, null)}.
+ */
  public McpServerAdapter(Map<String, Object> serviceContext, String logFilePath) {
+     this(serviceContext, logFilePath, true, 50, null);
+ }
+
+ /**
+ * v0.8.7 mcp-write-tools: Full constructor with readonly flag and
+ * write-mode configuration.
+ *
+ * @param serviceContext       shared service context (may include "homeDir")
+ * @param logFilePath          path to the JSONL tool call log
+ * @param readonly             when true, only readonly tools are registered;
+ *                             when false, write tools (ontology_import) are
+ *                             also registered and routed through
+ *                             {@link OntologyImportToolHandler}
+ * @param maxImportSizeMb      per-import size cap in MB (default 50)
+ * @param allowedImportRootsCsv comma-separated list of allowed root directories
+ *                             for ontology_import file_path; null/blank
+ *                             defaults to the workspace imports/ subdirectory
+ */
+ public McpServerAdapter(Map<String, Object> serviceContext, String logFilePath,
+                         boolean readonly, int maxImportSizeMb,
+                         String allowedImportRootsCsv) {
  this.serviceContext = serviceContext;
  this.toolRegistry = new McpToolRegistry();
  this.callLogger = new McpToolCallLogger(logFilePath);
+ this.readonly = readonly;
 
  // Initialize service layer
  String homeDir = (String) serviceContext.get("homeDir");
@@ -120,21 +169,23 @@ public class McpServerAdapter {
  // of large ontologies like Mondo).
  // v0.8.4: Register EntitySignatureCacheManager as OntologyReloadListener
  // for O(1) entity signature lookups in claim verification hot path.
+ // v0.8.7: Save ontologyCache as a field so the lazy-init overlayService()
+ // (used by the Pipeline) can reuse the same cache as the reasonerService.
  String workspaceBasePath = homeResolver.resolveHomeDirectory()
  .resolve("workspaces").toString();
  String workspaceName = "default";
- org.owl4agents.owlapi.OntologyCache ontologyCache =
+ this.ontologyCache =
  new org.owl4agents.owlapi.OntologyCache(workspaceBasePath, workspaceName);
  this.entitySignatureCacheManager = new org.owl4agents.owlapi.EntitySignatureCacheManager();
- ontologyCache.addReloadListener(this.entitySignatureCacheManager);
+ this.ontologyCache.addReloadListener(this.entitySignatureCacheManager);
  this.reasonerService = new org.owl4agents.reasoner.ReasonerServiceImpl(
- catalogStore, workspaceBasePath, workspaceName, ontologyCache,
+ catalogStore, workspaceBasePath, workspaceName, this.ontologyCache,
  this.entitySignatureCacheManager);
  this.consistencyAnalysisService = new org.owl4agents.validation.ConsistencyAnalysisService(
- reasonerService.getLifecycleManager(), workspaceBasePath, ontologyCache,
+ reasonerService.getLifecycleManager(), workspaceBasePath, this.ontologyCache,
  this.entitySignatureCacheManager);
  this.semanticDeepeningService = new org.owl4agents.owlapi.SemanticDeepeningService(
- workspaceBasePath, ontologyCache);
+ workspaceBasePath, this.ontologyCache);
  this.claimVerificationService = new org.owl4agents.validation.ClaimVerificationService(
  reasonerService, consistencyAnalysisService, semanticDeepeningService,
  catalogStore, new WorkspaceId("default"));
@@ -144,15 +195,63 @@ public class McpServerAdapter {
  claimVerificationService, evidenceGroundingService,
  catalogStore, new WorkspaceId("default"), reasonerService);
  this.evidenceContextBuilder = new EvidenceContextBuilder();
+
+ // v0.8.7 mcp-write-tools: instantiate the write tool handler in write mode.
+ // The handler captures the OntologyCache reference so overwrite=true can
+ // invalidate the cached entry before re-importing. In readonly mode the
+ // handler is null and write tool calls fall through to the readonly
+ // rejection path in handleToolCall.
+ if (!readonly) {
+     org.owl4agents.owlapi.OntologyImporter ontologyImporter =
+         new org.owl4agents.owlapi.OntologyImporter(homeResolver, catalogStore);
+     this.importHandler = new OntologyImportToolHandler(
+         homeResolver, catalogStore, ontologyImporter, ontologyCache,
+         new WorkspaceId("default"), maxImportSizeMb, allowedImportRootsCsv);
+ } else {
+     this.importHandler = null;
+ }
+ }
+
+ /**
+ * v0.8.7 mcp-write-tools: Expose the readonly flag for tests and callers.
+ */
+ public boolean isReadonly() {
+     return readonly;
  }
 
  /**
  * Handle an MCP tool call.
  * Routes through the shared service layer and logs every call.
+ *
+ * <p>v0.8.7 mcp-write-tools: write tools (currently {@code ontology_import})
+ * are routed through a dedicated {@link OntologyImportToolHandler} when the
+ * server is in write mode. In readonly mode, write tool calls fall through
+ * to the {@link ServiceError#readonlyViolation} rejection path so the
+ * behavior is identical to v0.8.6 for unsanctioned writes.</p>
  */
  public Map<String, Object> handleToolCall(String toolName, Map<String, Object> arguments) {
  Instant timestamp = Instant.now();
  String ontologyId = (String) arguments.getOrDefault("ontology_id", null);
+
+ // v0.8.7 mcp-write-tools: route write tools through the dedicated handler
+ // when in write mode. In readonly mode, write tools fall through to the
+ // readonly rejection below — preserving v0.8.6 behavior for any
+ // unsanctioned write attempt.
+ if (toolRegistry.isWriteTool(toolName)) {
+     if (!readonly && importHandler != null) {
+         Map<String, Object> writeResult = importHandler.execute(arguments);
+         String writeStatus = writeResult.containsKey("error") ? "error" : "success";
+         String writeErrorCode = writeResult.containsKey("error")
+             ? ((Map<String, Object>) writeResult.get("error")).get("code").toString()
+             : null;
+         callLogger.logCall(timestamp, toolName, ontologyId, writeStatus, writeErrorCode);
+         return writeResult;
+     }
+     // readonly mode or handler missing: reject as READONLY_VIOLATION.
+     ServiceError error = ServiceError.readonlyViolation(toolName);
+     callLogger.logCall(timestamp, toolName, ontologyId, "rejected", error.code().code());
+     return errorResponse(error);
+ }
 
  // Check if the tool is in the v0.1 readonly tool set
  if (!toolRegistry.isReadonlyTool(toolName)) {
@@ -185,10 +284,14 @@ public class McpServerAdapter {
  }
 
  /**
- * List available MCP tools (v0.1 readonly only).
+ * List available MCP tools.
+ *
+ * <p>v0.8.7 mcp-write-tools: in readonly mode returns the readonly tool
+ * set (v0.8.6 behavior); in write mode returns the readonly set plus
+ * write tools (currently {@code ontology_import}).</p>
  */
  public List<Map<String, Object>> listTools() {
- return toolRegistry.listToolSchemas();
+ return toolRegistry.listToolSchemas(readonly);
  }
 
  /**
@@ -205,7 +308,7 @@ public class McpServerAdapter {
  * {@link #loadVersion()} -> ?reads the jar manifest
  * {@code Implementation-Version} attribute (production shadowJar),
  * falls back to the {@code owl4agents.version} system property (gradle
- * run, gradle test, IDE runs), then to the literal {@code "0.8.6-dev"}.
+ * run, gradle test, IDE runs), then to the literal {@code "0.8.7-dev"}.
  * Single source of truth -> ?read by both stdio and HTTP transports
  * (including the `GET /mcp` SSE path).
  */
@@ -224,7 +327,7 @@ public class McpServerAdapter {
  *       {@code build.gradle.kts} {@code test} task). Works for
  *       {@code gradle run}, {@code gradle test}, and IDE runs where the
  *       manifest is not set.</li>
- *   <li>Literal {@code "0.8.6-dev"} fallback so the field is never null.</li>
+ *   <li>Literal {@code "0.8.7-dev"} fallback so the field is never null.</li>
  * </ol>
  */
  private static String loadVersion() {
@@ -245,7 +348,7 @@ public class McpServerAdapter {
  if (sysProp != null && !sysProp.isBlank()) {
  return sysProp;
  }
- return "0.8.6-dev";
+ return "0.8.7-dev";
  }
 
  /**
@@ -437,9 +540,20 @@ public class McpServerAdapter {
  case "ontology_eval_qa" -> { return executeEvalQa(arguments); }
  // v0.6 context-batch tools
  case "ontology_context_batch" -> { return executeContextBatch(arguments); }
- default -> { return errorResponse(ServiceError.readonlyViolation(toolName)); }
- }
- }
+ // v0.8.7 SHACL readonly tools
+        case "ontology_validate_shacl" -> { return executeValidateShacl(arguments); }
+        case "ontology_list_shape_sets" -> { return executeListShapeSets(arguments); }
+        case "ontology_get_shape_set" -> { return executeGetShapeSet(arguments); }
+        // v0.8.7 ToolCall readonly tools
+        case "ontology_get_tool_contract" -> { return executeGetToolContract(arguments); }
+        case "ontology_list_tool_contracts" -> { return executeListToolContracts(arguments); }
+        // v0.8.7 Pipeline readonly tools (toolcall-validation-pipeline spec "Pipeline MCP Tools")
+        case "ontology_validate_tool_call" -> { return executeValidateToolCall(arguments); }
+        case "ontology_explain_tool_call" -> { return executeExplainToolCall(arguments); }
+        case "ontology_preview_tool_call_effects" -> { return executePreviewToolCallEffects(arguments); }
+        default -> { return errorResponse(ServiceError.readonlyViolation(toolName)); }
+    }
+    }
 
  // ── Real implementations ──
 
@@ -2489,4 +2603,305 @@ public class McpServerAdapter {
  "details", error.details()
  ));
  }
+
+ // ── v0.8.7 SHACL readonly tool implementations ──
+
+ /**
+  * Lazy-initialize the ShapeRegistry + ShaclValidationService on first use.
+  * Both are lazily initialized so the MCP server does not pay the
+  * registry.json load cost on startup when no SHACL tool is invoked.
+  */
+ private synchronized org.owl4agents.shacl.ShaclValidationService shaclService() {
+     if (shaclValidationService == null) {
+         if (shapeRegistry == null) {
+             shapeRegistry = new org.owl4agents.shacl.FileShapeRegistry();
+         }
+         shaclValidationService = new org.owl4agents.shacl.JenaShaclValidationService(shapeRegistry);
+     }
+     return shaclValidationService;
+ }
+
+ /**
+  * Package-private accessor for tests to inject a custom service.
+  */
+ synchronized void setShaclServices(org.owl4agents.shacl.ShapeRegistry registry,
+                                    org.owl4agents.shacl.ShaclValidationService service) {
+     this.shapeRegistry = registry;
+     this.shaclValidationService = service;
+ }
+
+ /**
+  * ontology_validate_shacl: validate inline data_graph against a registered
+  * ShapeSet. Per spec "Agent Cannot Upload Arbitrary SHACL-SPARQL", the
+  * tool MUST NOT accept any shapes_graph parameter; only shape_set_id is
+  * accepted.
+  */
+ private Map<String, Object> executeValidateShacl(Map<String, Object> args) {
+     // Per spec: reject any attempt to upload inline shapes.
+     // Recognized aliases: shapes_graph, shapes, shapes_ttl.
+     if (args.containsKey("shapes_graph") || args.containsKey("shapes")
+         || args.containsKey("shapes_ttl")) {
+         ServiceError error = ServiceError.of(ErrorCode.INVALID_ARGUMENTS,
+             "ontology_validate_shacl only accepts 'shape_set_id'; inline shapes are rejected. " +
+             "Register shapes via the shacl-register CLI command.");
+         return errorResponse(error);
+     }
+     String shapeSetId = (String) args.get("shape_set_id");
+     if (shapeSetId == null || shapeSetId.isBlank()) {
+         return errorResponse(ServiceError.of(ErrorCode.INVALID_ARGUMENTS,
+             "shape_set_id is required"));
+     }
+     String dataGraphStr = (String) args.get("data_graph");
+     if (dataGraphStr == null || dataGraphStr.isBlank()) {
+         return errorResponse(ServiceError.of(ErrorCode.INVALID_ARGUMENTS,
+             "data_graph is required (inline Turtle or JSON-LD)"));
+     }
+
+     // Parse the inline data graph with Jena RDFDataMgr.
+     org.apache.jena.rdf.model.Model dataModel;
+     try {
+         dataModel = org.apache.jena.rdf.model.ModelFactory.createDefaultModel();
+         org.apache.jena.riot.RDFDataMgr.read(dataModel,
+             new java.io.ByteArrayInputStream(dataGraphStr.getBytes(java.nio.charset.StandardCharsets.UTF_8)),
+             org.apache.jena.riot.Lang.TTL);
+     } catch (RuntimeException ttlEx) {
+         // Fallback: try JSON-LD
+         try {
+             dataModel = org.apache.jena.rdf.model.ModelFactory.createDefaultModel();
+             org.apache.jena.riot.RDFDataMgr.read(dataModel,
+                 new java.io.ByteArrayInputStream(dataGraphStr.getBytes(java.nio.charset.StandardCharsets.UTF_8)),
+                 org.apache.jena.riot.Lang.JSONLD);
+         } catch (RuntimeException jsonLdEx) {
+             return errorResponse(ServiceError.of(ErrorCode.SHACL_SHAPES_MALFORMED,
+                 "Failed to parse data_graph (tried Turtle and JSON-LD): " + ttlEx.getMessage()));
+         }
+     }
+
+     // Parse options (includeWarnings, includeInfos, timeout).
+     Object optionsObj = args.get("options");
+     org.owl4agents.shacl.ShaclValidationOptions opts = org.owl4agents.shacl.ShaclValidationOptions.defaults();
+     if (optionsObj instanceof Map) {
+         @SuppressWarnings("unchecked")
+         Map<String, Object> optionsMap = (Map<String, Object>) optionsObj;
+         opts = org.owl4agents.shacl.ShaclValidationOptions.fromMap(optionsMap);
+     }
+
+     ServiceResult<org.owl4agents.shacl.ShaclValidationReport> result =
+         shaclService().validateRegisteredShapes(shapeSetId, dataModel, opts);
+     if (!result.isSuccess()) {
+         return errorResponse(((ServiceResult.Error<org.owl4agents.shacl.ShaclValidationReport>) result).error());
+     }
+     org.owl4agents.shacl.ShaclValidationReport report =
+         ((ServiceResult.Success<org.owl4agents.shacl.ShaclValidationReport>) result).data();
+     return Map.of("status", "success",
+         "data", org.owl4agents.shacl.ShaclJsonSerializer.reportToMap(report));
+ }
+
+ /**
+  * ontology_list_shape_sets: return registered ShapeSet metadata (no sourcePath,
+  * no Model content).
+  */
+ private Map<String, Object> executeListShapeSets(Map<String, Object> args) {
+     // Lazy-init the registry if not yet done.
+     shaclService();
+     java.util.List<org.owl4agents.shacl.ShapeSet> sets = shapeRegistry.list();
+     java.util.List<Map<String, Object>> serialized = sets.stream()
+         .map(org.owl4agents.shacl.ShaclJsonSerializer::shapeSetToMap)
+         .collect(Collectors.toList());
+     return Map.of("status", "success", "data", Map.of("shapeSets", serialized));
+ }
+
+ /**
+  * ontology_get_shape_set: return a single ShapeSet's metadata (no Model content).
+  */
+ private Map<String, Object> executeGetShapeSet(Map<String, Object> args) {
+     String shapeSetId = (String) args.get("shape_set_id");
+     if (shapeSetId == null || shapeSetId.isBlank()) {
+         return errorResponse(ServiceError.of(ErrorCode.INVALID_ARGUMENTS,
+             "shape_set_id is required"));
+     }
+     shaclService();
+     java.util.Optional<org.owl4agents.shacl.ShapeSet> opt = shapeRegistry.get(shapeSetId);
+     if (opt.isEmpty()) {
+         return errorResponse(ServiceError.of(ErrorCode.SHAPE_SET_NOT_FOUND,
+             "No ShapeSet registered with id '" + shapeSetId + "'.",
+             Map.of("shapeSetId", shapeSetId)));
+     }
+     return Map.of("status", "success",
+            "data", org.owl4agents.shacl.ShaclJsonSerializer.shapeSetToMap(opt.get()));
+    }
+
+    // ── v0.8.7 ToolCall readonly tool implementations ──
+
+    /**
+     * Lazy-initialize the ToolContractRegistry on first use.
+     * Mirrors the {@link #shaclService()} pattern: lazy-init so the MCP
+     * server does not pay the contracts-directory load cost on startup
+     * when no ToolCall tool is invoked. The registry itself is mtime-aware
+     * so hot-reload happens transparently inside {@code get(toolName)}.
+     */
+    private synchronized org.owl4agents.toolcall.ToolContractRegistry toolContractRegistry() {
+        if (toolContractRegistry == null) {
+            toolContractRegistry = new org.owl4agents.toolcall.ToolContractRegistry();
+        }
+        return toolContractRegistry;
+    }
+
+    /**
+     * Package-private accessor for tests to inject a custom registry
+     * (e.g. one pointed at a temp directory with fixture contracts).
+     */
+    synchronized void setToolContractRegistry(
+        org.owl4agents.toolcall.ToolContractRegistry registry) {
+        this.toolContractRegistry = registry;
+    }
+
+    /**
+     * ontology_get_tool_contract: return the full ToolContract record
+     * (9 fields) for a registered tool name. Queries the
+     * {@link ToolContractRegistry} which loads from
+     * {@code ~/.owl4agents/contracts/<toolName>.json} with mtime-based
+     * hot-reload. Returns {@code TOOL_CONTRACT_NOT_FOUND} when the file
+     * does not exist, with a hint about the expected file path convention.
+     */
+    private Map<String, Object> executeGetToolContract(Map<String, Object> args) {
+        String toolName = (String) args.get("toolName");
+        if (toolName == null || toolName.isBlank()) {
+            return errorResponse(ServiceError.of(ErrorCode.INVALID_ARGUMENTS,
+                "toolName is required"));
+        }
+        ServiceResult<org.owl4agents.toolcall.ToolContract> r =
+            toolContractRegistry().get(toolName);
+        if (!r.isSuccess()) {
+            return errorResponse(
+                ((ServiceResult.Error<org.owl4agents.toolcall.ToolContract>) r).error());
+        }
+        org.owl4agents.toolcall.ToolContract contract =
+            ((ServiceResult.Success<org.owl4agents.toolcall.ToolContract>) r).data();
+        return Map.of("status", "success",
+            "data", org.owl4agents.toolcall.ToolCallJsonSerializer.contractToMap(contract));
+    }
+
+    /**
+     * ontology_list_tool_contracts: list metadata summaries for every
+     * registered tool contract. Per spec "List registered contracts", each
+     * entry carries at minimum {@code toolName} and {@code riskLevel};
+     * the serializer also emits {@code hasShacl}, {@code targetsEntity},
+     * and {@code shapeSetIds} for caller convenience. Removed files are
+     * excluded even when a stale cache entry remains.
+     */
+    private Map<String, Object> executeListToolContracts(Map<String, Object> args) {
+        java.util.List<org.owl4agents.toolcall.ToolContract> contracts =
+            toolContractRegistry().list();
+        java.util.List<Map<String, Object>> serialized = contracts.stream()
+            .map(org.owl4agents.toolcall.ToolCallJsonSerializer::contractSummaryToMap)
+            .collect(Collectors.toList());
+        return Map.of("status", "success",
+            "data", Map.of("contracts", serialized));
+    }
+
+    // ── v0.8.7 Pipeline readonly tool implementations ──
+
+    /**
+     * Lazy-initialize the {@link TransientOntologyOverlayService} on first
+     * use. Reuses the shared {@link #ontologyCache} (saved as a field in
+     * the constructor) so the overlay resolves base ontologies through
+     * the same cache as the {@link #reasonerService}.
+     */
+    private synchronized org.owl4agents.overlay.TransientOntologyOverlayService overlayService() {
+        if (overlayService == null) {
+            if (ontologyCache == null) {
+                // Defensive: the constructor always sets ontologyCache, but
+                // tests using legacy constructors may bypass that path.
+                // Reconstruct from the home resolver so the overlay still
+                // works in test contexts.
+                String workspaceBasePath = homeResolver.resolveHomeDirectory()
+                    .resolve("workspaces").toString();
+                ontologyCache = new org.owl4agents.owlapi.OntologyCache(
+                    workspaceBasePath, "default");
+            }
+            overlayService = new org.owl4agents.overlay.TransientOntologyOverlayServiceImpl(
+                ontologyCache);
+        }
+        return overlayService;
+    }
+
+    /**
+     * Package-private accessor for tests to inject a custom overlay service.
+     */
+    synchronized void setOverlayService(
+        org.owl4agents.overlay.TransientOntologyOverlayService service) {
+        this.overlayService = service;
+    }
+
+    /**
+     * Lazy-initialize the {@link PipelineMcpTools} on first use. The
+     * underlying {@link ToolCallValidationPipeline} is constructed with
+     * the lazy-init {@link #toolContractRegistry()}, the lazy-init
+     * {@link #overlayService()}, the lazy-init {@link #shaclService()}
+     * (which also lazy-inits {@link #shapeRegistry}), and the
+     * eagerly-initialized {@link #claimWorkflowService} field.
+     *
+     * <p>Per spec "CLI and MCP Service Contract Sharing", the same
+     * pipeline instance is shared by both the MCP tools and (when the
+     * CLI is wired through {@code CliServiceFactory}) the CLI. The
+     * pipeline is stateless and safe to call concurrently.</p>
+     */
+    private synchronized org.owl4agents.toolcall.pipeline.PipelineMcpTools pipelineMcpTools() {
+        if (pipelineMcpTools == null) {
+            // Ensure shapeRegistry + shaclValidationService are initialized
+            // (the pipeline needs both for stage 7 SHACL validation).
+            shaclService();
+            org.owl4agents.toolcall.pipeline.ToolCallValidationPipeline pipeline =
+                org.owl4agents.toolcall.pipeline.ToolCallValidationPipeline.builder()
+                    .toolContractRegistry(toolContractRegistry())
+                    .overlayService(overlayService())
+                    .claimWorkflowService(claimWorkflowService)
+                    .shapeRegistry(shapeRegistry)
+                    .shaclValidationService(shaclValidationService)
+                    .build();
+            pipelineMcpTools = new org.owl4agents.toolcall.pipeline.PipelineMcpTools(
+                pipeline, toolContractRegistry(), overlayService());
+        }
+        return pipelineMcpTools;
+    }
+
+    /**
+     * Package-private accessor for tests to inject a custom
+     * {@link PipelineMcpTools} (e.g. one wired with a temp-directory
+     * ToolContractRegistry and an in-memory overlay service).
+     */
+    synchronized void setPipelineMcpTools(
+        org.owl4agents.toolcall.pipeline.PipelineMcpTools tools) {
+        this.pipelineMcpTools = tools;
+    }
+
+    /**
+     * ontology_validate_tool_call: run the 10-stage validation pipeline
+     * (Parse -> Load Contract -> JSON Schema -> Build Overlay -> Claim
+     * Decomposition -> OWL Batch -> SHACL -> Risk Eval -> Decision ->
+     * Report) and return a {@link ToolCallValidationReport}.
+     */
+    private Map<String, Object> executeValidateToolCall(Map<String, Object> args) {
+        return pipelineMcpTools().validateToolCall(args);
+    }
+
+    /**
+     * ontology_explain_tool_call: return the evidence, owlClaimResults,
+     * and shaclViolations for a prior validation (looked up by callId
+     * from the in-memory cache).
+     */
+    private Map<String, Object> executeExplainToolCall(Map<String, Object> args) {
+        return pipelineMcpTools().explainToolCall(args);
+    }
+
+    /**
+     * ontology_preview_tool_call_effects: create a transient overlay,
+     * simulate the tool call's effects, return the simulated post-state
+     * as Turtle, and release the overlay. The workspace ontology is
+     * never modified.
+     */
+    private Map<String, Object> executePreviewToolCallEffects(Map<String, Object> args) {
+        return pipelineMcpTools().previewToolCallEffects(args);
+    }
 }

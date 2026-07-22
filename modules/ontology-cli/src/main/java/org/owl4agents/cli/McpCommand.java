@@ -30,7 +30,7 @@ import com.google.gson.JsonParser;
  * and blocks until SIGTERM/SIGINT. The HTTP server registers a JVM shutdown
  * hook (HttpMcpServer constructor) to call {@code stop()} cleanly.</p>
  */
-@Command(name = "mcp", description = "Start the readonly MCP server.")
+@Command(name = "mcp", description = "Start the MCP server (readonly by default; use --readonly=false to enable write tools).")
 public class McpCommand implements Callable<Integer> {
 
     @Option(names = {"--readonly"}, description = "Start MCP in readonly mode (default)", arity = "0..1", fallbackValue = "true", defaultValue = "true")
@@ -66,13 +66,45 @@ public class McpCommand implements Callable<Integer> {
         defaultValue = "15")
     private long sseHeartbeatSeconds = HttpMcpServer.DEFAULT_HEARTBEAT_INTERVAL.toSeconds();
 
+    // v0.8.7 mcp-write-tools: write-mode configuration options.
+    // --max-import-size-mb caps the per-import payload size (default 50 MB).
+    // --allowed-import-roots restricts which server-local directories the
+    // ontology_import tool can read from (defaults to the workspace imports/
+    // subdirectory). Both are only consulted when --readonly=false.
+    @Option(names = {"--max-import-size-mb"},
+        description = "Maximum size in MB for a single ontology_import payload (only used with --readonly=false). Default: ${DEFAULT-VALUE}",
+        defaultValue = "50")
+    private int maxImportSizeMb = 50;
+
+    @Option(names = {"--allowed-import-roots"},
+        description = "Comma-separated list of allowed root directories for ontology_import file_path argument (only used with --readonly=false). Defaults to the workspace imports/ subdirectory.")
+    private String allowedImportRoots;
+
     private final Gson gson = GsonFactory.createGson();
 
     @Override
     public Integer call() {
+        // v0.8.7 mcp-write-tools D3: --readonly=false is now an opt-in write mode.
+        // Previously the CLI hard-rejected readonly=false. Now we forward the
+        // flag to McpServerAdapter so the adapter can conditionally register
+        // write tools (currently ontology_import). The hard-rejection code path
+        // is removed per tasks.md §2.1.
+        //
+        // Write mode startup warning is emitted here (stderr only) so it does
+        // not pollute the JSON-RPC stream on stdout. Per spec.md "Write mode
+        // startup warning" the warning must mention: (1) write mode enabled,
+        // (2) readonly guarantee no longer in effect, (3) ontology_import can
+        // write to the workspace, (4) configured allowed import roots,
+        // (5) per-import size limit.
         if (!readonly) {
-            System.err.println("Error: owl4agents only supports readonly MCP mode. Use --readonly (default).");
-            return 1;
+            String roots = (allowedImportRoots != null && !allowedImportRoots.isBlank())
+                ? allowedImportRoots
+                : "workspace imports/ subdirectory (default)";
+            System.err.println("WARNING: WRITE mode is enabled (--readonly=false).");
+            System.err.println("WARNING: The readonly guarantee is no longer in effect for the duration of this server process.");
+            System.err.println("WARNING: The ontology_import tool can write to the workspace.");
+            System.err.println("WARNING: Allowed import roots: " + roots);
+            System.err.println("WARNING: Size limit per import: " + maxImportSizeMb + " MB");
         }
 
         // Validate transport value early. Reject unknown values with a deterministic
@@ -97,7 +129,11 @@ public class McpCommand implements Callable<Integer> {
             .resolve("mcp-tool-calls.jsonl")
             .toString();
 
-        McpServerAdapter adapter = new McpServerAdapter(serviceContext, logFilePath);
+        // v0.8.7 mcp-write-tools D3: forward readonly flag + write-mode
+        // configuration into the adapter so it can conditionally register
+        // write tools (ontology_import) and enforce size/path limits.
+        McpServerAdapter adapter = new McpServerAdapter(
+            serviceContext, logFilePath, readonly, maxImportSizeMb, allowedImportRoots);
 
         if ("http".equals(transport)) {
             return runHttp(adapter);
@@ -114,8 +150,11 @@ public class McpCommand implements Callable<Integer> {
         BufferedReader reader = new BufferedReader(new InputStreamReader(System.in));
         PrintWriter writer = new PrintWriter(System.out, true);
 
-        // Signal that server is ready (write to stderr so it doesn't interfere with protocol)
-        System.err.println("owl4agents MCP server started in readonly mode (transport=stdio)");
+        // Signal that server is ready (write to stderr so it doesn't interfere with protocol).
+        // v0.8.7: message reflects the actual mode (readonly vs write) per tasks.md §2.8.
+        System.err.println("owl4agents MCP server started in "
+            + (readonly ? "readonly" : "WRITE")
+            + " mode (transport=stdio)");
 
         try {
             String line;

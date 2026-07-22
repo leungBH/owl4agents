@@ -19,6 +19,14 @@ import org.owl4agents.validation.ClaimVerificationService;
 import org.owl4agents.validation.ClaimWorkflowService;
 import org.owl4agents.validation.EvidenceGroundingService;
 import org.owl4agents.validation.EvidenceContextBuilder;
+// v0.8.7 Pipeline CLI: overlay + shacl + toolcall services.
+import org.owl4agents.overlay.TransientOntologyOverlayService;
+import org.owl4agents.overlay.TransientOntologyOverlayServiceImpl;
+import org.owl4agents.shacl.FileShapeRegistry;
+import org.owl4agents.shacl.JenaShaclValidationService;
+import org.owl4agents.shacl.ShaclValidationService;
+import org.owl4agents.shacl.ShapeRegistry;
+import org.owl4agents.toolcall.ToolContractRegistry;
 
 import org.semanticweb.owlapi.apibinding.OWLManager;
 import org.semanticweb.owlapi.model.OWLOntology;
@@ -55,6 +63,11 @@ public class CliServiceFactory {
     private EvidenceGroundingService evidenceGroundingService;
     private ClaimWorkflowService claimWorkflowService;
     private EvidenceContextBuilder evidenceContextBuilder;
+    // v0.8.7 Pipeline CLI: lazy-initialized services for toolcall-validate.
+    private TransientOntologyOverlayService overlayService;
+    private ShapeRegistry shapeRegistry;
+    private ShaclValidationService shaclValidationService;
+    private ToolContractRegistry toolContractRegistry;
 
     public CliServiceFactory(String workspaceName, String homeDirectory) {
         this.workspaceName = workspaceName;
@@ -308,6 +321,56 @@ public class CliServiceFactory {
             evidenceContextBuilder = new EvidenceContextBuilder();
         }
         return evidenceContextBuilder;
+    }
+
+    // ── v0.8.7 Pipeline CLI service accessors ──
+
+    /**
+     * Get the shared {@link TransientOntologyOverlayService} instance
+     * (lazy-initialized). Reuses the shared {@link OntologyCache} so the
+     * overlay resolves base ontologies through the same cache as the
+     * reasoner service.
+     */
+    public TransientOntologyOverlayService getOverlayService() {
+        if (overlayService == null) {
+            overlayService = new TransientOntologyOverlayServiceImpl(getOntologyCache());
+        }
+        return overlayService;
+    }
+
+    /**
+     * Get the shared {@link ShapeRegistry} instance (lazy-initialized).
+     * Used by the Pipeline CLI for stage 7 SHACL validation.
+     */
+    public ShapeRegistry getShapeRegistry() {
+        if (shapeRegistry == null) {
+            shapeRegistry = new FileShapeRegistry();
+        }
+        return shapeRegistry;
+    }
+
+    /**
+     * Get the shared {@link ShaclValidationService} instance
+     * (lazy-initialized). Wired with the shared {@link ShapeRegistry}.
+     */
+    public ShaclValidationService getShaclValidationService() {
+        if (shaclValidationService == null) {
+            shaclValidationService = new JenaShaclValidationService(getShapeRegistry());
+        }
+        return shaclValidationService;
+    }
+
+    /**
+     * Get the shared {@link ToolContractRegistry} instance
+     * (lazy-initialized). Loads contracts from
+     * {@code ~/.owl4agents/contracts/<toolName>.json} with mtime-based
+     * hot-reload.
+     */
+    public ToolContractRegistry getToolContractRegistry() {
+        if (toolContractRegistry == null) {
+            toolContractRegistry = new ToolContractRegistry();
+        }
+        return toolContractRegistry;
     }
 
     /**

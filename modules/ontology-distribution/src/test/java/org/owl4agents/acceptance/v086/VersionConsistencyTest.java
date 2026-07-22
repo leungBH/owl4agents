@@ -24,7 +24,7 @@ import static org.junit.jupiter.api.Assertions.*;
  *       so {@code Package.getImplementationVersion()} returns {@code null}.
  *       The {@code owl4agents.version} system property (set by the root
  *       {@code build.gradle.kts} {@code test} task) provides the value.</li>
- *   <li><b>Fallback</b>: if neither is set, the literal {@code "0.8.6-dev"}
+ *   <li><b>Fallback</b>: if neither is set, the literal {@code "0.8.7-dev"}
  *       is used so the field is never null.</li>
  * </ol>
  *
@@ -38,7 +38,7 @@ import static org.junit.jupiter.api.Assertions.*;
  *       value as {@code SERVER_VERSION} (the field is initialized from
  *       {@code loadVersion()} at class-load time).</li>
  *   <li>The 3-tier fallback chain works as documented: manifest → system
- *       property → "0.8.6-dev".</li>
+ *       property → "0.8.7-dev".</li>
  * </ul>
  *
  * <p>Tagged {@code "acceptance"} per project convention for v0.8.6 acceptance
@@ -48,7 +48,7 @@ import static org.junit.jupiter.api.Assertions.*;
 @org.junit.jupiter.api.Tag("acceptance")
 class VersionConsistencyTest {
 
-    private static final String FALLBACK_VERSION = "0.8.6-dev";
+    private static final String FALLBACK_VERSION = "0.8.7-dev";
 
     @Nested
     @DisplayName("SERVER_VERSION field is well-formed")
@@ -69,13 +69,13 @@ class VersionConsistencyTest {
         }
 
         @Test
-        @DisplayName("SERVER_VERSION starts with '0.8.6' (project version)")
+        @DisplayName("SERVER_VERSION starts with '0.8.7' (project version)")
         void serverVersionStartsWithProjectVersion() {
-            // The project version is "0.8.6" (set in root build.gradle.kts).
-            // SERVER_VERSION should be either "0.8.6" (manifest/sysprop) or
-            // "0.8.6-dev" (fallback). Either way, it must start with "0.8.6".
-            assertTrue(McpServerAdapter.SERVER_VERSION.startsWith("0.8.6"),
-                "SERVER_VERSION should start with '0.8.6' (project version). " +
+            // The project version is "0.8.7" (set in root build.gradle.kts).
+            // SERVER_VERSION should be either "0.8.7" (manifest/sysprop) or
+            // "0.8.7-dev" (fallback). Either way, it must start with "0.8.7".
+            assertTrue(McpServerAdapter.SERVER_VERSION.startsWith("0.8.7"),
+                "SERVER_VERSION should start with '0.8.7' (project version). " +
                 "Got: " + McpServerAdapter.SERVER_VERSION);
         }
     }
@@ -104,7 +104,7 @@ class VersionConsistencyTest {
         void loadVersionNeverReturnsNull() throws Exception {
             String fromMethod = invokeLoadVersion();
             assertNotNull(fromMethod,
-                "loadVersion() must never return null (fallback to '0.8.6-dev')");
+                "loadVersion() must never return null (fallback to '0.8.7-dev')");
         }
 
         @Test
@@ -112,7 +112,7 @@ class VersionConsistencyTest {
         void loadVersionNeverReturnsBlank() throws Exception {
             String fromMethod = invokeLoadVersion();
             assertFalse(fromMethod.isBlank(),
-                "loadVersion() must never return blank (fallback to '0.8.6-dev')");
+                "loadVersion() must never return blank (fallback to '0.8.7-dev')");
         }
     }
 
@@ -156,13 +156,13 @@ class VersionConsistencyTest {
         }
 
         @Test
-        @DisplayName("fallback literal is '0.8.6-dev' (matches FALLBACK_VERSION)")
+        @DisplayName("fallback literal is '0.8.7-dev' (matches FALLBACK_VERSION)")
         void fallbackLiteralIsCorrect() {
             // This is a compile-time contract test: the FALLBACK_VERSION
             // constant in this test must match the literal in loadVersion().
             // (If the literal changes, this test forces the author to update
             // the test too.)
-            assertEquals("0.8.6-dev", FALLBACK_VERSION,
+            assertEquals("0.8.7-dev", FALLBACK_VERSION,
                 "Fallback literal in this test must match the literal in loadVersion()");
         }
     }
@@ -172,9 +172,9 @@ class VersionConsistencyTest {
     class ProjectVersionTests {
 
         @Test
-        @DisplayName("gradle project version is '0.8.6'")
+        @DisplayName("gradle project version is '0.8.7'")
         void gradleProjectVersionIsCorrect() {
-            // The root build.gradle.kts sets version = "0.8.6".
+            // The root build.gradle.kts sets version = "0.8.7".
             // The gradle test task exposes this via the owl4agents.version
             // system property (added in v0.8.6 D9 / task 8.4).
             String sysProp = System.getProperty("owl4agents.version");
@@ -182,17 +182,17 @@ class VersionConsistencyTest {
                 sysProp != null && !sysProp.isBlank(),
                 "owl4agents.version system property must be set for this test");
 
-            assertEquals("0.8.6", sysProp,
-                "Gradle project version (root build.gradle.kts) must be '0.8.6'. " +
+            assertEquals("0.8.7", sysProp,
+                "Gradle project version (root build.gradle.kts) must be '0.8.7'. " +
                 "Got sysProp=" + sysProp);
         }
 
         @Test
-        @DisplayName("SERVER_VERSION is '0.8.6' under gradle test (manifest is null)")
+        @DisplayName("SERVER_VERSION is '0.8.7' under gradle test (manifest is null)")
         void serverVersionIsGradleProjectVersionUnderTest() {
             // Under `gradle test`, no shadow jar is built, so the manifest
             // is null. loadVersion() must fall through to the system property,
-            // which equals the gradle project version ("0.8.6").
+            // which equals the gradle project version ("0.8.7").
             String sysProp = System.getProperty("owl4agents.version");
             org.junit.jupiter.api.Assumptions.assumeTrue(
                 sysProp != null && !sysProp.isBlank(),

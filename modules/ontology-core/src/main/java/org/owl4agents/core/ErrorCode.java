@@ -166,7 +166,43 @@ public enum ErrorCode {
     REASONER_INTERRUPTED("REASONER_INTERRUPTED",
         "The reasoner call was interrupted before completion."),
     REASONER_EXPLANATION_UNSUPPORTED_FOR_LARGE_ONTOLOGY("REASONER_EXPLANATION_UNSUPPORTED_FOR_LARGE_ONTOLOGY",
-        "Explanation requested on large ontology (classCount > 20K). Openllet would OOM. Disable explanation, use a smaller ontology, or explicitly specify reasoner=openllet (accepting OOM risk).");
+        "Explanation requested on large ontology (classCount > 20K). Openllet would OOM. Disable explanation, use a smaller ontology, or explicitly specify reasoner=openllet (accepting OOM risk)."),
+
+    // v0.8.7 mcp-write-tools error codes
+    INVALID_IMPORT_ARGUMENTS("INVALID_IMPORT_ARGUMENTS",
+        "ontology_import requires either content_base64 or file_path (at least one must be provided)."),
+    IMPORT_SIZE_LIMIT_EXCEEDED("IMPORT_SIZE_LIMIT_EXCEEDED",
+        "The ontology_import payload exceeds the configured maximum size."),
+    IMPORT_PATH_OUTSIDE_ALLOWED_ROOTS("IMPORT_PATH_OUTSIDE_ALLOWED_ROOTS",
+        "The ontology_import file_path resolves outside the configured allowed roots."),
+    IMPORT_ID_CONFLICT("IMPORT_ID_CONFLICT",
+        "The ontology_id already exists in the catalog; pass overwrite=true to replace."),
+    TOOL_CONTRACT_NOT_FOUND("TOOL_CONTRACT_NOT_FOUND",
+        "No tool contract registered for the requested tool name."),
+
+    // v0.8.7 SHACL validation error codes
+    SHACL_SHAPES_MALFORMED("SHACL_SHAPES_MALFORMED",
+        "The SHACL shapes file could not be parsed by Jena RDFDataMgr.loadModel."),
+    SHACL_SHAPES_LOAD_FAILED("SHACL_SHAPES_LOAD_FAILED",
+        "A registered ShapeSet's source file could not be loaded (deleted, checksum mismatch, or I/O error)."),
+    SHAPE_SET_NOT_FOUND("SHAPE_SET_NOT_FOUND",
+        "The requested shape_set_id is not present in the ShapeRegistry."),
+    SHAPE_SET_ID_CONFLICT("SHAPE_SET_ID_CONFLICT",
+        "A ShapeSet with the same id already exists with a different checksum; pass --force to overwrite."),
+    SHACL_TIMEOUT("SHACL_TIMEOUT",
+        "The SHACL validation exceeded the configured timeout."),
+    INVALID_ARGUMENTS("INVALID_ARGUMENTS",
+        "One or more arguments supplied to the tool were invalid."),
+
+    // v0.8.7 reasoner isolation error codes (D15 / REL-001)
+    REASONER_WORKER_CRASHED("REASONER_WORKER_CRASHED",
+        "The isolated reasoner worker JVM exited unexpectedly before responding."),
+    REASONER_WORKER_PROTOCOL_ERROR("REASONER_WORKER_PROTOCOL_ERROR",
+        "The isolated reasoner worker produced malformed output on stdout."),
+
+    // v0.8.7 cache governance error code (D16 / REL-003)
+    SNAPSHOT_EXPIRED("SNAPSHOT_EXPIRED",
+        "The dynamic state snapshot exceeded its TTL window before pipeline entry.");
 
     private final String code;
     private final String defaultMessage;
