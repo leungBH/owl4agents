@@ -1838,6 +1838,24 @@ public class ReasonerServiceImpl implements ReasonerService, org.owl4agents.owla
         String detectedProfile = detectProfile(ontologyId, sourceOntology);
         String effectiveReasoner = resolveReasonerName(reasonerName, detectedProfile, false, sourceOntology);
 
+        // v0.8.8 D1: Stage 4 must use a full DL profile reasoner for disjointness
+        // detection. ELK (OWL 2 EL) cannot detect disjointness-based unsatisfiability.
+        // Override ELK to HermiT (small ontologies) or Openllet (large ontologies).
+        // This override is Stage 4 only — Stage 3 (entailment) still uses the
+        // claim-specified reasoner (ELK for fast subclass reasoning).
+        boolean d1Overridden = false;
+        if ("ELK".equalsIgnoreCase(effectiveReasoner)) {
+            int classCount = sourceOntology.getClassesInSignature().size();
+            String dlReasoner = (classCount > AutoReasonerSelector.LARGE_ONTOLOGY_CLASS_THRESHOLD)
+                ? "Openllet"
+                : "HermiT";
+            java.util.logging.Logger.getLogger(ReasonerServiceImpl.class.getName()).info(
+                "v0.8.8 D1: Stage 4 consistency check overriding reasoner from ELK to "
+                + dlReasoner + " for disjointness detection (classCount=" + classCount + ")");
+            effectiveReasoner = dlReasoner;
+            d1Overridden = true;
+        }
+
         // v0.8.5 P1: get or create cached exact-check session (base copy + reasoner).
         // On cache hit, temporaryCopyMs and reasonerInitMs are 0 (reused).
         // On cache miss, creates base ontology copy + initializes reasoner (expensive).
@@ -1872,8 +1890,35 @@ public class ReasonerServiceImpl implements ReasonerService, org.owl4agents.owla
             org.semanticweb.owlapi.model.OWLOntologyManager tempManager =
                 tempOntology.getOWLOntologyManager();
 
+            // v0.8.8 D2: Check satisfiability of named classes in the claim axiom
+            // on O (the base ontology, BEFORE the claim axiom is added). This
+            // establishes the baseline for detecting classes that BECOME
+            // unsatisfiable after adding the claim.
+            List<OWLClass> claimNamedClasses = extractNamedClassesFromAxiom(claimAxiom);
+            Map<String, Boolean> satBefore = new HashMap<>();
+            for (OWLClass cls : claimNamedClasses) {
+                String iri = cls.getIRI().toString();
+                try {
+                    satBefore.put(iri, cached.session.isSatisfiable(cls));
+                } catch (Exception e) {
+                    // Before-check failure is best-effort: treat as satisfiable
+                    // so a transient error does not suppress contradiction detection.
+                    java.util.logging.Logger.getLogger(ReasonerServiceImpl.class.getName())
+                        .warning("v0.8.8 D2: satBefore check failed for " + iri
+                            + ": " + e.getMessage() + " (treating as satisfiable)");
+                    satBefore.put(iri, true);
+                }
+            }
+
             // Add claim axiom to the base ontology (incremental, O(ms))
             tempManager.applyChange(new org.semanticweb.owlapi.model.AddAxiom(tempOntology, claimAxiom));
+
+            // v0.8.8 D4 (pizza-op-008): Track simplicity violations so the cached
+            // session can be invalidated after the check (HermiT's internal state
+            // may be corrupted after the exception). Declared before the inner try
+            // so it is visible in the finally block.
+            final java.util.concurrent.atomic.AtomicBoolean simplicityViolation =
+                new java.util.concurrent.atomic.AtomicBoolean(false);
 
             try {
                 long consistencyCheckStart = System.nanoTime();
@@ -1887,6 +1932,19 @@ public class ReasonerServiceImpl implements ReasonerService, org.owl4agents.owla
                     try {
                         org.owl4agents.core.model.ConsistencyResult cr = cachedFinal.session.checkConsistency();
                         return ServiceResult.success(cr.consistent(), ResultMetadata.empty());
+                    } catch (IllegalArgumentException e) {
+                        // v0.8.8 D4 (pizza-op-008): HermiT's ObjectPropertyInclusionManager
+                        // throws IllegalArgumentException when the claim axiom creates an
+                        // OWL 2 DL simplicity violation (e.g., asserting a subproperty of a
+                        // transitive property that is also functional/inverse-functional
+                        // makes the functional property non-simple). Adding an unsatisfiable
+                        // axiom means the ontology cannot be in a consistent state — treat
+                        // this as INCONSISTENT so the verdict maps to CONTRADICTED.
+                        if (e.getMessage() != null && e.getMessage().contains("Non-simple property")) {
+                            simplicityViolation.set(true);
+                            return ServiceResult.success(false, ResultMetadata.empty());
+                        }
+                        return ServiceResult.error(ErrorCode.CLAIM_CONSISTENCY_CHECK_FAILED, e.getMessage());
                     } catch (Exception e) {
                         return ServiceResult.error(ErrorCode.CLAIM_CONSISTENCY_CHECK_FAILED, e.getMessage());
                     }
@@ -1927,8 +1985,17 @@ public class ReasonerServiceImpl implements ReasonerService, org.owl4agents.owla
                     }
                 };
 
-                ServiceResult<Boolean> wrapperResult = reasonerCallWrapper.callWithElkFallback(
-                    effectiveReasoner, ontologyId, primarySupplier, elkSupplier, effectiveTimeout);
+                ServiceResult<Boolean> wrapperResult;
+                if (d1Overridden) {
+                    // v0.8.8 D1: No ELK fallback — ELK cannot detect disjointness,
+                    // falling back would silently undo the D1 fix. If the DL reasoner
+                    // times out, return REASONER_TIMEOUT (not UNKNOWN or CONTRADICTED).
+                    wrapperResult = reasonerCallWrapper.call(
+                        effectiveReasoner, ontologyId, primarySupplier, effectiveTimeout);
+                } else {
+                    wrapperResult = reasonerCallWrapper.callWithElkFallback(
+                        effectiveReasoner, ontologyId, primarySupplier, elkSupplier, effectiveTimeout);
+                }
 
                 long consistencyCheckMs = msSince(consistencyCheckStart);
                 long totalMs = msSince(totalStart);
@@ -1951,6 +2018,60 @@ public class ReasonerServiceImpl implements ReasonerService, org.owl4agents.owla
 
                     if (consistent) {
                         status = org.owl4agents.core.model.ConsistencyAfterAdditionStatus.CONSISTENT;
+
+                        // v0.8.8 D2: Check satisfiability of named classes on O∪{α}
+                        // (the claim axiom is already applied). Compare with
+                        // satBefore to detect classes that BECAME unsatisfiable.
+                        Map<String, Boolean> satAfter = new HashMap<>();
+                        for (OWLClass cls : claimNamedClasses) {
+                            String iri = cls.getIRI().toString();
+                            try {
+                                satAfter.put(iri, cached.session.isSatisfiable(cls));
+                            } catch (Exception e) {
+                                // After-check failure is a hard error: we cannot
+                                // safely determine the verdict. Return ERROR and
+                                // invalidate the cached session.
+                                // v0.8.8 P2: precise invalidation — only the
+                                // (ontologyId, effectiveReasoner) session, not all.
+                                invalidateExactCheckSessionCache(ontologyId.id(), effectiveReasoner);
+                                return ServiceResult.success(
+                                    org.owl4agents.core.model.ConsistencyAfterAdditionResult.create(
+                                        ontologyId, claimId, effectiveReasoner,
+                                        org.owl4agents.core.model.ConsistencyAfterAdditionStatus.ERROR,
+                                        claimAxiom.toString(), totalMs, true, true,
+                                        Optional.of("Satisfiability check failed (after): "
+                                            + e.getMessage()),
+                                        java.util.List.of(),
+                                        new org.owl4agents.core.model.PerStageTiming(
+                                            null, null, null, temporaryCopyMs, reasonerInitMs,
+                                            consistencyCheckMs, null, totalMs),
+                                        metadata),
+                                    ResultMetadata.empty());
+                            }
+                        }
+
+                        // Compare before/after: a class that was satisfiable in O
+                        // but unsatisfiable in O∪{α} became unsatisfiable.
+                        List<String> becameUnsatisfiable = new ArrayList<>();
+                        for (Map.Entry<String, Boolean> entry : satBefore.entrySet()) {
+                            String iri = entry.getKey();
+                            boolean before = entry.getValue();
+                            boolean after = satAfter.getOrDefault(iri, true);
+                            if (before && !after) {
+                                becameUnsatisfiable.add(iri);
+                            }
+                        }
+
+                        return ServiceResult.success(
+                            org.owl4agents.core.model.ConsistencyAfterAdditionResult.create(
+                                ontologyId, claimId, effectiveReasoner, status,
+                                claimAxiom.toString(), totalMs, true, true,
+                                diagnostic, explanationAxioms,
+                                new org.owl4agents.core.model.PerStageTiming(
+                                    null, null, null, temporaryCopyMs, reasonerInitMs,
+                                    consistencyCheckMs, null, totalMs),
+                                metadata, becameUnsatisfiable),
+                            ResultMetadata.empty());
                     } else {
                         status = org.owl4agents.core.model.ConsistencyAfterAdditionStatus.INCONSISTENT;
                         // Attempt explanation if supported (Openllet)
@@ -1963,18 +2084,18 @@ public class ReasonerServiceImpl implements ReasonerService, org.owl4agents.owla
                                 // explanation is best-effort
                             }
                         }
-                    }
 
-                    return ServiceResult.success(
-                        org.owl4agents.core.model.ConsistencyAfterAdditionResult.create(
-                            ontologyId, claimId, effectiveReasoner, status,
-                            claimAxiom.toString(), totalMs, true, true,
-                            diagnostic, explanationAxioms,
-                            new org.owl4agents.core.model.PerStageTiming(
-                                null, null, null, temporaryCopyMs, reasonerInitMs,
-                                consistencyCheckMs, null, totalMs),
-                            metadata),
-                        ResultMetadata.empty());
+                        return ServiceResult.success(
+                            org.owl4agents.core.model.ConsistencyAfterAdditionResult.create(
+                                ontologyId, claimId, effectiveReasoner, status,
+                                claimAxiom.toString(), totalMs, true, true,
+                                diagnostic, explanationAxioms,
+                                new org.owl4agents.core.model.PerStageTiming(
+                                    null, null, null, temporaryCopyMs, reasonerInitMs,
+                                    consistencyCheckMs, null, totalMs),
+                                metadata),
+                            ResultMetadata.empty());
+                    }
                 } else {
                     ServiceResult.Error<Boolean> error = (ServiceResult.Error<Boolean>) wrapperResult;
                     org.owl4agents.core.model.ConsistencyAfterAdditionStatus status;
@@ -1985,7 +2106,8 @@ public class ReasonerServiceImpl implements ReasonerService, org.owl4agents.owla
                         diagnostic = Optional.of("Reasoner exceeded timeout of "
                             + effectiveTimeout.toMillis() + "ms (wrapper-enforced)");
                         // On timeout, invalidate the cached session (reasoner may be corrupted)
-                        invalidateExactCheckSessionCache(ontologyId.id());
+                        // v0.8.8 P2: precise invalidation — only the timed-out reasoner's session.
+                        invalidateExactCheckSessionCache(ontologyId.id(), effectiveReasoner);
                     } else if (error.error().code() == ErrorCode.REASONER_BUSY) {
                         status = org.owl4agents.core.model.ConsistencyAfterAdditionStatus.ERROR;
                         diagnostic = Optional.of("Reasoner executor busy: " + error.error().message());
@@ -1993,7 +2115,8 @@ public class ReasonerServiceImpl implements ReasonerService, org.owl4agents.owla
                         status = org.owl4agents.core.model.ConsistencyAfterAdditionStatus.ERROR;
                         diagnostic = Optional.of("Reasoner error: " + error.error().message());
                         // On internal error, invalidate the cached session
-                        invalidateExactCheckSessionCache(ontologyId.id());
+                        // v0.8.8 P2: precise invalidation — only the failed reasoner's session.
+                        invalidateExactCheckSessionCache(ontologyId.id(), effectiveReasoner);
                     }
 
                     return ServiceResult.success(
@@ -2016,13 +2139,54 @@ public class ReasonerServiceImpl implements ReasonerService, org.owl4agents.owla
                         new org.semanticweb.owlapi.model.RemoveAxiom(tempOntology, claimAxiom));
                 } catch (Exception e) {
                     // Axiom removal failed — invalidate cache to prevent stale state
-                    invalidateExactCheckSessionCache(ontologyId.id());
+                    // v0.8.8 P2: precise invalidation — only this reasoner's session.
+                    invalidateExactCheckSessionCache(ontologyId.id(), effectiveReasoner);
+                }
+                // v0.8.8 D4 (pizza-op-008): If HermiT threw a simplicity violation
+                // during checkConsistency, its internal state may be corrupted.
+                // Invalidate the cached session so the next claim gets a fresh reasoner.
+                if (simplicityViolation.get()) {
+                    // v0.8.8 P2: precise invalidation — only this reasoner's session.
+                    invalidateExactCheckSessionCache(ontologyId.id(), effectiveReasoner);
                 }
             }
         } catch (ReasonerIncompatibleException e) {
             return ServiceResult.error(e.errorCode(), e.getMessage());
         } finally {
             cached.opLock.unlock();
+        }
+    }
+
+    // ════════════════════════════════════════════════════════════════════════
+    // v0.8.8 D2: Satisfiability check helpers
+    // ════════════════════════════════════════════════════════════════════════
+
+    /**
+     * Extract named classes (OWLClass) that appear in a claim axiom.
+     * Only SubClassOf, EquivalentClasses, and DisjointClasses axioms are
+     * inspected. Complex class expressions are skipped — only named classes
+     * (excluding owl:Thing and owl:Nothing) are returned.
+     */
+    private static List<OWLClass> extractNamedClassesFromAxiom(OWLAxiom axiom) {
+        List<OWLClass> classes = new ArrayList<>();
+        if (axiom instanceof OWLSubClassOfAxiom sub) {
+            addIfNamed(classes, sub.getSubClass());
+            addIfNamed(classes, sub.getSuperClass());
+        } else if (axiom instanceof OWLEquivalentClassesAxiom eq) {
+            for (OWLClassExpression ce : eq.classExpressions().toList()) {
+                addIfNamed(classes, ce);
+            }
+        } else if (axiom instanceof OWLDisjointClassesAxiom dis) {
+            for (OWLClassExpression ce : dis.classExpressions().toList()) {
+                addIfNamed(classes, ce);
+            }
+        }
+        return classes.stream().distinct().toList();
+    }
+
+    private static void addIfNamed(List<OWLClass> classes, OWLClassExpression ce) {
+        if (ce.isNamed() && !ce.isOWLThing() && !ce.isOWLNothing()) {
+            classes.add(ce.asOWLClass());
         }
     }
 
@@ -2542,6 +2706,11 @@ public class ReasonerServiceImpl implements ReasonerService, org.owl4agents.owla
     /**
      * Invalidate (and close) the cached exact-check session for the given
      * ontology ID. Called on ontology reload.
+     *
+     * <p>Removes ALL reasoner sessions for this ontology (e.g., both
+     * {@code (ontologyId, HermiT)} and {@code (ontologyId, Openllet)}).
+     * Use {@link #invalidateExactCheckSessionCache(String, String)} when
+     * only a specific reasoner's session should be invalidated.
      */
     private void invalidateExactCheckSessionCache(String ontologyId) {
         // Remove all entries whose key starts with "ontologyId|"
@@ -2556,6 +2725,33 @@ public class ReasonerServiceImpl implements ReasonerService, org.owl4agents.owla
             if (cached != null) {
                 cached.close();
             }
+        }
+    }
+
+    /**
+     * Invalidate (and close) the cached exact-check session for a specific
+     * (ontologyId, reasonerName) pair.
+     *
+     * <p>v0.8.8 P2: This precise invalidation avoids clearing unrelated
+     * reasoner sessions. Per claim-verification spec, when a Stage 4 check
+     * fails (timeout, exception, axiom removal failure, simplicity violation),
+     * only the {@code (ontologyId, <DL reasoner after D1 override>)} session
+     * should be invalidated — NOT the original claim-specified reasoner (e.g.,
+     * invalidate {@code (hpo, HermiT)}, not {@code (hpo, ELK)}).
+     *
+     * <p>Note: the {@code (ontologyId, ELK)} session is never created under
+     * D1 override (ELK is always overridden to HermiT/Openllet for Stage 4),
+     * so there is no ELK session to preserve in practice. This method still
+     * precisely targets only the specified reasoner to be safe.
+     *
+     * @param ontologyId the ontology ID
+     * @param reasonerName the reasoner name (e.g., "HermiT" after D1 override)
+     */
+    private void invalidateExactCheckSessionCache(String ontologyId, String reasonerName) {
+        String cacheKey = ontologyId + "|" + reasonerName;
+        CachedExactCheckSession cached = exactCheckSessionCache.remove(cacheKey);
+        if (cached != null) {
+            cached.close();
         }
     }
 

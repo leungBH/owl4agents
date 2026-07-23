@@ -120,16 +120,16 @@ class ClaimVerificationResultMetadataFlowTest {
     // ════════════════════════════════════════════════════════════════════
 
     @Test
-    @DisplayName("META-1: Stage 4 metadata is populated for UNKNOWN verdict (reaches Stage 4)")
+    @DisplayName("META-1: Stage 4 metadata is populated for CONTRADICTED verdict (reaches Stage 4, v0.8.8 D2/D3)")
     void stage4MetadataPopulatedForUnknown() {
         // disjoint-no-witness: C⊑D is not asserted, not entailed → reaches Stage 4
-        // Stage 4: O ∪ {C⊑D} is consistent → UNKNOWN
+        // v0.8.8 D2/D3: O ∪ {C⊑D} is consistent but C becomes unsatisfiable → CONTRADICTED
         String ns = "http://owl4agents.org/test/exact-consistency/disjoint-no-witness#";
         Claim claim = subclassClaim("meta-1", ns + "C", ns + "D", "disjoint-no-witness");
         ClaimVerificationResult result = extract(verificationService.verify(claim));
 
-        assertEquals(Verdict.UNKNOWN, result.verdict(),
-            "Disjoint without witness should yield UNKNOWN");
+        assertEquals(Verdict.CONTRADICTED, result.verdict(),
+            "Disjoint without witness should yield CONTRADICTED (v0.8.8 D2/D3: C became unsatisfiable)");
         assertNotNull(result.metadata(),
             "Stage 4 result must have non-null metadata (last stage that invoked a reasoner)");
         assertNotNull(result.metadata().reasonerName(),

@@ -200,6 +200,18 @@ public class ELKAdapter implements OWLReasonerAdapter {
     }
 
     @Override
+    public boolean isSatisfiable(OWLClassExpression expr) {
+        checkActive();
+        // v0.8.8: flush pending ontology changes before querying satisfiability.
+        // Note: ELK supports OWL 2 EL satisfiability; DL constructs outside EL
+        // may give incorrect results. This is acceptable since Stage 4 forces
+        // a DL reasoner (HermiT/Openllet) via D1 override — ELK is only used
+        // for API completeness and non-Stage-4 callers.
+        reasoner.flush();
+        return reasoner.isSatisfiable(expr);
+    }
+
+    @Override
     public OWLReasoner getUnderlyingReasoner() {
         checkActive();
         return reasoner;

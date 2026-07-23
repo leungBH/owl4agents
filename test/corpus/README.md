@@ -74,6 +74,22 @@ v0.4 uses a small project-owned biomedical golden ontology plus structured claim
 | `../fixtures/v0.4/claim-bio-unknown.json` | Unknown claim — Arthritis subClassOf InfectiousDisease (no direct axiom, contradicting disjointness exists) |
 | `../fixtures/v0.4/claim-bio-out-of-scope.json` | Out_of_scope claim — CancerStage entity not in ontology |
 
+## V086 Repro Package Fixtures (v0.8.8 Acceptance)
+
+The V086 repro package contains 388 claims (across Pizza, HPO, Mondo, SOSA ontologies) used for v0.8.6→v0.8.8 acceptance testing. The fixtures are copied from `E:\V086_REPRO_PACKAGE\` and are **local-only** (gitignored).
+
+| File | Purpose |
+| --- | --- |
+| `v086-repro/V086_FAILING_CLAIMS.jsonl` | 18 code-fixable claims (A1 6 + A2 11 + pizza-op-008 1) + 8 DEFERRED claims |
+| `v086-repro/pizza-112.jsonl` | 100 Pizza non-regression claims (v0.8.6 baseline) |
+| `v086-repro/hpo-60.jsonl` | 60 HPO non-regression claims |
+| `v086-repro/hpo-extra-20.jsonl` | 20 HPO extra claims |
+| `v086-repro/mondo-60.jsonl` | 60 Mondo non-regression claims |
+| `v086-repro/mondo-extra-20.jsonl` | 20 Mondo extra claims |
+| `v086-repro/sosa-84.jsonl` | 84 SOSA non-regression claims |
+
+**Note:** The large ontologies (HPO ~74MB, Mondo ~236MB, SOSA) are NOT included in the repro package. Download them separately per the [Large Ontology Sources](#large-ontology-sources-v082-benchmark) section before running the full 388-claim acceptance suite.
+
 ## Large Ontology Sources (v0.8.2 Benchmark)
 
 The following large ontologies are used in the v0.8.2 240-claim benchmark. They are **not committed** to the repository due to their size. Download manually before running benchmarks.

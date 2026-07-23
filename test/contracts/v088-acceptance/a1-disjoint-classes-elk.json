@@ -1,0 +1,74 @@
+{
+  "testId": "v088-a1-disjoint-classes-elk",
+  "description": "A1 fix: 6 disjoint_classes claims with reasoner=elk, expected contradicted, evidence must include SATISFIABILITY_CHECK. Stage 4 forces a full DL profile reasoner (HermiT for HPO <=20K classes, Openllet for Mondo >20K classes) even when the claim specifies reasoner=elk. The disjointness axiom makes one of the classes unsatisfiable under O ∪ {alpha}, which the satisfiability check detects.",
+  "version": "v0.8.8",
+  "fix": "A1 (D1 + D2)",
+  "expectedBehavior": {
+    "verdict": "contradicted",
+    "requiredEvidenceSource": "satisfiability-check",
+    "stage4ReasonerOverride": "ELK -> HermiT (classCount <= 20K) or Openllet (classCount > 20K)",
+    "stage3Reasoner": "ELK (claim-specified, unchanged)"
+  },
+  "claims": [
+    {
+      "id": "hpo-ex-004",
+      "type": "disjoint_classes",
+      "ontology": "hpo",
+      "reasoner": "elk",
+      "expectedVerdict": "contradicted",
+      "subject": {"kind": "class", "iri": "http://purl.obolibrary.org/obo/HP_0000002"},
+      "object": {"kind": "class", "iri": "http://purl.obolibrary.org/obo/HP_0001507"},
+      "predicate": "disjointWith"
+    },
+    {
+      "id": "hpo-ex-005",
+      "type": "disjoint_classes",
+      "ontology": "hpo",
+      "reasoner": "elk",
+      "expectedVerdict": "contradicted",
+      "subject": {"kind": "class", "iri": "http://purl.obolibrary.org/obo/HP_0000003"},
+      "object": {"kind": "class", "iri": "http://purl.obolibrary.org/obo/HP_0000107"},
+      "predicate": "disjointWith"
+    },
+    {
+      "id": "hpo-ex-006",
+      "type": "disjoint_classes",
+      "ontology": "hpo",
+      "reasoner": "elk",
+      "expectedVerdict": "contradicted",
+      "subject": {"kind": "class", "iri": "http://purl.obolibrary.org/obo/HP_0000005"},
+      "object": {"kind": "class", "iri": "http://purl.obolibrary.org/obo/HP_0000001"},
+      "predicate": "disjointWith"
+    },
+    {
+      "id": "mondo-ex-004",
+      "type": "disjoint_classes",
+      "ontology": "mondo",
+      "reasoner": "elk",
+      "expectedVerdict": "contradicted",
+      "subject": {"kind": "class", "iri": "http://purl.obolibrary.org/obo/MONDO_0000004"},
+      "object": {"kind": "class", "iri": "http://purl.obolibrary.org/obo/MONDO_0002816"},
+      "predicate": "disjointWith"
+    },
+    {
+      "id": "mondo-ex-005",
+      "type": "disjoint_classes",
+      "ontology": "mondo",
+      "reasoner": "elk",
+      "expectedVerdict": "contradicted",
+      "subject": {"kind": "class", "iri": "http://purl.obolibrary.org/obo/MONDO_0000005"},
+      "object": {"kind": "class", "iri": "http://purl.obolibrary.org/obo/MONDO_0004907"},
+      "predicate": "disjointWith"
+    },
+    {
+      "id": "mondo-ex-006",
+      "type": "disjoint_classes",
+      "ontology": "mondo",
+      "reasoner": "elk",
+      "expectedVerdict": "contradicted",
+      "subject": {"kind": "class", "iri": "http://purl.obolibrary.org/obo/MONDO_0000009"},
+      "object": {"kind": "class", "iri": "http://purl.obolibrary.org/obo/MONDO_0002243"},
+      "predicate": "disjointWith"
+    }
+  ]
+}

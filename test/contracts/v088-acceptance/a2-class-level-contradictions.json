@@ -1,0 +1,126 @@
+{
+  "testId": "v088-a2-class-level-contradictions",
+  "description": "A2 fix: 11 class-level claims on the Pizza ontology (5 subclass, 3 equivalent_classes, 3 disjoint_classes), expected contradicted, evidence must include SATISFIABILITY_CHECK. Adding the claim axiom to O makes a class unsatisfiable under O ∪ {alpha} while the ontology remains consistent (no individual witness), so the satisfiability check (D2) is required to upgrade the verdict from UNKNOWN to CONTRADICTED.",
+  "version": "v0.8.8",
+  "fix": "A2 (D2 + D3)",
+  "ontology": "pizza",
+  "ontologyIri": "http://www.co-ode.org/ontologies/pizza/pizza.owl#",
+  "expectedBehavior": {
+    "verdict": "contradicted",
+    "requiredEvidenceSource": "satisfiability-check",
+    "stage4Reasoner": "HermiT (Pizza is small, ~100 classes)",
+    "satisfiabilityCheckAppliesTo": ["subclass", "equivalent_classes", "disjoint_classes"]
+  },
+  "claims": [
+    {
+      "id": "pizza-sc-005",
+      "type": "subclass",
+      "ontology": "pizza",
+      "expectedVerdict": "contradicted",
+      "subject": {"kind": "class", "iri": "http://www.co-ode.org/ontologies/pizza/pizza.owl#Margherita"},
+      "object": {"kind": "class", "iri": "http://www.co-ode.org/ontologies/pizza/pizza.owl#PizzaTopping"},
+      "predicate": "subClassOf",
+      "rationale": "Margherita is a Pizza subclass; making it a subclass of PizzaTopping conflicts with Pizza ⊓ PizzaTopping disjointness, making Margherita unsatisfiable."
+    },
+    {
+      "id": "pizza-sc-006",
+      "type": "subclass",
+      "ontology": "pizza",
+      "expectedVerdict": "contradicted",
+      "subject": {"kind": "class", "iri": "http://www.co-ode.org/ontologies/pizza/pizza.owl#CheeseTopping"},
+      "object": {"kind": "class", "iri": "http://www.co-ode.org/ontologies/pizza/pizza.owl#MeatTopping"},
+      "predicate": "subClassOf",
+      "rationale": "CheeseTopping and MeatTopping are disjoint sibling toppings; subclass relation makes CheeseTopping unsatisfiable."
+    },
+    {
+      "id": "pizza-sc-007",
+      "type": "subclass",
+      "ontology": "pizza",
+      "expectedVerdict": "contradicted",
+      "subject": {"kind": "class", "iri": "http://www.co-ode.org/ontologies/pizza/pizza.owl#DeepPanBase"},
+      "object": {"kind": "class", "iri": "http://www.co-ode.org/ontologies/pizza/pizza.owl#ThinAndCrispyBase"},
+      "predicate": "subClassOf",
+      "rationale": "DeepPanBase and ThinAndCrispyBase are disjoint PizzaBase subclasses; subclass relation makes DeepPanBase unsatisfiable."
+    },
+    {
+      "id": "pizza-sc-008",
+      "type": "subclass",
+      "ontology": "pizza",
+      "expectedVerdict": "contradicted",
+      "subject": {"kind": "class", "iri": "http://www.co-ode.org/ontologies/pizza/pizza.owl#VegetarianPizza"},
+      "object": {"kind": "class", "iri": "http://www.co-ode.org/ontologies/pizza/pizza.owl#NonVegetarianPizza"},
+      "predicate": "subClassOf",
+      "rationale": "VegetarianPizza and NonVegetarianPizza are disjoint by definition; subclass relation makes VegetarianPizza unsatisfiable."
+    },
+    {
+      "id": "pizza-sc-009",
+      "type": "subclass",
+      "ontology": "pizza",
+      "expectedVerdict": "contradicted",
+      "subject": {"kind": "class", "iri": "http://www.co-ode.org/ontologies/pizza/pizza.owl#Margherita"},
+      "object": {"kind": "class", "iri": "http://www.co-ode.org/ontologies/pizza/pizza.owl#SpicyPizza"},
+      "predicate": "subClassOf",
+      "rationale": "Margherita is defined as non-spicy; making it a subclass of SpicyPizza makes Margherita unsatisfiable."
+    },
+    {
+      "id": "pizza-ec-005",
+      "type": "equivalent_classes",
+      "ontology": "pizza",
+      "expectedVerdict": "contradicted",
+      "subject": {"kind": "class", "iri": "http://www.co-ode.org/ontologies/pizza/pizza.owl#Pizza"},
+      "object": {"kind": "class", "iri": "http://www.co-ode.org/ontologies/pizza/pizza.owl#PizzaTopping"},
+      "predicate": "equivalentTo",
+      "rationale": "Pizza and PizzaTopping are disjoint; making them equivalent makes both unsatisfiable."
+    },
+    {
+      "id": "pizza-ec-006",
+      "type": "equivalent_classes",
+      "ontology": "pizza",
+      "expectedVerdict": "contradicted",
+      "subject": {"kind": "class", "iri": "http://www.co-ode.org/ontologies/pizza/pizza.owl#Hot"},
+      "object": {"kind": "class", "iri": "http://www.co-ode.org/ontologies/pizza/pizza.owl#Mild"},
+      "predicate": "equivalentTo",
+      "rationale": "Hot and Mild are disjoint spiciness values; making them equivalent makes both unsatisfiable."
+    },
+    {
+      "id": "pizza-ec-007",
+      "type": "equivalent_classes",
+      "ontology": "pizza",
+      "expectedVerdict": "contradicted",
+      "subject": {"kind": "class", "iri": "http://www.co-ode.org/ontologies/pizza/pizza.owl#VegetarianPizza"},
+      "object": {"kind": "class", "iri": "http://www.co-ode.org/ontologies/pizza/pizza.owl#NonVegetarianPizza"},
+      "predicate": "equivalentTo",
+      "rationale": "VegetarianPizza and NonVegetarianPizza are disjoint; making them equivalent makes both unsatisfiable."
+    },
+    {
+      "id": "pizza-dc-005",
+      "type": "disjoint_classes",
+      "ontology": "pizza",
+      "expectedVerdict": "contradicted",
+      "subject": {"kind": "class", "iri": "http://www.co-ode.org/ontologies/pizza/pizza.owl#Margherita"},
+      "object": {"kind": "class", "iri": "http://www.co-ode.org/ontologies/pizza/pizza.owl#NamedPizza"},
+      "predicate": "disjointWith",
+      "rationale": "Margherita is already a subclass of NamedPizza; declaring them disjoint makes Margherita unsatisfiable."
+    },
+    {
+      "id": "pizza-dc-006",
+      "type": "disjoint_classes",
+      "ontology": "pizza",
+      "expectedVerdict": "contradicted",
+      "subject": {"kind": "class", "iri": "http://www.co-ode.org/ontologies/pizza/pizza.owl#MozzarellaTopping"},
+      "object": {"kind": "class", "iri": "http://www.co-ode.org/ontologies/pizza/pizza.owl#CheeseTopping"},
+      "predicate": "disjointWith",
+      "rationale": "MozzarellaTopping is a subclass of CheeseTopping; declaring them disjoint makes MozzarellaTopping unsatisfiable."
+    },
+    {
+      "id": "pizza-dc-007",
+      "type": "disjoint_classes",
+      "ontology": "pizza",
+      "expectedVerdict": "contradicted",
+      "subject": {"kind": "class", "iri": "http://www.co-ode.org/ontologies/pizza/pizza.owl#Pizza"},
+      "object": {"kind": "class", "iri": "http://www.co-ode.org/ontologies/pizza/pizza.owl#Food"},
+      "predicate": "disjointWith",
+      "rationale": "Pizza is a subclass of Food; declaring them disjoint makes Pizza unsatisfiable."
+    }
+  ]
+}

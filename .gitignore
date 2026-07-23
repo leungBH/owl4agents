@@ -30,6 +30,7 @@ test/corpus/realworld-local/
 test/corpus/downloads/
 test/corpus/large/
 test/corpus/benchmarks/ore/
+test/corpus/v086-repro/
 
 # Gradle
 .gradle/

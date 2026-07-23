@@ -3,6 +3,7 @@ package org.owl4agents.reasoner;
 import org.owl4agents.core.ErrorCode;
 import org.owl4agents.core.ServiceResult;
 import org.owl4agents.core.model.ConsistencyResult;
+import org.semanticweb.owlapi.model.OWLClassExpression;
 import org.semanticweb.owlapi.model.OWLOntology;
 
 import java.time.Duration;
@@ -122,6 +123,32 @@ public final class TransientReasonerSession implements AutoCloseable {
         reasoningLock.lock();
         try {
             return adapter.checkConsistency("transient");
+        } finally {
+            reasoningLock.unlock();
+        }
+    }
+
+    /**
+     * v0.8.8: Check whether the given class expression is satisfiable
+     * under the current ontology state. Thread-safe with respect to
+     * {@link #close()}: acquires the reasoning lock so that disposal
+     * cannot run concurrently with reasoning.
+     *
+     * <p>The caller ({@code ReasonerService.checkConsistencyAfterAdding})
+     * is responsible for timeout enforcement via {@code Future.get(timeout)}.
+     *
+     * @param expr the class expression to check
+     * @return {@code true} if the class expression is satisfiable
+     * @throws IllegalStateException if the session has been disposed
+     */
+    public boolean isSatisfiable(OWLClassExpression expr) {
+        if (disposed) {
+            throw new IllegalStateException(
+                "TransientReasonerSession has been disposed; cannot isSatisfiable.");
+        }
+        reasoningLock.lock();
+        try {
+            return adapter.isSatisfiable(expr);
         } finally {
             reasoningLock.unlock();
         }

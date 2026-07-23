@@ -1,6 +1,7 @@
 package org.owl4agents.reasoner;
 
 import org.owl4agents.core.model.*;
+import org.semanticweb.owlapi.model.OWLClassExpression;
 import org.semanticweb.owlapi.model.OWLOntology;
 import org.semanticweb.owlapi.reasoner.OWLReasoner;
 
@@ -106,6 +107,24 @@ public interface OWLReasonerAdapter {
      * Check whether the adapter has been initialized and is still active.
      */
     boolean isActive();
+
+    /**
+     * v0.8.8: Check whether the given class expression is satisfiable
+     * (i.e., can have instances) under the current ontology state.
+     *
+     * <p>Implementations SHALL call {@code reasoner.flush()} before querying
+     * to ensure pending ontology changes (axiom add/remove) are processed.
+     * This is consistent with the v0.8.5 P1 fix for {@code checkConsistency}.
+     *
+     * <p>Used by Stage 4 satisfiability check (D2) to detect classes that
+     * became unsatisfiable after adding a claim axiom, even when the ontology
+     * remains consistent (OWL 2 DL: class unsatisfiable != ontology inconsistent).
+     *
+     * @param expr the class expression to check
+     * @return {@code true} if the class expression is satisfiable
+     * @throws IllegalStateException if the adapter has been shut down
+     */
+    boolean isSatisfiable(OWLClassExpression expr);
 
     /**
      * v0.8.1 ISSUE-02: returns the raw underlying {@link OWLReasoner} instance

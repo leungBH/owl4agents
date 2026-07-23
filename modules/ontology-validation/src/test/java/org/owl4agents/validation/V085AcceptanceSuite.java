@@ -142,13 +142,13 @@ class V085AcceptanceSuite {
     class SemanticFixturesTests {
 
         @Test
-        @DisplayName("EC-DISJOINT-NO-WITNESS → UNKNOWN")
-        void disjointNoWitnessYieldsUnknown() {
+        @DisplayName("EC-DISJOINT-NO-WITNESS → CONTRADICTED")
+        void disjointNoWitnessYieldsContradicted() {
             String ns = "http://owl4agents.org/test/exact-consistency/disjoint-no-witness#";
             Claim claim = subclassClaim("ec-1", ns + "C", ns + "D", "disjoint-no-witness");
             ClaimVerificationResult result = extract(verificationService.verify(claim));
-            assertEquals(Verdict.UNKNOWN, result.verdict(),
-                "Disjoint without witness: adding C⊑D keeps ontology consistent → UNKNOWN");
+            assertEquals(Verdict.CONTRADICTED, result.verdict(),
+                "Disjoint without witness: adding C⊑D makes C unsatisfiable (C⊑D and Disjoint(C,D)) → CONTRADICTED (v0.8.8 D2/D3)");
         }
 
         @Test
@@ -172,13 +172,13 @@ class V085AcceptanceSuite {
         }
 
         @Test
-        @DisplayName("EC-EXISTENTIAL-NO-WITNESS → UNKNOWN")
-        void existentialNoWitnessYieldsUnknown() {
+        @DisplayName("EC-EXISTENTIAL-NO-WITNESS → CONTRADICTED")
+        void existentialNoWitnessYieldsContradicted() {
             String ns = "http://owl4agents.org/test/exact-consistency/existential-no-witness#";
             Claim claim = subclassClaim("ec-4", ns + "C", ns + "D", "existential-no-witness");
             ClaimVerificationResult result = extract(verificationService.verify(claim));
-            assertEquals(Verdict.UNKNOWN, result.verdict(),
-                "Existential without witness: adding C⊑D is consistent → UNKNOWN");
+            assertEquals(Verdict.CONTRADICTED, result.verdict(),
+                "Existential without witness: adding C⊑D makes C unsatisfiable → CONTRADICTED (v0.8.8 D2/D3)");
         }
 
         @Test
@@ -222,16 +222,16 @@ class V085AcceptanceSuite {
         }
 
         @Test
-        @DisplayName("EC-EQUIV-DISJOINT-NO-WITNESS → UNKNOWN")
-        void equivDisjointNoWitnessYieldsUnknown() {
+        @DisplayName("EC-EQUIV-DISJOINT-NO-WITNESS → CONTRADICTED")
+        void equivDisjointNoWitnessYieldsContradicted() {
             String ns = "http://owl4agents.org/test/exact-consistency/equiv-disjoint-no-witness#";
             Claim claim = new Claim("ec-8", ClaimType.EQUIVALENT_CLASSES, "equiv-disjoint-no-witness",
                 new ClaimEntity("class", ns + "C"), null,
                 new ClaimEntity("class", ns + "D"),
                 Optional.empty(), Optional.empty(), Optional.empty());
             ClaimVerificationResult result = extract(verificationService.verify(claim));
-            assertEquals(Verdict.UNKNOWN, result.verdict(),
-                "Equiv disjoint without witness: adding C≡D makes both empty but consistent → UNKNOWN");
+            assertEquals(Verdict.CONTRADICTED, result.verdict(),
+                "Equiv disjoint without witness: adding C≡D makes both C and D unsatisfiable → CONTRADICTED (v0.8.8 D2/D3)");
         }
 
         @Test
@@ -407,7 +407,7 @@ class V085AcceptanceSuite {
             Claim normalClaim = subclassClaim("to-2", ns2 + "C", ns2 + "D", "disjoint-no-witness");
             ClaimVerificationResult result = extract(verificationService.verify(normalClaim));
             assertNotNull(result.verdict(), "Service should continue working after timeout");
-            assertEquals(Verdict.UNKNOWN, result.verdict());
+            assertEquals(Verdict.CONTRADICTED, result.verdict());
         }
     }
 

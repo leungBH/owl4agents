@@ -1,6 +1,7 @@
 package org.owl4agents.reasoner;
 
 import org.owl4agents.core.model.*;
+import org.semanticweb.owlapi.model.OWLClassExpression;
 import org.semanticweb.owlapi.model.OWLOntology;
 import org.semanticweb.owlapi.reasoner.OWLReasoner;
 
@@ -118,6 +119,11 @@ class MockReasonerAdapter implements OWLReasonerAdapter {
     @Override
     public OWLReasoner getUnderlyingReasoner() {
         return null;
+    }
+
+    @Override
+    public boolean isSatisfiable(OWLClassExpression expr) {
+        throw new UnsupportedOperationException("Mock does not implement isSatisfiable");
     }
 
     /** Number of times {@link #shutdown()} was invoked. */

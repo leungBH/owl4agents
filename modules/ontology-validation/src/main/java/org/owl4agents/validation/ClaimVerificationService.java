@@ -407,7 +407,18 @@ public class ClaimVerificationService {
                     contradictedEvidence, Optional.empty(), Optional.empty(), finalTiming, metaAfterStage4);
 
             case CONSISTENT:
-                // not-entailed + consistent → UNKNOWN
+                // v0.8.8 D2/D3: 3-state verdict mapping
+                // CONSISTENT + unsatisfiable → CONTRADICTED (via satisfiability check)
+                // CONSISTENT + all satisfiable → UNKNOWN
+                if (exact.unsatisfiableClasses() != null && !exact.unsatisfiableClasses().isEmpty()) {
+                    List<EvidenceItem> satContradictedEvidence =
+                        buildSatisfiabilityContradictedEvidence(claim, exact, entailment,
+                            exact.unsatisfiableClasses(), ontology, ontId);
+                    return buildCompletedResult(claim, ontId, Verdict.CONTRADICTED,
+                        satContradictedEvidence, Optional.empty(), Optional.empty(),
+                        finalTiming, metaAfterStage4);
+                }
+                // All satisfiable → UNKNOWN (existing behavior)
                 List<EvidenceItem> unknownEvidence =
                     buildUnknownEvidence(claim, exact, entailment, ontology, ontId);
                 Optional<UnknownReason> reason = EntailmentResult.UNSUPPORTED_AXIOM_TYPE.equals(entailment.result())
@@ -487,6 +498,64 @@ public class ClaimVerificationService {
                     EvidenceItem.CONFIDENCE_INFERRED
                 ));
             }
+        }
+        return items;
+    }
+
+    /**
+     * v0.8.8 D2/D3: Build evidence for CONTRADICTED verdict when the ontology
+     * O∪{α} is consistent but named classes BECAME unsatisfiable. This is the
+     * satisfiability-check path (distinct from the inconsistency path in
+     * {@link #buildContradictedEvidence}).
+     *
+     * <p>Includes:
+     * <ul>
+     *   <li>REASONING_REPORT (counter): classes that became unsatisfiable</li>
+     *   <li>REASONING_REPORT (supporting): claim not entailed + consistency context</li>
+     *   <li>STRUCTURAL_CONFLICT_HINT (supporting): proxy hint if available</li>
+     * </ul>
+     */
+    private List<EvidenceItem> buildSatisfiabilityContradictedEvidence(Claim claim,
+                                                                         ConsistencyAfterAdditionResult exact,
+                                                                         EntailmentResult entailment,
+                                                                         List<String> unsatisfiableClasses,
+                                                                         OWLOntology ontology,
+                                                                         OntologyId ontId) {
+        List<EvidenceItem> items = new ArrayList<>();
+        String reasonerName = exact.reasonerName() != null ? exact.reasonerName() : "default";
+
+        // SATISFIABILITY_CHECK: primary counter-evidence — classes became unsatisfiable
+        String unsatList = String.join(", ", unsatisfiableClasses);
+        items.add(new EvidenceItem(
+            evidenceId("satisfiability-check", claim.claimId()),
+            EvidenceItem.ROLE_COUNTER,
+            EvidenceKind.REASONING_REPORT,
+            "Classes became unsatisfiable after adding claim axiom: " + unsatList,
+            "satisfiability-check",
+            reasonerName,
+            "UNION",
+            unsatisfiableClasses,
+            EvidenceItem.CONFIDENCE_INFERRED
+        ));
+
+        // No-entailment evidence: claim was not entailed (supporting context)
+        items.add(new EvidenceItem(
+            evidenceId("no-entailment", claim.claimId()),
+            EvidenceItem.ROLE_SUPPORTING,
+            EvidenceKind.REASONING_REPORT,
+            "Claim not entailed; adding claim preserves overall consistency but "
+                + "makes named classes unsatisfiable.",
+            "exact-consistency-check",
+            reasonerName,
+            "UNION",
+            List.of(),
+            EvidenceItem.CONFIDENCE_INFERRED
+        ));
+
+        // STRUCTURAL_CONFLICT_HINT: proxy hint (if available)
+        EvidenceItem proxyHint = buildStructuralConflictHint(ontology, claim, ontId);
+        if (proxyHint != null) {
+            items.add(proxyHint);
         }
         return items;
     }

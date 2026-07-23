@@ -13,6 +13,13 @@ import org.owl4agents.core.OntologyId;
  * {@code ServiceResult.reasonerMetadata} returned by
  * {@code ReasonerCallWrapper.callWithElkFallback} in
  * {@code checkConsistencyAfterAdding}.</p>
+ *
+ * <p>v0.8.8: New {@code unsatisfiableClasses} field containing IRIs of named
+ * classes that BECAME unsatisfiable after adding the claim axiom (were
+ * satisfiable in O, unsatisfiable in O∪{α}). Non-empty only when
+ * {@code status == CONSISTENT} and the satisfiability check detected a
+ * contradiction. Used by {@code ClaimVerificationService} to upgrade the
+ * verdict from UNKNOWN to CONTRADICTED (D2/D3).</p>
  */
 public record ConsistencyAfterAdditionResult(
     OntologyId ontologyId,
@@ -26,10 +33,11 @@ public record ConsistencyAfterAdditionResult(
     Optional<String> diagnosticMessage,
     List<String> explanationAxioms,
     PerStageTiming perStageTiming,
-    ReasonerCallMetadata metadata
+    ReasonerCallMetadata metadata,
+    List<String> unsatisfiableClasses
 ) {
     /**
-     * Backward-compatible factory matching the v0.8.5 signature (metadata = null).
+     * Backward-compatible factory matching the v0.8.5 signature (metadata = null, unsatisfiableClasses = empty).
      */
     public static ConsistencyAfterAdditionResult create(
         OntologyId ontologyId,
@@ -47,11 +55,11 @@ public record ConsistencyAfterAdditionResult(
         return new ConsistencyAfterAdditionResult(
             ontologyId, claimId, reasonerName, status, addedAxiom, elapsedMillis,
             sourceOntologyConsistent, temporaryOntologyIsolated, diagnosticMessage,
-            explanationAxioms, perStageTiming, null);
+            explanationAxioms, perStageTiming, null, List.of());
     }
 
     /**
-     * v0.8.6: Factory with reasoner call metadata.
+     * v0.8.6: Factory with reasoner call metadata (unsatisfiableClasses = empty).
      */
     public static ConsistencyAfterAdditionResult create(
         OntologyId ontologyId,
@@ -70,6 +78,31 @@ public record ConsistencyAfterAdditionResult(
         return new ConsistencyAfterAdditionResult(
             ontologyId, claimId, reasonerName, status, addedAxiom, elapsedMillis,
             sourceOntologyConsistent, temporaryOntologyIsolated, diagnosticMessage,
-            explanationAxioms, perStageTiming, metadata);
+            explanationAxioms, perStageTiming, metadata, List.of());
+    }
+
+    /**
+     * v0.8.8: Factory with reasoner call metadata and unsatisfiable classes.
+     */
+    public static ConsistencyAfterAdditionResult create(
+        OntologyId ontologyId,
+        String claimId,
+        String reasonerName,
+        ConsistencyAfterAdditionStatus status,
+        String addedAxiom,
+        long elapsedMillis,
+        boolean sourceOntologyConsistent,
+        boolean temporaryOntologyIsolated,
+        Optional<String> diagnosticMessage,
+        List<String> explanationAxioms,
+        PerStageTiming perStageTiming,
+        ReasonerCallMetadata metadata,
+        List<String> unsatisfiableClasses
+    ) {
+        return new ConsistencyAfterAdditionResult(
+            ontologyId, claimId, reasonerName, status, addedAxiom, elapsedMillis,
+            sourceOntologyConsistent, temporaryOntologyIsolated, diagnosticMessage,
+            explanationAxioms, perStageTiming, metadata,
+            unsatisfiableClasses != null ? unsatisfiableClasses : List.of());
     }
 }

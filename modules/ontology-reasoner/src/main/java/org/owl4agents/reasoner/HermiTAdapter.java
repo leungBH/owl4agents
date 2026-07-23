@@ -214,6 +214,14 @@ public class HermiTAdapter implements OWLReasonerAdapter {
     }
 
     @Override
+    public boolean isSatisfiable(OWLClassExpression expr) {
+        checkActive();
+        // v0.8.8: flush pending ontology changes before querying satisfiability.
+        reasoner.flush();
+        return reasoner.isSatisfiable(expr);
+    }
+
+    @Override
     public OWLReasoner getUnderlyingReasoner() {
         checkActive();
         return reasoner;

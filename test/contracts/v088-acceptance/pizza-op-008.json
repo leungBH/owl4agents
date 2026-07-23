@@ -1,0 +1,39 @@
+{
+  "testId": "v088-pizza-op-008",
+  "description": "pizza-op-008 contract: an object_property_assertion claim with predicate=subPropertyOf must NOT return CLAIM_CONSISTENCY_CHECK_FAILED error. Per design D4, the root cause is investigated and fixed. The satisfiability check is NOT applied to object_property_assertion claims (properties have no satisfiability concept). The expected verdict is determined by the Stage 4 exact consistency check.",
+  "version": "v0.8.8",
+  "fix": "D4 (pizza-op-008 investigation)",
+  "ontology": "pizza",
+  "ontologyIri": "http://www.co-ode.org/ontologies/pizza/pizza.owl#",
+  "expectedBehavior": {
+    "mustNotReturn": "CLAIM_CONSISTENCY_CHECK_FAILED",
+    "executionStatus": "COMPLETED",
+    "semanticVerdictNotNull": true,
+    "satisfiabilityCheckSkipped": true,
+    "rationale": "object_property_assertion claims are excluded from the Stage 4 satisfiability check (D2) because OWL object properties do not have a satisfiability concept"
+  },
+  "claim": {
+    "id": "pizza-op-008-c1",
+    "questionId": "pizza-op-008",
+    "type": "object_property_assertion",
+    "ontology": "pizza",
+    "subject": {"kind": "object_property", "iri": "http://www.co-ode.org/ontologies/pizza/pizza.owl#isIngredientOf"},
+    "object": {"kind": "object_property", "iri": "http://www.co-ode.org/ontologies/pizza/pizza.owl#isBaseOf"},
+    "predicate": "subPropertyOf",
+    "expectedVerdict": "contradicted",
+    "question": "Is isIngredientOf a subproperty of isBaseOf?"
+  },
+  "investigationNotes": {
+    "possibleRootCauses": [
+      "ClaimAxiomBuilder.buildObjectPropertySubProperty constructs an axiom with incorrect type or direction",
+      "CachedExactCheckSession.applyChange does not support SubObjectPropertyOf axiom add/remove lifecycle",
+      "HermiT flush issue with SubObjectPropertyOf axiom"
+    ],
+    "verificationCommand": "verify-claim pizza --claim=pizza-op-008.json --json --reasoner=auto"
+  },
+  "passCriteria": {
+    "primary": "Verdict is non-null and executionStatus is COMPLETED (not ERROR)",
+    "noErrorCode": "errorCode must NOT be CLAIM_CONSISTENCY_CHECK_FAILED",
+    "verdictCorrectness": "Verdict matches the gold label per D4 investigation outcome"
+  }
+}

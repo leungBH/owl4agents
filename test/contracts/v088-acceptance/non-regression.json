@@ -1,0 +1,39 @@
+{
+  "testId": "v088-non-regression",
+  "description": "Non-regression contract: 359 previously-passing claims from the v0.8.6 repro package must produce identical verdicts under v0.8.8. No previously-supported claim may become contradicted or unknown; no previously-unknown claim may become supported. The 18 code-fixable claims (A1 6 + A2 11 + pizza-op-008 1) and 8 gold-label-disputed claims (B1/B2/C1) are excluded from this set (tracked separately).",
+  "version": "v0.8.8",
+  "category": "non-regression",
+  "fixtureSource": {
+    "package": "E:\\V086_REPRO_PACKAGE",
+    "localCopy": "test/corpus/v086-repro/",
+    "failingClaimsFile": "V086_FAILING_CLAIMS.jsonl",
+    "questionSets": [
+      "hpo-60.jsonl",
+      "hpo-extra-20.jsonl",
+      "mondo-60.jsonl",
+      "mondo-extra-20.jsonl",
+      "pizza-112.jsonl",
+      "sosa-84.jsonl"
+    ]
+  },
+  "totalClaimCount": 359,
+  "baselineVersion": "v0.8.7",
+  "targetVersion": "v0.8.8",
+  "expectedBehavior": {
+    "verdictPreservation": "Each previously-passing claim must produce the same verdict as under v0.8.7",
+    "noFalsePositive": "No previously-supported claim may become contradicted or unknown",
+    "noFalseNegative": "No previously-unknown claim may become supported",
+    "excludedClaims": {
+      "codeFixable": "A1 (6) + A2 (11) + pizza-op-008 (1) = 18 — tracked in a1/a2/pizza-op-008 contracts",
+      "goldLabelDisputed": "B1 (3) + B2 (3) + C1 (2) = 8 — tracked in deferred-claims contract"
+    }
+  },
+  "samplingStrategy": {
+    "fullRun": "All 359 claims run via acceptance-test.ps1 adapted for v0.8.8",
+    "representativeSample": "At minimum, a 20+ claim representative sample must pass in V088NonRegressionIntegrationTest (Section 8.3)"
+  },
+  "passCriteria": {
+    "accuracy": "359/359 previously-passing claims produce identical verdicts",
+    "noRegressions": "Zero previously-passing claims change verdict"
+  }
+}
