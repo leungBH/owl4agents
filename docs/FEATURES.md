@@ -2697,7 +2697,7 @@ Increase `--max-context-tokens`. In `jsonl` format, the per-line `truncated` fla
 The v0.8.1 row covers the 5 fix scenarios (`pizza-007`, `pizza-035`,
 `pizza-037`, `pizza-046`, `owl2bench-027`) plus the remaining 75 curated
 claims, asserting the 80/80 accuracy gate introduced to address the
-v0.8.0 ISSUE-01…ISSUE-05 defects (see `doc/retrospectives/`).
+v0.8.0 ISSUE-01…ISSUE-05 defects (see [CHANGELOG.md](../CHANGELOG.md) §"0.8.1").
 
 Run them all:
 

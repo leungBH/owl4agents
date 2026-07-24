@@ -11,6 +11,24 @@
 - `tools/scripts/create-v0.8.0-release.js` — one-off v0.8.0 release script, no longer needed
 - `tools/scripts/update-v0.8.0-release.js` — one-off v0.8.0 release update script, no longer needed
 - 84 root-level `.log` files and junk directories (`temp/`, `org/`, `results/`, `workspaces/`, `data/`) — local-only artifacts
+- `docs/design.md` — v0.1 historical design document, superseded by OpenSpec specs
+- `docs/v1.0.0-planning.md` — historical R3 planning document, explicitly defers to OpenSpec as authoritative
+- `test/contracts/v07-acceptance/release-notes-v0.7.0.md` — outdated release notes, content already in CHANGELOG
+- `test/contracts/v07-acceptance/release-notes-v0.7.1.md` — outdated release notes, content already in CHANGELOG
+- `test/fixtures/v0.5/fixture-gate-mapping.md` — unreferenced historical fixture mapping
+- `test/fixtures/v0.5/report-assertions.md` — unreferenced historical report assertions
+- `test/corpus/v089-full-suite/ontologies/pizza.owl` — duplicate of `test/corpus/smoke/pizza.owl` (SHA256-identical)
+- `test/corpus/v089-full-suite/BUG_REPORT.md` — v0.8.8 bug report, fix recorded in CHANGELOG §"0.9.0"
+- `test/corpus/v089-full-suite/README-full-test-suite.md` — v0.8.8 test suite README, no longer needed
+- `test/corpus/v089-full-suite/scripts/reproduce_bug.ps1` — v0.8.8 bug reproduction script
+- `test/corpus/v089-full-suite/scripts/run_full_test.ps1` — v0.8.8 test runner script
+- `test/corpus/v089-full-suite/v086-baseline-results/*.jsonl` (6 files) — v0.8.6 baseline outputs, no longer referenced
+
+### Fixed
+
+- Corrected stale `doc/retrospectives/` references in README.md, README.zh-CN.md, docs/FEATURES.md, docs/FEATURES.zh-CN.md, and `test/contracts/v0.8.1-acceptance/contracts.md` to point to CHANGELOG.md (the retrospective directory is gitignored and not externally visible)
+- Corrected `test/fixtures/v0.6/exact-consistency-388-claims.md` reference to nonexistent `test/fixtures/v0.8.1/acceptance-suite/` directory
+- Corrected `test/corpus/README.md` download-script path from `scripts/` to `tools/scripts/`
 
 ### Verified
 

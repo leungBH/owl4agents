@@ -3,7 +3,7 @@
 ## Principle
 
 v0.8.1 is a patch release that fixes 5 claim-verification root-cause defects
-(see `doc/retrospectives/2026-07-08-system-issues-v0.8.0.md` for the 5 ISSUE
+(see [CHANGELOG.md](../../../CHANGELOG.md) §"0.8.1" for the 5 ISSUE
 descriptions) and improves the 80-curated-claim accuracy gate from 75/80 to
 80/80. This contract defines the 29 acceptance gates (TC-1 through TC-29) that
 v0.8.1 MUST pass before being tagged as released.
@@ -85,7 +85,7 @@ that covers it, and the required PASS criteria.
 | TC-17 | readonly tool count = 56 | McpToolRegistryTest.`toolCountRemains56` | `new McpToolRegistry().listToolSchemas().size() == 56` |
 | TC-18 | CLI / MCP parity on 5 fix scenarios | V081AcceptanceSuite or manual acceptance step | verdict / unknownReason / evidence.source field-level equivalence |
 | TC-19 | version-alignment 8-point job | VersionAlignmentTest or CI job | all 8 version-string locations report `0.8.1` |
-| TC-20 | SYSTEM_ISSUES.md archived | file system check | `doc/retrospectives/2026-07-08-system-issues-v0.8.0.md` exists with full content |
+| TC-20 | CHANGELOG documents ISSUE-01…ISSUE-05 | file check | [CHANGELOG.md](../../../CHANGELOG.md) §"0.8.1" contains the 5 ISSUE descriptions |
 
 ### Implementation pre-conditions (TC-21, TC-28, TC-29)
 

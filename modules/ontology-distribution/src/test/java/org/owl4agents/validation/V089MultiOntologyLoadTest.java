@@ -201,14 +201,13 @@ class V089MultiOntologyLoadTest {
     private Path findPizzaFixture() {
         Path projectRoot = Path.of("").toAbsolutePath();
         Path[] candidates = {
-            projectRoot.resolve("test/corpus/v089-full-suite/ontologies/pizza.owl"),
             projectRoot.resolve("test/corpus/smoke/pizza.owl"),
+            projectRoot.resolve("test/corpus/v089-full-suite/ontologies/pizza.owl"),
             projectRoot.resolve("test/owl_files/pizza.owl"),
             projectRoot.resolve("test/corpus/pizza.owl"),
             projectRoot.resolve("test/corpus/pizza/pizza.owl"),
             projectRoot.resolve("../test/corpus/smoke/pizza.owl"),
             projectRoot.resolve("../test/owl_files/pizza.owl"),
-            Path.of("D:\\owl4agents\\test\\corpus\\v089-full-suite\\ontologies\\pizza.owl"),
             Path.of("D:\\owl4agents\\data\\workspaces\\default\\ontologies\\pizza\\canonical\\ontology.owl")
         };
         for (Path candidate : candidates) {

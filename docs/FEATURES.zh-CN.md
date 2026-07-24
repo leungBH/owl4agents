@@ -2685,7 +2685,7 @@ SELECT ?s WHERE { ?s <http://www.w3.org/2000/01/rdf-schema#subClassOf> <http://e
 | 推理机压测(tag `stress`) | 10 个并发推理机调用 | 1 | ~60s |
 | 端到端示例包 | `examples/claim-verification/`、`examples/pizza-reasoning/`、`examples/biomedical-grounding/`、`examples/agent-mcp/` | 5 | 每个 ~5s |
 
-v0.8.1 这行覆盖 5 个修复场景(`pizza-007`、`pizza-035`、`pizza-037`、`pizza-046`、`owl2bench-027`)和剩余 75 个策展 claim,断言 80/80 准确率门禁,用于修复 v0.8.0 的 ISSUE-01…ISSUE-05 缺陷(见 `doc/retrospectives/`)。
+v0.8.1 这行覆盖 5 个修复场景(`pizza-007`、`pizza-035`、`pizza-037`、`pizza-046`、`owl2bench-027`)和剩余 75 个策展 claim,断言 80/80 准确率门禁,用于修复 v0.8.0 的 ISSUE-01…ISSUE-05 缺陷(见 [CHANGELOG.md](../CHANGELOG.md) §"0.8.1")。
 
 全跑一遍:
 

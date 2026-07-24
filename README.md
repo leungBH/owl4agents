@@ -14,7 +14,7 @@
 >
 > **v0.8.3** fixes 7 semantic accuracy issues in claim verification (R1, R2, R4-R7: OOS pre-check, disjoint proxy, EquivalentClasses complex expressions, individual-level disjointness, property hierarchy, ObjectPropertyDomain complex domains; D7: ClaimType deserialization hardening) — resolving 9 error claims from the upgrade package. See [CHANGELOG.md](CHANGELOG.md) §"0.8.3".
 >
-> **v0.8.1** fixes 5 claim-verification accuracy defects from v0.8.0 (ISSUE-01…ISSUE-05) — see [CHANGELOG.md](CHANGELOG.md) §"0.8.1" and `doc/retrospectives/`. The 80-curated-claim accuracy gate moved from 75/80 → 80/80. Two new claim types (`different_individuals`, `object_property_subproperty`) and an optional `expression` field on `subject` / `object` for complex class expressions are now supported.
+> **v0.8.1** fixes 5 claim-verification accuracy defects from v0.8.0 (ISSUE-01…ISSUE-05) — see [CHANGELOG.md](CHANGELOG.md) §"0.8.1". The 80-curated-claim accuracy gate moved from 75/80 → 80/80. Two new claim types (`different_individuals`, `object_property_subproperty`) and an optional `expression` field on `subject` / `object` for complex class expressions are now supported.
 
 ---
 

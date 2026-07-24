@@ -16,7 +16,7 @@
 
 ## Sources
 
-1. **v0.8.1 Acceptance Suite** (80 claims): `test/fixtures/v0.8.1/acceptance-suite/` — Pizza ontology
+1. **v0.8.1 Acceptance Suite** (80 claims): `test/fixtures/v0.6/question-sets/pizza-50.jsonl` and `test/fixtures/v0.6/question-sets/pizza-80.jsonl` — Pizza ontology
 2. **v0.6 Error Claims** (9 claims): `test/fixtures/v0.6/error-claims/` — Pizza, HPO, Mondo
 3. **Exact Consistency Fixtures** (15 claims): `test/corpus/exact-consistency/` — synthetic ontologies
 4. **HPO Benchmark Claims** (100 claims): generated from HPO ontology structure

@@ -158,10 +158,10 @@ Small fixtures may be downloaded into this directory. Large corpora should usual
 Use:
 
 ```powershell
-.\scripts\download-test-corpus.ps1 -Suite smoke
-.\scripts\download-test-corpus.ps1 -Suite realworld-small
-.\scripts\download-test-corpus.ps1 -Suite benchmarks
-.\scripts\download-test-corpus.ps1 -Suite all -IncludeLarge
+.\tools\scripts\download-test-corpus.ps1 -Suite smoke
+.\tools\scripts\download-test-corpus.ps1 -Suite realworld-small
+.\tools\scripts\download-test-corpus.ps1 -Suite benchmarks
+.\tools\scripts\download-test-corpus.ps1 -Suite all -IncludeLarge
 ```
 
 Large downloads include resources such as ORE, Mondo, Uberon, and full benchmark corpora. These can be hundreds of MB or more.
