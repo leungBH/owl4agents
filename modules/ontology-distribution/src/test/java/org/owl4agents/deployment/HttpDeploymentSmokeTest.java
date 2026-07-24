@@ -198,7 +198,7 @@ class HttpDeploymentSmokeTest {
     void testOntologySummaryOnPizza() throws Exception {
         assumeTrue(pizzaAvailable,
             "Skipping: pizza ontology is not loaded in the default workspace. "
-                + "Import pizza first: .\\owl4agents.bat import test/corpus/smoke/pizza.owl pizza");
+                + "Import pizza first: .\\tools\\bin\\owl4agents.bat import test/corpus/smoke/pizza.owl pizza");
 
         HttpResponse resp = sendToolCall(serverPort, mcpSessionId,
             "ontology_summary", "{\"ontology_id\":\"pizza\"}");

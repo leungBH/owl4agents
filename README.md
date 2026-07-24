@@ -8,7 +8,7 @@
 >
 > **v0.8.4** (recommended) optimizes claim verification performance via 7 decisions: reasoner classification state tracking (skip redundant `precomputeInferences`), profile caching, per-request ontology single loading, `EntitySignatureCache` for O(1) entity signature lookups, asserted axiom indexing (SubClassOf + DisjointClasses), in-memory inferred hierarchy index, and `OntologyCache` 5s TTL window. Pizza hot path ~85ms → ~30-40ms. See [CHANGELOG.md](CHANGELOG.md) §"0.8.4".
 >
-> **v0.8.5** replaces structural proxy verdicts with exact consistency checks (`O ∪ {α} is inconsistent`). The 5-stage pipeline (scope → source consistency → entailment → exact consistency → verdict) produces semantically correct verdicts for all 15 test fixtures. Breaking change: `ClaimVerificationResult` schema v2 adds `executionStatus` (COMPLETED/TIMEOUT/ERROR) and makes `semanticVerdict` nullable. See [MIGRATION.md](MIGRATION.md) for the v1 → v2 migration guide.
+> **v0.8.5** replaces structural proxy verdicts with exact consistency checks (`O ∪ {α} is inconsistent`). The 5-stage pipeline (scope → source consistency → entailment → exact consistency → verdict) produces semantically correct verdicts for all 15 test fixtures. Breaking change: `ClaimVerificationResult` schema v2 adds `executionStatus` (COMPLETED/TIMEOUT/ERROR) and makes `semanticVerdict` nullable. See [MIGRATION.md](docs/MIGRATION.md) for the v1 → v2 migration guide.
 >
 > **v0.8.5 Known Limitations:** (1) Java interrupt may not reliably stop reasoners on timeout — `future.cancel(true)` interrupts the thread, but HermiT/ELK may continue running in the background; future work may use an independent JVM worker for reliable cancellation. (2) Windows `parkNanos` has ~1ms timer resolution — sub-millisecond timeouts may not work reliably; use `Duration.ZERO` for immediate timeout. (3) ELK reasoner (OWL 2 EL) silently ignores OWL 2 DL constructs like `NegativeObjectPropertyAssertion` — always specify HermiT explicitly for OWL 2 DL ontologies.
 >
@@ -22,7 +22,7 @@
 
 - **English** (this file)
 - [简体中文 README](README.zh-CN.md)
-- Deep reference: [English FEATURES](FEATURES.md) | [功能参考(中文)](FEATURES.zh-CN.md)
+- Deep reference: [English FEATURES](docs/FEATURES.md) | [功能参考(中文)](docs/FEATURES.zh-CN.md)
 
 ---
 
@@ -33,9 +33,9 @@ This repository has two documentation files, and they have different jobs:
 | File | Audience | Length | What it covers |
 |---|---|---|---|
 | [README.md](README.md) (this file) | Everyone, especially new users | ~10 min read | What owl4agents is, 5-minute quick start, deployment, MCP client config, troubleshooting pointers. |
-| [FEATURES.md](FEATURES.md) | Programmers who want to **use** owl4agents (CLI or MCP) | ~60 min read | The full reference. Every CLI command and every MCP tool, with real OWL files, real input/output JSON, and "when to use it" guidance. Start here if you plan to write code against owl4agents. |
+| [FEATURES.md](docs/FEATURES.md) | Programmers who want to **use** owl4agents (CLI or MCP) | ~60 min read | The full reference. Every CLI command and every MCP tool, with real OWL files, real input/output JSON, and "when to use it" guidance. Start here if you plan to write code against owl4agents. |
 
-**Rule of thumb:** if you want to install and try owl4agents, read this README. If you want to know what a particular tool *does* and what its response looks like, read [FEATURES.md](FEATURES.md).
+**Rule of thumb:** if you want to install and try owl4agents, read this README. If you want to know what a particular tool *does* and what its response looks like, read [FEATURES.md](docs/FEATURES.md).
 
 > Looking for the strict protocol contract (error codes, HTTP semantics, JSON schema)? See [CHANGELOG.md](CHANGELOG.md) and the per-feature spec under `openspec/changes/archive/`.
 
@@ -96,9 +96,9 @@ node tools/npm/bin/owl4agents.js query v03_demo `
 If you got bindings for `?s`, congratulations — the pipeline works end to end. From here:
 
 - **Want to drive it from an LLM agent?** Skip to [MCP client configuration](#mcp-client-configuration).
-- **Want to verify a structured claim against the ontology?** See [FEATURES.md §6 "Claim verification"](FEATURES.md).
-- **Want to know what every CLI command does?** [FEATURES.md §4](FEATURES.md).
-- **Want to know what every MCP tool returns?** [FEATURES.md §5](FEATURES.md).
+- **Want to verify a structured claim against the ontology?** See [FEATURES.md §6 "Claim verification"](docs/FEATURES.md).
+- **Want to know what every CLI command does?** [FEATURES.md §4](docs/FEATURES.md).
+- **Want to know what every MCP tool returns?** [FEATURES.md §5](docs/FEATURES.md).
 
 ---
 
@@ -149,7 +149,7 @@ init … --workspace <name>` and `import` commands to run it.
                                                    +────────────────────────+
 ```
 
-11 Gradle modules, grouped into three layers (storage / OWL-API / query / reasoner / retrieval / validation / benchmark for the core, ontology-cli and ontology-mcp for the entry points, ontology-distribution for the acceptance suite). See [FEATURES.md §2](FEATURES.md) for the module-level breakdown.
+11 Gradle modules, grouped into three layers (storage / OWL-API / query / reasoner / retrieval / validation / benchmark for the core, ontology-cli and ontology-mcp for the entry points, ontology-distribution for the acceptance suite). See [FEATURES.md §2](docs/FEATURES.md) for the module-level breakdown.
 
 ---
 
@@ -178,7 +178,7 @@ node tools/npm/bin/owl4agents.js mcp-config --client claude `
 
 > The MCP server is **readonly by default**. Use the CLI to import / delete ontologies, and the MCP server to query / verify.
 
-For a deeper end-to-end walkthrough (start the server, run `tools/list`, run a tool, read the response) see [FEATURES.md §3 "Try the MCP server in 5 minutes"](FEATURES.md).
+For a deeper end-to-end walkthrough (start the server, run `tools/list`, run a tool, read the response) see [FEATURES.md §3 "Try the MCP server in 5 minutes"](docs/FEATURES.md).
 
 ---
 
@@ -190,7 +190,7 @@ For a deeper end-to-end walkthrough (start the server, run `tools/list`, run a t
 4. Initialize a workspace and import ontologies with the CLI.
 5. Point your MCP client at `node tools/npm/bin/owl4agents.js mcp --readonly`.
 
-Full deployment recipe (including the Windows-only `java -jar` ACCESS_VIOLATION workaround, environment variables, and the systemd service template) is in [FEATURES.md §7](FEATURES.md).
+Full deployment recipe (including the Windows-only `java -jar` ACCESS_VIOLATION workaround, environment variables, and the systemd service template) is in [FEATURES.md §7](docs/FEATURES.md).
 
 ---
 
@@ -220,10 +220,10 @@ A green run reports `BUILD SUCCESSFUL`, `Results: 29 passed, 0 failed` for the n
 
 ## Where to go next
 
-- **New to OWL / RDF?** [FEATURES.md §1 "OWL and SPARQL in 5 minutes"](FEATURES.md) is a primer aimed at CS graduates.
-- **Want to see real tool calls?** [FEATURES.md §3 "A real walkthrough"](FEATURES.md) loads a small ontology, runs reasoner, asks a SPARQL query, and verifies a claim — every step with actual output.
-- **Building an agent?** [FEATURES.md §6 "Claim verification and evidence grounding"](FEATURES.md) shows how to wire `verify-claim` / `evidence-context` into an answer pipeline.
-- **Hitting an error?** [FEATURES.md §9 "Troubleshooting"](FEATURES.md) lists the common `READONLY_VIOLATION`, `SPARQL_SAFETY_VIOLATION`, `ONTOLOGY_NOT_READY` and other errors with fixes.
+- **New to OWL / RDF?** [FEATURES.md §1 "OWL and SPARQL in 5 minutes"](docs/FEATURES.md) is a primer aimed at CS graduates.
+- **Want to see real tool calls?** [FEATURES.md §3 "A real walkthrough"](docs/FEATURES.md) loads a small ontology, runs reasoner, asks a SPARQL query, and verifies a claim — every step with actual output.
+- **Building an agent?** [FEATURES.md §6 "Claim verification and evidence grounding"](docs/FEATURES.md) shows how to wire `verify-claim` / `evidence-context` into an answer pipeline.
+- **Hitting an error?** [FEATURES.md §9 "Troubleshooting"](docs/FEATURES.md) lists the common `READONLY_VIOLATION`, `SPARQL_SAFETY_VIOLATION`, `ONTOLOGY_NOT_READY` and other errors with fixes.
 
 ## License
 

@@ -9,7 +9,7 @@
 # do not exhaust disk (only the most recent heap dump is preserved).
 #
 # Usage:
-#   .\owl4agents.ps1 [mcp args...]
+#   .\tools\bin\owl4agents.ps1 [mcp args...]
 #
 # Default args (if none supplied): mcp --transport=http --host=0.0.0.0 --port=8080
 #
@@ -23,7 +23,8 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
-$ProjectRoot = $PSScriptRoot
+# Script lives in tools/bin/, project root is two levels up.
+$ProjectRoot = Split-Path (Split-Path $PSScriptRoot -Parent) -Parent
 Set-Location -Path $ProjectRoot
 
 # Locate shadow jar (built by :modules:ontology-cli:shadowJar).

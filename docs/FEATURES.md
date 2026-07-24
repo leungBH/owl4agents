@@ -2,7 +2,7 @@
 
 > **Version:** v0.8.4 (released 2026-07-11, claim verification performance optimization: 7 decisions including EntitySignatureCache, per-request ontology single loading, asserted axiom indexing, inferred hierarchy index, OntologyCache TTL window).
 > **Audience:** programmers who want to **use** owl4agents (CLI or MCP) and understand what each command / tool does, what it takes as input, and what it returns. We assume you're a CS graduate — comfortable with JSON, HTTP, regex, and reading API docs — but you may or may not have touched OWL or SPARQL before.
-> **Pair this with:** [README.md](README.md) for the elevator pitch and 5-minute quick start. This file is the deep reference.
+> **Pair this with:** [README.md](../README.md) for the elevator pitch and 5-minute quick start. This file is the deep reference.
 
 ---
 
@@ -10,7 +10,7 @@
 
 - **English** (this file)
 - [功能参考(中文)](FEATURES.zh-CN.md) — full Chinese translation of this document
-- [English README](README.md) | [简体中文 README](README.zh-CN.md)
+- [English README](../README.md) | [简体中文 README](../README.zh-CN.md)
 
 ---
 

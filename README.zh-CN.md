@@ -17,7 +17,7 @@
 ## 语言版本 / Available languages
 
 - [English](README.md) | **简体中文**(本文)
-- 详细功能参考:[English FEATURES](FEATURES.md) | [中文版 FEATURES](FEATURES.zh-CN.md)
+- 详细功能参考:[English FEATURES](docs/FEATURES.md) | [中文版 FEATURES](docs/FEATURES.zh-CN.md)
 
 ---
 
@@ -28,9 +28,9 @@
 | 文件 | 受众 | 篇幅 | 内容 |
 |---|---|---|---|
 | [README.md](README.md)(英文)/ [README.zh-CN.md](README.zh-CN.md)(本文) | 所有人,尤其是新用户 | ~10 分钟 | 项目是什么、5 分钟快速启动、部署、MCP 客户端配置、故障排查指引 |
-| [FEATURES.md](FEATURES.md)(英文)/ [FEATURES.zh-CN.md](FEATURES.zh-CN.md) | 想要**使用** owl4agents(CLI 或 MCP)的程序员 | ~60 分钟 | 完整参考。覆盖每个 CLI 命令和每个 MCP 工具,带真实 OWL 文件、真实入参/出参 JSON、以及"何时使用"的指引。准备写代码对接 owl4agents 时,先读这份 |
+| [FEATURES.md](docs/FEATURES.md)(英文)/ [FEATURES.zh-CN.md](docs/FEATURES.zh-CN.md) | 想要**使用** owl4agents(CLI 或 MCP)的程序员 | ~60 分钟 | 完整参考。覆盖每个 CLI 命令和每个 MCP 工具,带真实 OWL 文件、真实入参/出参 JSON、以及"何时使用"的指引。准备写代码对接 owl4agents 时,先读这份 |
 
-**经验法则:** 想安装并跑通 owl4agents,读本 README。想了解某个工具*做什么*以及响应长什么样,读 [FEATURES.zh-CN.md](FEATURES.zh-CN.md)。
+**经验法则:** 想安装并跑通 owl4agents,读本 README。想了解某个工具*做什么*以及响应长什么样,读 [FEATURES.zh-CN.md](docs/FEATURES.zh-CN.md)。
 
 > 寻找严格的协议契约(错误码、HTTP 语义、JSON schema)?见 [CHANGELOG.md](CHANGELOG.md) 和 `openspec/changes/archive/` 下的各特性 spec。
 
@@ -91,9 +91,9 @@ node tools/npm/bin/owl4agents.js query v03_demo `
 如果 `?s` 拿到绑定结果,恭喜 —— 端到端打通。接下来:
 
 - **想用 LLM 代理驱动它?** 跳到 [MCP 客户端配置](#mcp-客户端配置)。
-- **想对本体验证一条结构化 claim?** 见 [FEATURES.zh-CN.md §6 "Claim 验证与证据"](FEATURES.zh-CN.md)。
-- **想了解每个 CLI 命令做什么?** [FEATURES.zh-CN.md §4](FEATURES.zh-CN.md)。
-- **想了解每个 MCP 工具返回什么?** [FEATURES.zh-CN.md §5](FEATURES.zh-CN.md)。
+- **想对本体验证一条结构化 claim?** 见 [FEATURES.zh-CN.md §6 "Claim 验证与证据"](docs/FEATURES.zh-CN.md)。
+- **想了解每个 CLI 命令做什么?** [FEATURES.zh-CN.md §4](docs/FEATURES.zh-CN.md)。
+- **想了解每个 MCP 工具返回什么?** [FEATURES.zh-CN.md §5](docs/FEATURES.zh-CN.md)。
 
 ---
 
@@ -121,7 +121,7 @@ node tools/npm/bin/owl4agents.js query v03_demo `
                                                    +────────────────────────+
 ```
 
-11 个 Gradle 模块,分为三层(核心的 storage / OWL-API / query / reasoner / retrieval / validation / benchmark,入口的 ontology-cli 与 ontology-mcp,以及验收测试用的 ontology-distribution)。模块级拆解见 [FEATURES.zh-CN.md §2](FEATURES.zh-CN.md)。
+11 个 Gradle 模块,分为三层(核心的 storage / OWL-API / query / reasoner / retrieval / validation / benchmark,入口的 ontology-cli 与 ontology-mcp,以及验收测试用的 ontology-distribution)。模块级拆解见 [FEATURES.zh-CN.md §2](docs/FEATURES.zh-CN.md)。
 
 ---
 
@@ -150,7 +150,7 @@ node tools/npm/bin/owl4agents.js mcp-config --client claude `
 
 > MCP 服务器**默认只读**。请用 CLI 来 import / delete 本体,用 MCP 服务器来查询 / 验证。
 
-想看完整的端到端走读(启动服务器、调用 `tools/list`、调用工具、读取响应),见 [FEATURES.zh-CN.md §3 "5 分钟体验 MCP 服务器"](FEATURES.zh-CN.md)。
+想看完整的端到端走读(启动服务器、调用 `tools/list`、调用工具、读取响应),见 [FEATURES.zh-CN.md §3 "5 分钟体验 MCP 服务器"](docs/FEATURES.zh-CN.md)。
 
 ---
 
@@ -162,7 +162,7 @@ node tools/npm/bin/owl4agents.js mcp-config --client claude `
 4. 用 CLI 初始化工作区并导入本体。
 5. 把 MCP 客户端指向 `node tools/npm/bin/owl4agents.js mcp --readonly`。
 
-完整的部署方案(包括 Windows 上 `java -jar` 出现 ACCESS_VIOLATION 的变通方法、环境变量、systemd 服务模板)见 [FEATURES.zh-CN.md §7](FEATURES.zh-CN.md)。
+完整的部署方案(包括 Windows 上 `java -jar` 出现 ACCESS_VIOLATION 的变通方法、环境变量、systemd 服务模板)见 [FEATURES.zh-CN.md §7](docs/FEATURES.zh-CN.md)。
 
 ---
 
@@ -192,10 +192,10 @@ node tools/npm/bin/owl4agents.js --help
 
 ## 下一步读什么
 
-- **OWL / RDF 新手?** [FEATURES.zh-CN.md §1 "5 分钟 OWL 与 SPARQL 入门"](FEATURES.zh-CN.md) 是面向 CS 毕业生的速成课。
-- **想看真实的工具调用?** [FEATURES.zh-CN.md §3 "完整走读"](FEATURES.zh-CN.md) 演示加载一个本体、跑推理、提 SPARQL 查询、验证 claim —— 每一步都带真实输出。
-- **正在搭建代理?** [FEATURES.zh-CN.md §6 "Claim 验证与证据落地"](FEATURES.zh-CN.md) 展示如何把 `verify-claim` / `evidence-context` 接入答案流水线。
-- **遇到错误?** [FEATURES.zh-CN.md §9 "故障排查"](FEATURES.zh-CN.md) 列出常见的 `READONLY_VIOLATION`、`SPARQL_SAFETY_VIOLATION`、`ONTOLOGY_NOT_READY` 等错误及修复方法。
+- **OWL / RDF 新手?** [FEATURES.zh-CN.md §1 "5 分钟 OWL 与 SPARQL 入门"](docs/FEATURES.zh-CN.md) 是面向 CS 毕业生的速成课。
+- **想看真实的工具调用?** [FEATURES.zh-CN.md §3 "完整走读"](docs/FEATURES.zh-CN.md) 演示加载一个本体、跑推理、提 SPARQL 查询、验证 claim —— 每一步都带真实输出。
+- **正在搭建代理?** [FEATURES.zh-CN.md §6 "Claim 验证与证据落地"](docs/FEATURES.zh-CN.md) 展示如何把 `verify-claim` / `evidence-context` 接入答案流水线。
+- **遇到错误?** [FEATURES.zh-CN.md §9 "故障排查"](docs/FEATURES.zh-CN.md) 列出常见的 `READONLY_VIOLATION`、`SPARQL_SAFETY_VIOLATION`、`ONTOLOGY_NOT_READY` 等错误及修复方法。
 
 ## 许可证
 

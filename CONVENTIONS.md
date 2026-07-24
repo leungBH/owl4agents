@@ -25,8 +25,8 @@ owl4agents/
 │   ├── npm/                npm launcher package (Node.js → Java bridge)
 │   │   ├── bin/               owl4agents.js (main entry point)
 │   │   └── test/              launcher tests
-│   ├── bin/                Platform launch scripts (.cmd wrappers)
-│   └── scripts/            Build/test utility scripts (PS1, SH)
+│   ├── bin/                Platform launch scripts (.bat / .ps1 wrappers)
+│   └── scripts/            Build/test utility scripts (PS1, SH, JS)
 │
 ├── test/                 # ALL test-related content lives here
 │   ├── contracts/          Test contract definitions (JSON/YAML)
@@ -39,8 +39,16 @@ owl4agents/
 ├── examples/             # Runnable demo packs (pizza, claim-verification, biomedical, agent-mcp)
 │
 ├── docs/                 # Project documentation
-│   ├── design.md           Architecture and design notes
-│   └── architecture.png    System architecture diagram
+│   ├── FEATURES.md          Full feature reference (EN)
+│   ├── FEATURES.zh-CN.md    Full feature reference (ZH)
+│   ├── MIGRATION.md         v1 → v2 migration guide
+│   ├── design.md            Architecture and design notes
+│   ├── architecture.png     System architecture diagram
+│   ├── schemas/             JSON Schema definitions
+│   ├── adr/                 Architecture Decision Records
+│   ├── research/            Research notes
+│   ├── retrospectives/      Internal retrospectives (gitignored)
+│   └── internal/            Internal deployment guides (gitignored)
 │
 ├── openspec/             # Spec and change management (gitignored — local only)
 │
@@ -51,8 +59,10 @@ owl4agents/
 ├── build/                # All build output (gitignored, centralized)
 │   └── modules/             Per-module artifacts (libs/, classes/, test-results/)
 ├── CHANGELOG.md
+├── CLAUDE.md             # AI agent instructions
+├── CONVENTIONS.md        # Directory structure and naming rules
 ├── LICENSE / NOTICE
-└── README.md
+├── README.md / README.zh-CN.md
 ```
 
 ## Rules

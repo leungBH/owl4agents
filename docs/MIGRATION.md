@@ -110,7 +110,7 @@ The `verify-claim` command now accepts `--timeout <duration>` (e.g., `--timeout 
 
 ## JSON Schema
 
-The formal JSON Schema is at `schemas/claim-verification-result-2.schema.json`. Validate your output against this schema to ensure compliance.
+The formal JSON Schema is at `docs/schemas/claim-verification-result-2.schema.json`. Validate your output against this schema to ensure compliance.
 
 ## Backward Compatibility
 

@@ -10,7 +10,7 @@ REM The heap dump file is deleted BEFORE each launch so repeated OOM events
 REM do not exhaust disk (only the most recent heap dump is preserved).
 REM
 REM Usage:
-REM   owl4agents.bat [mcp args...]
+REM   tools\bin\owl4agents.bat [mcp args...]
 REM
 REM Default args (if none supplied): mcp --transport=http --host=0.0.0.0 --port=8080
 REM
@@ -19,7 +19,8 @@ REM   `gradlew.bat :modules:ontology-cli:shadowJar` first).
 
 setlocal enableextensions
 
-set "PROJECT_ROOT=%~dp0"
+REM Script lives in tools\bin\, project root is two levels up.
+set "PROJECT_ROOT=%~dp0..\..\"
 pushd "%PROJECT_ROOT%"
 
 REM Locate shadow jar (built by :modules:ontology-cli:shadowJar).

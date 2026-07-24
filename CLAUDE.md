@@ -84,7 +84,7 @@ Read and follow `CONVENTIONS.md` for:
 
 These rules were added after the v0.8.1 acceptance review, where 6 defects
 escaped the development loop (DEFECT-1..DEFECT-6 in
-`reports/acceptance/2026-07-09-v0.8.1-acceptance-defects.md`).
+`test/reports/acceptance/2026-07-09-v0.8.1-acceptance-defects.md`).
 
 ### Rule 1: Test exists ≠ test passes
 
@@ -213,3 +213,7 @@ hours. (Manual check today; CLI gate is a future improvement.)
 | Example demos              | `examples/`                                |
 | Agent skill packs          | `tools/skills/`                            |
 | Project conventions        | `CONVENTIONS.md`                           |
+| Launch scripts             | `tools/bin/owl4agents.bat` / `.ps1`        |
+| Feature reference          | `docs/FEATURES.md` / `docs/FEATURES.zh-CN.md` |
+| Migration guide            | `docs/MIGRATION.md`                        |
+| JSON schemas               | `docs/schemas/`                            |

@@ -69,7 +69,7 @@ tasks.shadowJar {
             "Implementation-Version" to rootProject.version.toString(),
             // v0.8.6 D5 / task 4.1: JVM-Args is a documentation-only
             // manifest attribute. `java -jar` does NOT read this; the
-            // launch scripts (owl4agents.bat / owl4agents.ps1) hardcode
+            // launch scripts (tools/bin/owl4agents.bat / owl4agents.ps1) hardcode
             // the same flags directly.
             "JVM-Args" to "-XX:+ExitOnOutOfMemoryError -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=./owl4agents-heapdump.hprof"
         )

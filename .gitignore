@@ -3,29 +3,24 @@
 .codex/
 .trae/
 openspec/
-docs/
 backup/
-version.md
+
+# Internal-only documentation (retrospectives, deployment guides with internal IPs)
+docs/retrospectives/
+docs/internal/
+docs/version.md
 
 # Local-only evidence and scratch space
-reports/
 temp/
 local/
-
-# Internal retrospective documents (root-cause analyses for release defects).
-# These reference local paths and design rationale; they are local-only and
-# MUST NOT be committed alongside the public v0.8.x changelog entries. The
-# corresponding high-level ISSUE entries are summarized in CHANGELOG.md.
-doc/
+local-traces/
 
 # Generated example outputs (runtime logs, transcripts, screenshots)
 temp/examples/
 
-# Generated workflow reports and local agent traces
-local-traces/
-
 # Private or sensitive ontology inputs
 test/owl_files/
+test/reports/
 test/corpus/realworld-local/
 test/corpus/downloads/
 test/corpus/large/
@@ -56,6 +51,7 @@ build/
 # Java
 *.class
 *.war
+*.hprof
 # Maven metadata extracted by OWL API / Jena dependency resolution
 META-INF/
 /org/
@@ -66,6 +62,10 @@ Thumbs.db
 
 # owl4agents local workspace (created at runtime)
 .owl4agents/
+/workspaces/
+/data/
+/results/
+/config.yaml
 
 # Smoke test temporary workspaces
 *-smoke/
@@ -79,88 +79,41 @@ v*-final-*/
 
 # Root-level test artifacts, debug logs, and one-off scripts (v0.8+)
 # These are local-only transient files generated during testing.
-# Real acceptance evidence is in reports/acceptance/ (which is itself gitignored).
+# Real acceptance evidence is in test/reports/acceptance/ (which is itself gitignored).
 # Real regression tests are in modules/*/src/test/ and test/contracts/.
 /*.log
 /NUL
 /hdr.txt
 /post_hdr.txt
 /q.json
-/req_call.json
-/req_call2.json
-/req_tools_list.json
-/sse_a.log
-/sse_b.log
+/req_*.json
+/trae_*.json
+/trae_*.err
+/trae_*.out
+/trae_*.log
+/trae_stream.log
 /server.err
 /server.out
 /server_v3.log
-/trae_call.json
-/trae_call2.json
-/trae_call3.json
-/trae_curl.err
-/trae_curl.out
-/trae_get.json
-/trae_init.json
-/trae_list.json
-/trae_stream.log
-/test_all_tools.ps1
-/test_all_tools_v2.ps1
-/test_all_tools_v3.ps1
-/test_run.log
-/test_run_v2.log
-/test_run_v3.log
+/sse_a.log
+/sse_b.log
+/test_all_tools*.ps1
+/test_run*.log
 /test_junit.log
-/test_scoreboard.txt
-/test_scoreboard_v2.txt
-/test_scoreboard_v3.txt
-/deploy_swap.ps1
-/deploy_swap.log
-/deploy_v071.ps1
-/deploy_verify.ps1
-/deploy_verify.log
-/deploy_verify2.ps1
-/deploy_verify2.log
-/deploy_verify3.ps1
-/deploy_verify3.log
-/deploy_verify4.ps1
-/deploy_verify4.log
-/deploy_verify5.ps1
-/deploy_verify5.log
+/test_scoreboard*.txt
+/deploy_*.ps1
+/deploy_*.log
 /deploy.log
-/import_bfo.log
-/import_datatype_constraints.log
-/import_disjoint_properties.log
-/import_g02_subclass_transitive.log
-/import_g03_equivalent_classes.log
-/import_g04_disjoint_classes.log
-/import_g05_property_axioms.log
-/import_g06_individual_assertions.log
-/import_g07_sparql_safety.log
-/import_individual_assertions.log
-/import_pizza.log
-/import_relation_assertions.log
-/import_v03_claim_verification.log
-/import_v04_biomedical_grounding.log
+/import_*.log
 
-# Sensitive internal documents — MUST NOT be committed (contain internal IPs/paths)
-内网调用手册*.md
+# Sensitive files
 *.pem
 *.key
 *.p12
 watchdog-*.ps1
-
-# Local runtime workspace (materialized from test/corpus)
-/data/
 
 # Temporary extraction directories
 /temp_jar_check/
 
 # CLI integration test workspace
 /test-workspace/
-
-# v0.8.6 stability test artifacts
-/owl4agents-heapdump.hprof
-*.hprof
-/workspaces/
-/results/
-/config.yaml
