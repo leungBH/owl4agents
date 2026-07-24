@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.9.1 - 2026-07-24
+
+### Changed
+
+- **Project structure reorganization** — Reorganized project to follow CONVENTIONS.md: merged `doc/` into `docs/`, moved `FEATURES.md`/`FEATURES.zh-CN.md`/`MIGRATION.md` to `docs/`, moved `schemas/` to `docs/schemas/`, moved launch scripts (`owl4agents.bat`/`.ps1`) to `tools/bin/`, consolidated `scripts/` into `tools/scripts/`. Un-ignored `docs/` in `.gitignore` so documentation is properly tracked. Updated all file references in README, CLAUDE, CONVENTIONS, and build files. Fixed launch script path resolution for new location.
+
+### Removed
+
+- `tools/scripts/create-v0.8.0-release.js` — one-off v0.8.0 release script, no longer needed
+- `tools/scripts/update-v0.8.0-release.js` — one-off v0.8.0 release update script, no longer needed
+- 84 root-level `.log` files and junk directories (`temp/`, `org/`, `results/`, `workspaces/`, `data/`) — local-only artifacts
+
+### Verified
+
+- Build: `BUILD SUCCESSFUL` (32 tasks, 0 failures)
+- Deployment: 4 ontologies loaded (pizza, sosa, hpo, mondo), 64 tools available
+
 ## 0.9.0 - 2026-07-23
 
 ### BREAKING CHANGES
