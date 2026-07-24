@@ -1,0 +1,9 @@
+name: pizza-112
+description: Pizza ontology benchmark with 100 claims covering 10 claim types
+ontologyIds:
+  - pizza
+questionSetPath: d:/code/ARIS-owl4agents/owl4agents-v086/owl4agents/test/fixtures/v0.6/question-sets/pizza-112.jsonl
+reasoners:
+  - hermit
+outputPath: d:/code/ARIS-owl4agents/owl4agents-v086/owl4agents/results/v086/pizza-112-output.jsonl
+timeoutPerQuestion: 30

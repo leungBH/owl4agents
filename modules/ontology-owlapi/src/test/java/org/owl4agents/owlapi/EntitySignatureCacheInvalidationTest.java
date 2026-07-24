@@ -1,90 +1,146 @@
 package org.owl4agents.owlapi;
 
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.owl4agents.core.OntologyId;
+import org.semanticweb.owlapi.apibinding.OWLManager;
+import org.semanticweb.owlapi.model.IRI;
+import org.semanticweb.owlapi.model.OWLDataFactory;
+import org.semanticweb.owlapi.model.OWLDeclarationAxiom;
+import org.semanticweb.owlapi.model.OWLOntology;
+import org.semanticweb.owlapi.model.OWLOntologyManager;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * v0.8.6 D4 / task 5.12: Verifies the global {@link EntitySignatureCache}
- * {@link EntitySignatureCache#invalidateAll()} method clears all entries
- * from the static Caffeine cache.
- *
- * <p>This is the v0.8.6 task 5.3 hook called from
- * {@code ReasonerServiceImpl.onOntologyReloaded} and
- * {@code onAllOntologiesReloaded} to prevent stale signature entries from
- * producing false-positive {@code contains} results after an ontology
- * reload.</p>
+ * v0.9.0 D1 / task 6.3: Verifies per-ontology {@link EntitySignatureCache}
+ * {@link EntitySignatureCache#invalidate()} method clears all entries from
+ * this ontology's Caffeine cache, and that
+ * {@link EntitySignatureCacheManager#onOntologyReloaded(OntologyId)}
+ * invalidates only the reloaded ontology's cache (other ontologies remain
+ * intact).
  */
-@DisplayName("v0.8.6 D4 / task 5.12: EntitySignatureCache invalidateAll")
+@DisplayName("v0.9.0 D1 / task 6.3: EntitySignatureCache per-instance invalidation")
 class EntitySignatureCacheInvalidationTest {
 
-    @BeforeEach
-    void resetGlobalCache() {
-        EntitySignatureCache.invalidateAll();
-    }
+    private static final String TEST_NS = "http://example.org/inval-test#";
+    // buildOntologyWithEntities() uses name "ontology" → class IRIs are
+    // TEST_NS + "ontology#C<i>" and property IRIs are TEST_NS + "P<i>".
+    private static final String ONT_CLASS_C0 = TEST_NS + "ontology#C0";
+    private static final String ONT_PROP_P0 = TEST_NS + "P0";
 
-    @AfterEach
-    void cleanupGlobalCache() {
-        EntitySignatureCache.invalidateAll();
+    @Test
+    @DisplayName("invalidate() drops all entries (size == 0)")
+    void invalidateClearsCache() {
+        OWLOntology ontology = buildOntologyWithEntities();
+        EntitySignatureCache cache = EntitySignatureCache.build(ontology);
+
+        // Verify entries exist before invalidation.
+        assertTrue(cache.contains("class", ONT_CLASS_C0),
+            "Class C0 must be found before invalidate");
+        cache.cleanUp();
+        assertTrue(cache.estimatedSize() > 0,
+            "Cache must have entries before invalidate, but size was " + cache.estimatedSize());
+
+        // Invalidate and verify.
+        cache.invalidate();
+        cache.cleanUp();
+        assertEquals(0L, cache.estimatedSize(),
+            "Cache size must be 0 after invalidate, but was " + cache.estimatedSize());
+        assertFalse(cache.contains("class", ONT_CLASS_C0),
+            "Class C0 must not be found after invalidate");
     }
 
     @Test
-    @DisplayName("invalidateAll() drops all entries (size == 0)")
-    void invalidateAllClearsCache() {
-        // Insert 100 entries across all 4 kinds.
-        for (int i = 0; i < 25; i++) {
-            EntitySignatureCache.put("class", "http://example.org/test#C" + i);
-            EntitySignatureCache.put("objprop", "http://example.org/test#P" + i);
-            EntitySignatureCache.put("dataprop", "http://example.org/test#D" + i);
-            EntitySignatureCache.put("individual", "http://example.org/test#I" + i);
-        }
-        EntitySignatureCache.cleanUp();
-        long sizeBefore = EntitySignatureCache.estimatedSize();
-        assertTrue(sizeBefore > 0,
-            "Cache must have entries before invalidateAll, but size was " + sizeBefore);
-
-        EntitySignatureCache.invalidateAll();
-        // Caffeine.invalidateAll is synchronous — no cleanUp() needed.
-        long sizeAfter = EntitySignatureCache.estimatedSize();
-        assertEquals(0L, sizeAfter,
-            "Cache size must be 0 after invalidateAll, but was " + sizeAfter);
-    }
-
-    @Test
-    @DisplayName("get() returns null for every previously-present entry after invalidateAll")
-    void getReturnsNullAfterInvalidation() {
-        EntitySignatureCache.put("class", "http://example.org/test#C1");
-        EntitySignatureCache.put("objprop", "http://example.org/test#P1");
-        EntitySignatureCache.put("dataprop", "http://example.org/test#D1");
-        EntitySignatureCache.put("individual", "http://example.org/test#I1");
+    @DisplayName("contains() returns false for every previously-present entry after invalidate")
+    void containsReturnsFalseAfterInvalidation() {
+        OWLOntology ontology = buildOntologyWithEntities();
+        EntitySignatureCache cache = EntitySignatureCache.build(ontology);
 
         // Sanity check: entries present before invalidation.
-        assertEquals(Boolean.TRUE, EntitySignatureCache.get("class", "http://example.org/test#C1"));
-        assertEquals(Boolean.TRUE, EntitySignatureCache.get("objprop", "http://example.org/test#P1"));
+        assertTrue(cache.contains("class", ONT_CLASS_C0));
+        assertTrue(cache.contains("object_property", ONT_PROP_P0));
 
-        EntitySignatureCache.invalidateAll();
+        cache.invalidate();
 
-        assertNull(EntitySignatureCache.get("class", "http://example.org/test#C1"),
-            "class entry must be absent after invalidateAll");
-        assertNull(EntitySignatureCache.get("objprop", "http://example.org/test#P1"),
-            "objprop entry must be absent after invalidateAll");
-        assertNull(EntitySignatureCache.get("dataprop", "http://example.org/test#D1"),
-            "dataprop entry must be absent after invalidateAll");
-        assertNull(EntitySignatureCache.get("individual", "http://example.org/test#I1"),
-            "individual entry must be absent after invalidateAll");
+        assertFalse(cache.contains("class", ONT_CLASS_C0),
+            "class entry must be absent after invalidate");
+        assertFalse(cache.contains("object_property", ONT_PROP_P0),
+            "objprop entry must be absent after invalidate");
     }
 
     @Test
-    @DisplayName("invalidateAll() on empty cache is a no-op (no exception)")
-    void invalidateAllOnEmptyCacheIsNoOp() {
-        EntitySignatureCache.invalidateAll();
-        EntitySignatureCache.invalidateAll();
-        assertEquals(0L, EntitySignatureCache.estimatedSize(),
-            "Empty cache must remain size 0 after repeated invalidateAll");
+    @DisplayName("invalidate() on freshly-built cache is a no-op (no exception)")
+    void invalidateOnFreshCacheIsNoOp() {
+        OWLOntology ontology = buildOntologyWithEntities();
+        EntitySignatureCache cache = EntitySignatureCache.build(ontology);
+        cache.invalidate();
+        cache.invalidate(); // Double invalidate should not throw.
+        cache.cleanUp();
+        assertEquals(0L, cache.estimatedSize(),
+            "Cache must remain size 0 after repeated invalidate");
+    }
+
+    @Test
+    @DisplayName("onOntologyReloaded invalidates only the reloaded ontology's cache")
+    void onOntologyReloadedInvalidatesOnlyTarget() {
+        OWLOntology ontA = buildOntologyWithClasses("ont-a", 5);
+        OWLOntology ontB = buildOntologyWithClasses("ont-b", 5);
+
+        EntitySignatureCacheManager manager = new EntitySignatureCacheManager();
+        OntologyId idA = new OntologyId("ont-a");
+        OntologyId idB = new OntologyId("ont-b");
+
+        EntitySignatureCache cacheA = manager.getOrCreate(idA, ontA);
+        EntitySignatureCache cacheB = manager.getOrCreate(idB, ontB);
+        assertNotNull(cacheA, "cacheA must be built");
+        assertNotNull(cacheB, "cacheB must be built");
+
+        // Verify both caches have entries.
+        assertTrue(cacheA.contains("class", TEST_NS + "ont-a#C0"));
+        assertTrue(cacheB.contains("class", TEST_NS + "ont-b#C0"));
+
+        // Reload only ontA — cacheB must remain intact.
+        manager.onOntologyReloaded(idA);
+
+        // cacheA's entries are invalidated (the instance is removed from manager).
+        assertFalse(cacheA.contains("class", TEST_NS + "ont-a#C0"),
+            "cacheA entries must be invalidated after onOntologyReloaded(ontA)");
+
+        // cacheB's entries must still be present.
+        assertTrue(cacheB.contains("class", TEST_NS + "ont-b#C0"),
+            "cacheB entries must remain intact after onOntologyReloaded(ontA)");
+    }
+
+    private OWLOntology buildOntologyWithEntities() {
+        return buildOntologyWithClasses("ontology", 10, true);
+    }
+
+    private OWLOntology buildOntologyWithClasses(String name, int classCount) {
+        return buildOntologyWithClasses(name, classCount, false);
+    }
+
+    private OWLOntology buildOntologyWithClasses(String name, int classCount, boolean withProperties) {
+        try {
+            OWLOntologyManager mgr = OWLManager.createOWLOntologyManager();
+            OWLDataFactory df = mgr.getOWLDataFactory();
+            OWLOntology ontology = mgr.createOntology(IRI.create(TEST_NS + name));
+            for (int i = 0; i < classCount; i++) {
+                ontology.add(df.getOWLDeclarationAxiom(
+                    df.getOWLClass(IRI.create(TEST_NS + name + "#C" + i))));
+            }
+            if (withProperties) {
+                for (int i = 0; i < 5; i++) {
+                    ontology.add(df.getOWLDeclarationAxiom(
+                        df.getOWLObjectProperty(IRI.create(TEST_NS + "P" + i))));
+                }
+            }
+            return ontology;
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
     }
 }

@@ -80,7 +80,7 @@ owl4agents review-answer pizza-ontology --claims test/fixtures/v0.5/answer-claim
 ```
 
 The response provides:
-- `aggregateStatus`: "verified" if all required claims are supported
+- `aggregateStatus`: "supported" if all required claims are supported
 - `handlingGuidance`: "Policy: strict — do not present any claim as fact unless it is supported by ontology evidence."
 - `agentInstructions`: "Cite only evidence returned in this context."
 

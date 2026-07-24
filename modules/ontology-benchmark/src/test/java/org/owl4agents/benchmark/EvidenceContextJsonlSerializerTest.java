@@ -33,7 +33,7 @@ class EvidenceContextJsonlSerializerTest {
 
         // Core fields
         assertEquals("answer-1", parsed.get("answerId"));
-        assertEquals("verified", parsed.get("status"));
+        assertEquals("supported", parsed.get("status"));
 
         // Per-claim entries
         List<Map<String, Object>> claims = (List<Map<String, Object>>) parsed.get("claims");

@@ -1,0 +1,1566 @@
+{
+    "pizza-112":  [
+                      {
+                          "questionId":  "pizza-sc-001",
+                          "expectedVerdict":  "supported"
+                      },
+                      {
+                          "questionId":  "pizza-sc-002",
+                          "expectedVerdict":  "supported"
+                      },
+                      {
+                          "questionId":  "pizza-sc-003",
+                          "expectedVerdict":  "supported"
+                      },
+                      {
+                          "questionId":  "pizza-sc-004",
+                          "expectedVerdict":  "supported"
+                      },
+                      {
+                          "questionId":  "pizza-sc-005",
+                          "expectedVerdict":  "contradicted"
+                      },
+                      {
+                          "questionId":  "pizza-sc-006",
+                          "expectedVerdict":  "contradicted"
+                      },
+                      {
+                          "questionId":  "pizza-sc-007",
+                          "expectedVerdict":  "contradicted"
+                      },
+                      {
+                          "questionId":  "pizza-sc-008",
+                          "expectedVerdict":  "contradicted"
+                      },
+                      {
+                          "questionId":  "pizza-sc-009",
+                          "expectedVerdict":  "contradicted"
+                      },
+                      {
+                          "questionId":  "pizza-sc-010",
+                          "expectedVerdict":  "unknown"
+                      },
+                      {
+                          "questionId":  "pizza-sc-011",
+                          "expectedVerdict":  "out_of_scope"
+                      },
+                      {
+                          "questionId":  "pizza-ec-001",
+                          "expectedVerdict":  "supported"
+                      },
+                      {
+                          "questionId":  "pizza-ec-002",
+                          "expectedVerdict":  "unknown"
+                      },
+                      {
+                          "questionId":  "pizza-ec-003",
+                          "expectedVerdict":  "supported"
+                      },
+                      {
+                          "questionId":  "pizza-ec-004",
+                          "expectedVerdict":  "unknown"
+                      },
+                      {
+                          "questionId":  "pizza-ec-005",
+                          "expectedVerdict":  "contradicted"
+                      },
+                      {
+                          "questionId":  "pizza-ec-006",
+                          "expectedVerdict":  "contradicted"
+                      },
+                      {
+                          "questionId":  "pizza-ec-007",
+                          "expectedVerdict":  "contradicted"
+                      },
+                      {
+                          "questionId":  "pizza-ec-008",
+                          "expectedVerdict":  "unknown"
+                      },
+                      {
+                          "questionId":  "pizza-ec-009",
+                          "expectedVerdict":  "unknown"
+                      },
+                      {
+                          "questionId":  "pizza-ec-010",
+                          "expectedVerdict":  "unknown"
+                      },
+                      {
+                          "questionId":  "pizza-ec-011",
+                          "expectedVerdict":  "out_of_scope"
+                      },
+                      {
+                          "questionId":  "pizza-dc-001",
+                          "expectedVerdict":  "supported"
+                      },
+                      {
+                          "questionId":  "pizza-dc-002",
+                          "expectedVerdict":  "supported"
+                      },
+                      {
+                          "questionId":  "pizza-dc-003",
+                          "expectedVerdict":  "supported"
+                      },
+                      {
+                          "questionId":  "pizza-dc-004",
+                          "expectedVerdict":  "supported"
+                      },
+                      {
+                          "questionId":  "pizza-dc-005",
+                          "expectedVerdict":  "contradicted"
+                      },
+                      {
+                          "questionId":  "pizza-dc-006",
+                          "expectedVerdict":  "contradicted"
+                      },
+                      {
+                          "questionId":  "pizza-dc-007",
+                          "expectedVerdict":  "contradicted"
+                      },
+                      {
+                          "questionId":  "pizza-dc-008",
+                          "expectedVerdict":  "unknown"
+                      },
+                      {
+                          "questionId":  "pizza-dc-009",
+                          "expectedVerdict":  "supported"
+                      },
+                      {
+                          "questionId":  "pizza-dc-010",
+                          "expectedVerdict":  "supported"
+                      },
+                      {
+                          "questionId":  "pizza-dc-011",
+                          "expectedVerdict":  "out_of_scope"
+                      },
+                      {
+                          "questionId":  "pizza-im-001",
+                          "expectedVerdict":  "supported"
+                      },
+                      {
+                          "questionId":  "pizza-im-002",
+                          "expectedVerdict":  "supported"
+                      },
+                      {
+                          "questionId":  "pizza-im-003",
+                          "expectedVerdict":  "supported"
+                      },
+                      {
+                          "questionId":  "pizza-im-004",
+                          "expectedVerdict":  "supported"
+                      },
+                      {
+                          "questionId":  "pizza-im-005",
+                          "expectedVerdict":  "contradicted"
+                      },
+                      {
+                          "questionId":  "pizza-im-006",
+                          "expectedVerdict":  "contradicted"
+                      },
+                      {
+                          "questionId":  "pizza-im-007",
+                          "expectedVerdict":  "contradicted"
+                      },
+                      {
+                          "questionId":  "pizza-im-008",
+                          "expectedVerdict":  "unknown"
+                      },
+                      {
+                          "questionId":  "pizza-im-009",
+                          "expectedVerdict":  "unknown"
+                      },
+                      {
+                          "questionId":  "pizza-im-010",
+                          "expectedVerdict":  "unknown"
+                      },
+                      {
+                          "questionId":  "pizza-im-011",
+                          "expectedVerdict":  "out_of_scope"
+                      },
+                      {
+                          "questionId":  "pizza-op-001",
+                          "expectedVerdict":  "supported"
+                      },
+                      {
+                          "questionId":  "pizza-op-002",
+                          "expectedVerdict":  "supported"
+                      },
+                      {
+                          "questionId":  "pizza-op-003",
+                          "expectedVerdict":  "unknown"
+                      },
+                      {
+                          "questionId":  "pizza-op-004",
+                          "expectedVerdict":  "unknown"
+                      },
+                      {
+                          "questionId":  "pizza-op-005",
+                          "expectedVerdict":  "unknown"
+                      },
+                      {
+                          "questionId":  "pizza-op-006",
+                          "expectedVerdict":  "unknown"
+                      },
+                      {
+                          "questionId":  "pizza-op-007",
+                          "expectedVerdict":  "unknown"
+                      },
+                      {
+                          "questionId":  "pizza-op-008",
+                          "expectedVerdict":  "contradicted"
+                      },
+                      {
+                          "questionId":  "pizza-op-009",
+                          "expectedVerdict":  "unknown"
+                      },
+                      {
+                          "questionId":  "pizza-op-010",
+                          "expectedVerdict":  "out_of_scope"
+                      },
+                      {
+                          "questionId":  "pizza-op-011",
+                          "expectedVerdict":  "unknown"
+                      },
+                      {
+                          "questionId":  "pizza-od-001",
+                          "expectedVerdict":  "supported"
+                      },
+                      {
+                          "questionId":  "pizza-od-002",
+                          "expectedVerdict":  "supported"
+                      },
+                      {
+                          "questionId":  "pizza-od-003",
+                          "expectedVerdict":  "supported"
+                      },
+                      {
+                          "questionId":  "pizza-od-004",
+                          "expectedVerdict":  "supported"
+                      },
+                      {
+                          "questionId":  "pizza-od-005",
+                          "expectedVerdict":  "unknown"
+                      },
+                      {
+                          "questionId":  "pizza-od-006",
+                          "expectedVerdict":  "unknown"
+                      },
+                      {
+                          "questionId":  "pizza-od-007",
+                          "expectedVerdict":  "unknown"
+                      },
+                      {
+                          "questionId":  "pizza-od-008",
+                          "expectedVerdict":  "unknown"
+                      },
+                      {
+                          "questionId":  "pizza-od-009",
+                          "expectedVerdict":  "unknown"
+                      },
+                      {
+                          "questionId":  "pizza-od-010",
+                          "expectedVerdict":  "out_of_scope"
+                      },
+                      {
+                          "questionId":  "pizza-or-001",
+                          "expectedVerdict":  "supported"
+                      },
+                      {
+                          "questionId":  "pizza-or-002",
+                          "expectedVerdict":  "supported"
+                      },
+                      {
+                          "questionId":  "pizza-or-003",
+                          "expectedVerdict":  "supported"
+                      },
+                      {
+                          "questionId":  "pizza-or-004",
+                          "expectedVerdict":  "supported"
+                      },
+                      {
+                          "questionId":  "pizza-or-005",
+                          "expectedVerdict":  "unknown"
+                      },
+                      {
+                          "questionId":  "pizza-or-006",
+                          "expectedVerdict":  "unknown"
+                      },
+                      {
+                          "questionId":  "pizza-or-007",
+                          "expectedVerdict":  "unknown"
+                      },
+                      {
+                          "questionId":  "pizza-or-008",
+                          "expectedVerdict":  "unknown"
+                      },
+                      {
+                          "questionId":  "pizza-or-009",
+                          "expectedVerdict":  "unknown"
+                      },
+                      {
+                          "questionId":  "pizza-or-010",
+                          "expectedVerdict":  "out_of_scope"
+                      },
+                      {
+                          "questionId":  "pizza-cc-001",
+                          "expectedVerdict":  "supported"
+                      },
+                      {
+                          "questionId":  "pizza-cc-002",
+                          "expectedVerdict":  "supported"
+                      },
+                      {
+                          "questionId":  "pizza-cc-003",
+                          "expectedVerdict":  "supported"
+                      },
+                      {
+                          "questionId":  "pizza-cc-004",
+                          "expectedVerdict":  "supported"
+                      },
+                      {
+                          "questionId":  "pizza-cc-005",
+                          "expectedVerdict":  "contradicted"
+                      },
+                      {
+                          "questionId":  "pizza-cc-006",
+                          "expectedVerdict":  "contradicted"
+                      },
+                      {
+                          "questionId":  "pizza-cc-007",
+                          "expectedVerdict":  "contradicted"
+                      },
+                      {
+                          "questionId":  "pizza-cc-008",
+                          "expectedVerdict":  "contradicted"
+                      },
+                      {
+                          "questionId":  "pizza-cc-009",
+                          "expectedVerdict":  "unknown"
+                      },
+                      {
+                          "questionId":  "pizza-cc-010",
+                          "expectedVerdict":  "contradicted"
+                      },
+                      {
+                          "questionId":  "pizza-cc-011",
+                          "expectedVerdict":  "out_of_scope"
+                      },
+                      {
+                          "questionId":  "pizza-oc-001",
+                          "expectedVerdict":  "supported"
+                      },
+                      {
+                          "questionId":  "pizza-oc-002",
+                          "expectedVerdict":  "supported"
+                      },
+                      {
+                          "questionId":  "pizza-oc-003",
+                          "expectedVerdict":  "supported"
+                      },
+                      {
+                          "questionId":  "pizza-oc-004",
+                          "expectedVerdict":  "supported"
+                      },
+                      {
+                          "questionId":  "pizza-oc-005",
+                          "expectedVerdict":  "supported"
+                      },
+                      {
+                          "questionId":  "pizza-oc-006",
+                          "expectedVerdict":  "supported"
+                      },
+                      {
+                          "questionId":  "pizza-oc-007",
+                          "expectedVerdict":  "supported"
+                      },
+                      {
+                          "questionId":  "pizza-os-001",
+                          "expectedVerdict":  "supported"
+                      },
+                      {
+                          "questionId":  "pizza-os-002",
+                          "expectedVerdict":  "supported"
+                      },
+                      {
+                          "questionId":  "pizza-os-003",
+                          "expectedVerdict":  "out_of_scope"
+                      },
+                      {
+                          "questionId":  "pizza-os-004",
+                          "expectedVerdict":  "out_of_scope"
+                      },
+                      {
+                          "questionId":  "pizza-os-005",
+                          "expectedVerdict":  "out_of_scope"
+                      },
+                      {
+                          "questionId":  "pizza-os-006",
+                          "expectedVerdict":  "out_of_scope"
+                      },
+                      {
+                          "questionId":  "pizza-os-007",
+                          "expectedVerdict":  "out_of_scope"
+                      }
+                  ],
+    "hpo-60":  [
+                   {
+                       "questionId":  "hpo-001",
+                       "expectedVerdict":  "supported"
+                   },
+                   {
+                       "questionId":  "hpo-002",
+                       "expectedVerdict":  "supported"
+                   },
+                   {
+                       "questionId":  "hpo-003",
+                       "expectedVerdict":  "supported"
+                   },
+                   {
+                       "questionId":  "hpo-004",
+                       "expectedVerdict":  "supported"
+                   },
+                   {
+                       "questionId":  "hpo-005",
+                       "expectedVerdict":  "supported"
+                   },
+                   {
+                       "questionId":  "hpo-006",
+                       "expectedVerdict":  "supported"
+                   },
+                   {
+                       "questionId":  "hpo-007",
+                       "expectedVerdict":  "supported"
+                   },
+                   {
+                       "questionId":  "hpo-008",
+                       "expectedVerdict":  "supported"
+                   },
+                   {
+                       "questionId":  "hpo-009",
+                       "expectedVerdict":  "supported"
+                   },
+                   {
+                       "questionId":  "hpo-010",
+                       "expectedVerdict":  "supported"
+                   },
+                   {
+                       "questionId":  "hpo-011",
+                       "expectedVerdict":  "supported"
+                   },
+                   {
+                       "questionId":  "hpo-012",
+                       "expectedVerdict":  "supported"
+                   },
+                   {
+                       "questionId":  "hpo-013",
+                       "expectedVerdict":  "supported"
+                   },
+                   {
+                       "questionId":  "hpo-014",
+                       "expectedVerdict":  "supported"
+                   },
+                   {
+                       "questionId":  "hpo-015",
+                       "expectedVerdict":  "supported"
+                   },
+                   {
+                       "questionId":  "hpo-016",
+                       "expectedVerdict":  "supported"
+                   },
+                   {
+                       "questionId":  "hpo-017",
+                       "expectedVerdict":  "supported"
+                   },
+                   {
+                       "questionId":  "hpo-018",
+                       "expectedVerdict":  "supported"
+                   },
+                   {
+                       "questionId":  "hpo-019",
+                       "expectedVerdict":  "supported"
+                   },
+                   {
+                       "questionId":  "hpo-020",
+                       "expectedVerdict":  "supported"
+                   },
+                   {
+                       "questionId":  "hpo-021",
+                       "expectedVerdict":  "supported"
+                   },
+                   {
+                       "questionId":  "hpo-022",
+                       "expectedVerdict":  "supported"
+                   },
+                   {
+                       "questionId":  "hpo-023",
+                       "expectedVerdict":  "supported"
+                   },
+                   {
+                       "questionId":  "hpo-024",
+                       "expectedVerdict":  "supported"
+                   },
+                   {
+                       "questionId":  "hpo-025",
+                       "expectedVerdict":  "supported"
+                   },
+                   {
+                       "questionId":  "hpo-026",
+                       "expectedVerdict":  "supported"
+                   },
+                   {
+                       "questionId":  "hpo-027",
+                       "expectedVerdict":  "supported"
+                   },
+                   {
+                       "questionId":  "hpo-028",
+                       "expectedVerdict":  "supported"
+                   },
+                   {
+                       "questionId":  "hpo-029",
+                       "expectedVerdict":  "supported"
+                   },
+                   {
+                       "questionId":  "hpo-030",
+                       "expectedVerdict":  "supported"
+                   },
+                   {
+                       "questionId":  "hpo-031",
+                       "expectedVerdict":  "supported"
+                   },
+                   {
+                       "questionId":  "hpo-032",
+                       "expectedVerdict":  "supported"
+                   },
+                   {
+                       "questionId":  "hpo-033",
+                       "expectedVerdict":  "supported"
+                   },
+                   {
+                       "questionId":  "hpo-034",
+                       "expectedVerdict":  "supported"
+                   },
+                   {
+                       "questionId":  "hpo-035",
+                       "expectedVerdict":  "supported"
+                   },
+                   {
+                       "questionId":  "hpo-036",
+                       "expectedVerdict":  "unknown"
+                   },
+                   {
+                       "questionId":  "hpo-037",
+                       "expectedVerdict":  "unknown"
+                   },
+                   {
+                       "questionId":  "hpo-038",
+                       "expectedVerdict":  "unknown"
+                   },
+                   {
+                       "questionId":  "hpo-039",
+                       "expectedVerdict":  "unknown"
+                   },
+                   {
+                       "questionId":  "hpo-040",
+                       "expectedVerdict":  "unknown"
+                   },
+                   {
+                       "questionId":  "hpo-041",
+                       "expectedVerdict":  "unknown"
+                   },
+                   {
+                       "questionId":  "hpo-042",
+                       "expectedVerdict":  "supported"
+                   },
+                   {
+                       "questionId":  "hpo-043",
+                       "expectedVerdict":  "unknown"
+                   },
+                   {
+                       "questionId":  "hpo-044",
+                       "expectedVerdict":  "unknown"
+                   },
+                   {
+                       "questionId":  "hpo-045",
+                       "expectedVerdict":  "unknown"
+                   },
+                   {
+                       "questionId":  "hpo-046",
+                       "expectedVerdict":  "unknown"
+                   },
+                   {
+                       "questionId":  "hpo-047",
+                       "expectedVerdict":  "unknown"
+                   },
+                   {
+                       "questionId":  "hpo-048",
+                       "expectedVerdict":  "unknown"
+                   },
+                   {
+                       "questionId":  "hpo-049",
+                       "expectedVerdict":  "unknown"
+                   },
+                   {
+                       "questionId":  "hpo-050",
+                       "expectedVerdict":  "unknown"
+                   },
+                   {
+                       "questionId":  "hpo-051",
+                       "expectedVerdict":  "out_of_scope"
+                   },
+                   {
+                       "questionId":  "hpo-052",
+                       "expectedVerdict":  "out_of_scope"
+                   },
+                   {
+                       "questionId":  "hpo-053",
+                       "expectedVerdict":  "out_of_scope"
+                   },
+                   {
+                       "questionId":  "hpo-054",
+                       "expectedVerdict":  "out_of_scope"
+                   },
+                   {
+                       "questionId":  "hpo-055",
+                       "expectedVerdict":  "out_of_scope"
+                   },
+                   {
+                       "questionId":  "hpo-056",
+                       "expectedVerdict":  "out_of_scope"
+                   },
+                   {
+                       "questionId":  "hpo-057",
+                       "expectedVerdict":  "out_of_scope"
+                   },
+                   {
+                       "questionId":  "hpo-058",
+                       "expectedVerdict":  "out_of_scope"
+                   },
+                   {
+                       "questionId":  "hpo-059",
+                       "expectedVerdict":  "out_of_scope"
+                   },
+                   {
+                       "questionId":  "hpo-060",
+                       "expectedVerdict":  "out_of_scope"
+                   }
+               ],
+    "mondo-60":  [
+                     {
+                         "questionId":  "mondo-001",
+                         "expectedVerdict":  "supported"
+                     },
+                     {
+                         "questionId":  "mondo-002",
+                         "expectedVerdict":  "supported"
+                     },
+                     {
+                         "questionId":  "mondo-003",
+                         "expectedVerdict":  "supported"
+                     },
+                     {
+                         "questionId":  "mondo-004",
+                         "expectedVerdict":  "supported"
+                     },
+                     {
+                         "questionId":  "mondo-005",
+                         "expectedVerdict":  "supported"
+                     },
+                     {
+                         "questionId":  "mondo-006",
+                         "expectedVerdict":  "supported"
+                     },
+                     {
+                         "questionId":  "mondo-007",
+                         "expectedVerdict":  "supported"
+                     },
+                     {
+                         "questionId":  "mondo-008",
+                         "expectedVerdict":  "supported"
+                     },
+                     {
+                         "questionId":  "mondo-009",
+                         "expectedVerdict":  "supported"
+                     },
+                     {
+                         "questionId":  "mondo-010",
+                         "expectedVerdict":  "supported"
+                     },
+                     {
+                         "questionId":  "mondo-011",
+                         "expectedVerdict":  "supported"
+                     },
+                     {
+                         "questionId":  "mondo-012",
+                         "expectedVerdict":  "supported"
+                     },
+                     {
+                         "questionId":  "mondo-013",
+                         "expectedVerdict":  "supported"
+                     },
+                     {
+                         "questionId":  "mondo-014",
+                         "expectedVerdict":  "supported"
+                     },
+                     {
+                         "questionId":  "mondo-015",
+                         "expectedVerdict":  "supported"
+                     },
+                     {
+                         "questionId":  "mondo-016",
+                         "expectedVerdict":  "supported"
+                     },
+                     {
+                         "questionId":  "mondo-017",
+                         "expectedVerdict":  "supported"
+                     },
+                     {
+                         "questionId":  "mondo-018",
+                         "expectedVerdict":  "supported"
+                     },
+                     {
+                         "questionId":  "mondo-019",
+                         "expectedVerdict":  "supported"
+                     },
+                     {
+                         "questionId":  "mondo-020",
+                         "expectedVerdict":  "supported"
+                     },
+                     {
+                         "questionId":  "mondo-021",
+                         "expectedVerdict":  "supported"
+                     },
+                     {
+                         "questionId":  "mondo-022",
+                         "expectedVerdict":  "supported"
+                     },
+                     {
+                         "questionId":  "mondo-023",
+                         "expectedVerdict":  "supported"
+                     },
+                     {
+                         "questionId":  "mondo-024",
+                         "expectedVerdict":  "supported"
+                     },
+                     {
+                         "questionId":  "mondo-025",
+                         "expectedVerdict":  "supported"
+                     },
+                     {
+                         "questionId":  "mondo-026",
+                         "expectedVerdict":  "supported"
+                     },
+                     {
+                         "questionId":  "mondo-027",
+                         "expectedVerdict":  "supported"
+                     },
+                     {
+                         "questionId":  "mondo-028",
+                         "expectedVerdict":  "supported"
+                     },
+                     {
+                         "questionId":  "mondo-029",
+                         "expectedVerdict":  "supported"
+                     },
+                     {
+                         "questionId":  "mondo-030",
+                         "expectedVerdict":  "supported"
+                     },
+                     {
+                         "questionId":  "mondo-031",
+                         "expectedVerdict":  "supported"
+                     },
+                     {
+                         "questionId":  "mondo-032",
+                         "expectedVerdict":  "supported"
+                     },
+                     {
+                         "questionId":  "mondo-033",
+                         "expectedVerdict":  "supported"
+                     },
+                     {
+                         "questionId":  "mondo-034",
+                         "expectedVerdict":  "supported"
+                     },
+                     {
+                         "questionId":  "mondo-035",
+                         "expectedVerdict":  "supported"
+                     },
+                     {
+                         "questionId":  "mondo-036",
+                         "expectedVerdict":  "unknown"
+                     },
+                     {
+                         "questionId":  "mondo-037",
+                         "expectedVerdict":  "unknown"
+                     },
+                     {
+                         "questionId":  "mondo-038",
+                         "expectedVerdict":  "unknown"
+                     },
+                     {
+                         "questionId":  "mondo-039",
+                         "expectedVerdict":  "unknown"
+                     },
+                     {
+                         "questionId":  "mondo-040",
+                         "expectedVerdict":  "unknown"
+                     },
+                     {
+                         "questionId":  "mondo-041",
+                         "expectedVerdict":  "unknown"
+                     },
+                     {
+                         "questionId":  "mondo-042",
+                         "expectedVerdict":  "unknown"
+                     },
+                     {
+                         "questionId":  "mondo-043",
+                         "expectedVerdict":  "unknown"
+                     },
+                     {
+                         "questionId":  "mondo-044",
+                         "expectedVerdict":  "unknown"
+                     },
+                     {
+                         "questionId":  "mondo-045",
+                         "expectedVerdict":  "unknown"
+                     },
+                     {
+                         "questionId":  "mondo-046",
+                         "expectedVerdict":  "unknown"
+                     },
+                     {
+                         "questionId":  "mondo-047",
+                         "expectedVerdict":  "unknown"
+                     },
+                     {
+                         "questionId":  "mondo-048",
+                         "expectedVerdict":  "unknown"
+                     },
+                     {
+                         "questionId":  "mondo-049",
+                         "expectedVerdict":  "unknown"
+                     },
+                     {
+                         "questionId":  "mondo-050",
+                         "expectedVerdict":  "unknown"
+                     },
+                     {
+                         "questionId":  "mondo-051",
+                         "expectedVerdict":  "out_of_scope"
+                     },
+                     {
+                         "questionId":  "mondo-052",
+                         "expectedVerdict":  "out_of_scope"
+                     },
+                     {
+                         "questionId":  "mondo-053",
+                         "expectedVerdict":  "out_of_scope"
+                     },
+                     {
+                         "questionId":  "mondo-054",
+                         "expectedVerdict":  "out_of_scope"
+                     },
+                     {
+                         "questionId":  "mondo-055",
+                         "expectedVerdict":  "out_of_scope"
+                     },
+                     {
+                         "questionId":  "mondo-056",
+                         "expectedVerdict":  "out_of_scope"
+                     },
+                     {
+                         "questionId":  "mondo-057",
+                         "expectedVerdict":  "out_of_scope"
+                     },
+                     {
+                         "questionId":  "mondo-058",
+                         "expectedVerdict":  "out_of_scope"
+                     },
+                     {
+                         "questionId":  "mondo-059",
+                         "expectedVerdict":  "out_of_scope"
+                     },
+                     {
+                         "questionId":  "mondo-060",
+                         "expectedVerdict":  "out_of_scope"
+                     }
+                 ],
+    "sosa-84":  [
+                    {
+                        "questionId":  "sosa-sc-001",
+                        "expectedVerdict":  "unknown"
+                    },
+                    {
+                        "questionId":  "sosa-sc-002",
+                        "expectedVerdict":  "unknown"
+                    },
+                    {
+                        "questionId":  "sosa-sc-003",
+                        "expectedVerdict":  "unknown"
+                    },
+                    {
+                        "questionId":  "sosa-sc-004",
+                        "expectedVerdict":  "unknown"
+                    },
+                    {
+                        "questionId":  "sosa-sc-005",
+                        "expectedVerdict":  "unknown"
+                    },
+                    {
+                        "questionId":  "sosa-sc-006",
+                        "expectedVerdict":  "unknown"
+                    },
+                    {
+                        "questionId":  "sosa-sc-007",
+                        "expectedVerdict":  "unknown"
+                    },
+                    {
+                        "questionId":  "sosa-sc-008",
+                        "expectedVerdict":  "out_of_scope"
+                    },
+                    {
+                        "questionId":  "sosa-sc-009",
+                        "expectedVerdict":  "out_of_scope"
+                    },
+                    {
+                        "questionId":  "sosa-ec-001",
+                        "expectedVerdict":  "supported"
+                    },
+                    {
+                        "questionId":  "sosa-ec-002",
+                        "expectedVerdict":  "supported"
+                    },
+                    {
+                        "questionId":  "sosa-ec-003",
+                        "expectedVerdict":  "unknown"
+                    },
+                    {
+                        "questionId":  "sosa-ec-004",
+                        "expectedVerdict":  "unknown"
+                    },
+                    {
+                        "questionId":  "sosa-ec-005",
+                        "expectedVerdict":  "unknown"
+                    },
+                    {
+                        "questionId":  "sosa-ec-006",
+                        "expectedVerdict":  "unknown"
+                    },
+                    {
+                        "questionId":  "sosa-ec-007",
+                        "expectedVerdict":  "unknown"
+                    },
+                    {
+                        "questionId":  "sosa-ec-008",
+                        "expectedVerdict":  "out_of_scope"
+                    },
+                    {
+                        "questionId":  "sosa-ec-009",
+                        "expectedVerdict":  "out_of_scope"
+                    },
+                    {
+                        "questionId":  "sosa-dc-001",
+                        "expectedVerdict":  "unknown"
+                    },
+                    {
+                        "questionId":  "sosa-dc-002",
+                        "expectedVerdict":  "unknown"
+                    },
+                    {
+                        "questionId":  "sosa-dc-003",
+                        "expectedVerdict":  "unknown"
+                    },
+                    {
+                        "questionId":  "sosa-dc-004",
+                        "expectedVerdict":  "unknown"
+                    },
+                    {
+                        "questionId":  "sosa-dc-005",
+                        "expectedVerdict":  "unknown"
+                    },
+                    {
+                        "questionId":  "sosa-dc-006",
+                        "expectedVerdict":  "unknown"
+                    },
+                    {
+                        "questionId":  "sosa-dc-007",
+                        "expectedVerdict":  "unknown"
+                    },
+                    {
+                        "questionId":  "sosa-dc-008",
+                        "expectedVerdict":  "out_of_scope"
+                    },
+                    {
+                        "questionId":  "sosa-dc-009",
+                        "expectedVerdict":  "out_of_scope"
+                    },
+                    {
+                        "questionId":  "sosa-im-001",
+                        "expectedVerdict":  "supported"
+                    },
+                    {
+                        "questionId":  "sosa-im-002",
+                        "expectedVerdict":  "out_of_scope"
+                    },
+                    {
+                        "questionId":  "sosa-im-003",
+                        "expectedVerdict":  "unknown"
+                    },
+                    {
+                        "questionId":  "sosa-im-004",
+                        "expectedVerdict":  "unknown"
+                    },
+                    {
+                        "questionId":  "sosa-im-005",
+                        "expectedVerdict":  "unknown"
+                    },
+                    {
+                        "questionId":  "sosa-im-006",
+                        "expectedVerdict":  "unknown"
+                    },
+                    {
+                        "questionId":  "sosa-im-007",
+                        "expectedVerdict":  "unknown"
+                    },
+                    {
+                        "questionId":  "sosa-im-008",
+                        "expectedVerdict":  "out_of_scope"
+                    },
+                    {
+                        "questionId":  "sosa-im-009",
+                        "expectedVerdict":  "out_of_scope"
+                    },
+                    {
+                        "questionId":  "sosa-op-001",
+                        "expectedVerdict":  "unknown"
+                    },
+                    {
+                        "questionId":  "sosa-op-002",
+                        "expectedVerdict":  "unknown"
+                    },
+                    {
+                        "questionId":  "sosa-op-003",
+                        "expectedVerdict":  "unknown"
+                    },
+                    {
+                        "questionId":  "sosa-op-004",
+                        "expectedVerdict":  "unknown"
+                    },
+                    {
+                        "questionId":  "sosa-op-005",
+                        "expectedVerdict":  "unknown"
+                    },
+                    {
+                        "questionId":  "sosa-op-006",
+                        "expectedVerdict":  "unknown"
+                    },
+                    {
+                        "questionId":  "sosa-op-007",
+                        "expectedVerdict":  "unknown"
+                    },
+                    {
+                        "questionId":  "sosa-op-008",
+                        "expectedVerdict":  "out_of_scope"
+                    },
+                    {
+                        "questionId":  "sosa-op-009",
+                        "expectedVerdict":  "out_of_scope"
+                    },
+                    {
+                        "questionId":  "sosa-dp-001",
+                        "expectedVerdict":  "unknown"
+                    },
+                    {
+                        "questionId":  "sosa-dp-002",
+                        "expectedVerdict":  "contradicted"
+                    },
+                    {
+                        "questionId":  "sosa-dp-003",
+                        "expectedVerdict":  "unknown"
+                    },
+                    {
+                        "questionId":  "sosa-dp-004",
+                        "expectedVerdict":  "contradicted"
+                    },
+                    {
+                        "questionId":  "sosa-dp-005",
+                        "expectedVerdict":  "unknown"
+                    },
+                    {
+                        "questionId":  "sosa-dp-006",
+                        "expectedVerdict":  "contradicted"
+                    },
+                    {
+                        "questionId":  "sosa-dp-007",
+                        "expectedVerdict":  "unknown"
+                    },
+                    {
+                        "questionId":  "sosa-dp-008",
+                        "expectedVerdict":  "out_of_scope"
+                    },
+                    {
+                        "questionId":  "sosa-dp-009",
+                        "expectedVerdict":  "out_of_scope"
+                    },
+                    {
+                        "questionId":  "sosa-od-001",
+                        "expectedVerdict":  "unknown"
+                    },
+                    {
+                        "questionId":  "sosa-od-002",
+                        "expectedVerdict":  "unknown"
+                    },
+                    {
+                        "questionId":  "sosa-od-003",
+                        "expectedVerdict":  "unknown"
+                    },
+                    {
+                        "questionId":  "sosa-od-004",
+                        "expectedVerdict":  "unknown"
+                    },
+                    {
+                        "questionId":  "sosa-od-005",
+                        "expectedVerdict":  "unknown"
+                    },
+                    {
+                        "questionId":  "sosa-od-006",
+                        "expectedVerdict":  "unknown"
+                    },
+                    {
+                        "questionId":  "sosa-od-007",
+                        "expectedVerdict":  "unknown"
+                    },
+                    {
+                        "questionId":  "sosa-od-008",
+                        "expectedVerdict":  "out_of_scope"
+                    },
+                    {
+                        "questionId":  "sosa-od-009",
+                        "expectedVerdict":  "out_of_scope"
+                    },
+                    {
+                        "questionId":  "sosa-or-001",
+                        "expectedVerdict":  "unknown"
+                    },
+                    {
+                        "questionId":  "sosa-or-002",
+                        "expectedVerdict":  "unknown"
+                    },
+                    {
+                        "questionId":  "sosa-or-003",
+                        "expectedVerdict":  "unknown"
+                    },
+                    {
+                        "questionId":  "sosa-or-004",
+                        "expectedVerdict":  "unknown"
+                    },
+                    {
+                        "questionId":  "sosa-or-005",
+                        "expectedVerdict":  "unknown"
+                    },
+                    {
+                        "questionId":  "sosa-or-006",
+                        "expectedVerdict":  "unknown"
+                    },
+                    {
+                        "questionId":  "sosa-or-007",
+                        "expectedVerdict":  "unknown"
+                    },
+                    {
+                        "questionId":  "sosa-or-008",
+                        "expectedVerdict":  "out_of_scope"
+                    },
+                    {
+                        "questionId":  "sosa-or-009",
+                        "expectedVerdict":  "out_of_scope"
+                    },
+                    {
+                        "questionId":  "sosa-dd-001",
+                        "expectedVerdict":  "unknown"
+                    },
+                    {
+                        "questionId":  "sosa-dd-002",
+                        "expectedVerdict":  "unknown"
+                    },
+                    {
+                        "questionId":  "sosa-dd-003",
+                        "expectedVerdict":  "unknown"
+                    },
+                    {
+                        "questionId":  "sosa-dd-004",
+                        "expectedVerdict":  "unknown"
+                    },
+                    {
+                        "questionId":  "sosa-dd-005",
+                        "expectedVerdict":  "unknown"
+                    },
+                    {
+                        "questionId":  "sosa-dd-006",
+                        "expectedVerdict":  "unknown"
+                    },
+                    {
+                        "questionId":  "sosa-dd-007",
+                        "expectedVerdict":  "unknown"
+                    },
+                    {
+                        "questionId":  "sosa-dd-008",
+                        "expectedVerdict":  "out_of_scope"
+                    },
+                    {
+                        "questionId":  "sosa-dd-009",
+                        "expectedVerdict":  "out_of_scope"
+                    },
+                    {
+                        "questionId":  "sosa-dr-001",
+                        "expectedVerdict":  "supported"
+                    },
+                    {
+                        "questionId":  "sosa-dr-002",
+                        "expectedVerdict":  "supported"
+                    },
+                    {
+                        "questionId":  "sosa-dr-003",
+                        "expectedVerdict":  "out_of_scope"
+                    },
+                    {
+                        "questionId":  "sosa-dr-004",
+                        "expectedVerdict":  "out_of_scope"
+                    },
+                    {
+                        "questionId":  "sosa-dr-005",
+                        "expectedVerdict":  "out_of_scope"
+                    },
+                    {
+                        "questionId":  "sosa-dr-006",
+                        "expectedVerdict":  "out_of_scope"
+                    },
+                    {
+                        "questionId":  "sosa-dr-007",
+                        "expectedVerdict":  "out_of_scope"
+                    },
+                    {
+                        "questionId":  "sosa-dr-008",
+                        "expectedVerdict":  "out_of_scope"
+                    },
+                    {
+                        "questionId":  "sosa-dr-009",
+                        "expectedVerdict":  "out_of_scope"
+                    },
+                    {
+                        "questionId":  "sosa-lv-001",
+                        "expectedVerdict":  "contradicted"
+                    },
+                    {
+                        "questionId":  "sosa-lv-002",
+                        "expectedVerdict":  "contradicted"
+                    },
+                    {
+                        "questionId":  "sosa-lv-003",
+                        "expectedVerdict":  "contradicted"
+                    },
+                    {
+                        "questionId":  "sosa-lv-004",
+                        "expectedVerdict":  "contradicted"
+                    },
+                    {
+                        "questionId":  "sosa-lv-005",
+                        "expectedVerdict":  "supported"
+                    },
+                    {
+                        "questionId":  "sosa-lv-006",
+                        "expectedVerdict":  "contradicted"
+                    },
+                    {
+                        "questionId":  "sosa-lv-007",
+                        "expectedVerdict":  "contradicted"
+                    },
+                    {
+                        "questionId":  "sosa-lv-008",
+                        "expectedVerdict":  "supported"
+                    },
+                    {
+                        "questionId":  "sosa-lv-009",
+                        "expectedVerdict":  "supported"
+                    },
+                    {
+                        "questionId":  "sosa-cc-001",
+                        "expectedVerdict":  "unknown"
+                    },
+                    {
+                        "questionId":  "sosa-cc-002",
+                        "expectedVerdict":  "unknown"
+                    },
+                    {
+                        "questionId":  "sosa-cc-003",
+                        "expectedVerdict":  "unknown"
+                    },
+                    {
+                        "questionId":  "sosa-cc-004",
+                        "expectedVerdict":  "unknown"
+                    },
+                    {
+                        "questionId":  "sosa-cc-005",
+                        "expectedVerdict":  "unknown"
+                    },
+                    {
+                        "questionId":  "sosa-cc-006",
+                        "expectedVerdict":  "unknown"
+                    },
+                    {
+                        "questionId":  "sosa-cc-007",
+                        "expectedVerdict":  "unknown"
+                    },
+                    {
+                        "questionId":  "sosa-cc-008",
+                        "expectedVerdict":  "out_of_scope"
+                    },
+                    {
+                        "questionId":  "sosa-cc-009",
+                        "expectedVerdict":  "out_of_scope"
+                    },
+                    {
+                        "questionId":  "sosa-oc-001",
+                        "expectedVerdict":  "supported"
+                    },
+                    {
+                        "questionId":  "sosa-oc-002",
+                        "expectedVerdict":  "supported"
+                    },
+                    {
+                        "questionId":  "sosa-oc-003",
+                        "expectedVerdict":  "supported"
+                    },
+                    {
+                        "questionId":  "sosa-oc-004",
+                        "expectedVerdict":  "supported"
+                    },
+                    {
+                        "questionId":  "sosa-oc-005",
+                        "expectedVerdict":  "supported"
+                    },
+                    {
+                        "questionId":  "sosa-oc-006",
+                        "expectedVerdict":  "supported"
+                    },
+                    {
+                        "questionId":  "sosa-oc-007",
+                        "expectedVerdict":  "supported"
+                    },
+                    {
+                        "questionId":  "sosa-oc-008",
+                        "expectedVerdict":  "supported"
+                    },
+                    {
+                        "questionId":  "sosa-oc-009",
+                        "expectedVerdict":  "supported"
+                    },
+                    {
+                        "questionId":  "sosa-os-001",
+                        "expectedVerdict":  "supported"
+                    },
+                    {
+                        "questionId":  "sosa-os-002",
+                        "expectedVerdict":  "supported"
+                    },
+                    {
+                        "questionId":  "sosa-os-003",
+                        "expectedVerdict":  "out_of_scope"
+                    },
+                    {
+                        "questionId":  "sosa-os-004",
+                        "expectedVerdict":  "out_of_scope"
+                    },
+                    {
+                        "questionId":  "sosa-os-005",
+                        "expectedVerdict":  "out_of_scope"
+                    },
+                    {
+                        "questionId":  "sosa-os-006",
+                        "expectedVerdict":  "out_of_scope"
+                    },
+                    {
+                        "questionId":  "sosa-os-007",
+                        "expectedVerdict":  "out_of_scope"
+                    },
+                    {
+                        "questionId":  "sosa-os-008",
+                        "expectedVerdict":  "out_of_scope"
+                    },
+                    {
+                        "questionId":  "sosa-os-009",
+                        "expectedVerdict":  "out_of_scope"
+                    }
+                ],
+    "hpo-extra-20":  [
+                         {
+                             "questionId":  "hpo-ex-001",
+                             "expectedVerdict":  "unknown"
+                         },
+                         {
+                             "questionId":  "hpo-ex-002",
+                             "expectedVerdict":  "unknown"
+                         },
+                         {
+                             "questionId":  "hpo-ex-003",
+                             "expectedVerdict":  "unknown"
+                         },
+                         {
+                             "questionId":  "hpo-ex-004",
+                             "expectedVerdict":  "contradicted"
+                         },
+                         {
+                             "questionId":  "hpo-ex-005",
+                             "expectedVerdict":  "contradicted"
+                         },
+                         {
+                             "questionId":  "hpo-ex-006",
+                             "expectedVerdict":  "contradicted"
+                         },
+                         {
+                             "questionId":  "hpo-ex-007",
+                             "expectedVerdict":  "out_of_scope"
+                         },
+                         {
+                             "questionId":  "hpo-ex-008",
+                             "expectedVerdict":  "out_of_scope"
+                         },
+                         {
+                             "questionId":  "hpo-ex-009",
+                             "expectedVerdict":  "out_of_scope"
+                         },
+                         {
+                             "questionId":  "hpo-ex-010",
+                             "expectedVerdict":  "out_of_scope"
+                         },
+                         {
+                             "questionId":  "hpo-ex-011",
+                             "expectedVerdict":  "out_of_scope"
+                         },
+                         {
+                             "questionId":  "hpo-ex-012",
+                             "expectedVerdict":  "out_of_scope"
+                         },
+                         {
+                             "questionId":  "hpo-ex-013",
+                             "expectedVerdict":  "out_of_scope"
+                         },
+                         {
+                             "questionId":  "hpo-ex-014",
+                             "expectedVerdict":  "out_of_scope"
+                         },
+                         {
+                             "questionId":  "hpo-ex-015",
+                             "expectedVerdict":  "out_of_scope"
+                         },
+                         {
+                             "questionId":  "hpo-ex-016",
+                             "expectedVerdict":  "supported"
+                         },
+                         {
+                             "questionId":  "hpo-ex-017",
+                             "expectedVerdict":  "supported"
+                         },
+                         {
+                             "questionId":  "hpo-ex-018",
+                             "expectedVerdict":  "supported"
+                         },
+                         {
+                             "questionId":  "hpo-ex-019",
+                             "expectedVerdict":  "supported"
+                         },
+                         {
+                             "questionId":  "hpo-ex-020",
+                             "expectedVerdict":  "out_of_scope"
+                         }
+                     ],
+    "mondo-extra-20":  [
+                           {
+                               "questionId":  "mondo-ex-001",
+                               "expectedVerdict":  "unknown"
+                           },
+                           {
+                               "questionId":  "mondo-ex-002",
+                               "expectedVerdict":  "unknown"
+                           },
+                           {
+                               "questionId":  "mondo-ex-003",
+                               "expectedVerdict":  "supported"
+                           },
+                           {
+                               "questionId":  "mondo-ex-004",
+                               "expectedVerdict":  "contradicted"
+                           },
+                           {
+                               "questionId":  "mondo-ex-005",
+                               "expectedVerdict":  "contradicted"
+                           },
+                           {
+                               "questionId":  "mondo-ex-006",
+                               "expectedVerdict":  "contradicted"
+                           },
+                           {
+                               "questionId":  "mondo-ex-007",
+                               "expectedVerdict":  "out_of_scope"
+                           },
+                           {
+                               "questionId":  "mondo-ex-008",
+                               "expectedVerdict":  "out_of_scope"
+                           },
+                           {
+                               "questionId":  "mondo-ex-009",
+                               "expectedVerdict":  "out_of_scope"
+                           },
+                           {
+                               "questionId":  "mondo-ex-010",
+                               "expectedVerdict":  "out_of_scope"
+                           },
+                           {
+                               "questionId":  "mondo-ex-011",
+                               "expectedVerdict":  "out_of_scope"
+                           },
+                           {
+                               "questionId":  "mondo-ex-012",
+                               "expectedVerdict":  "out_of_scope"
+                           },
+                           {
+                               "questionId":  "mondo-ex-013",
+                               "expectedVerdict":  "out_of_scope"
+                           },
+                           {
+                               "questionId":  "mondo-ex-014",
+                               "expectedVerdict":  "out_of_scope"
+                           },
+                           {
+                               "questionId":  "mondo-ex-015",
+                               "expectedVerdict":  "out_of_scope"
+                           },
+                           {
+                               "questionId":  "mondo-ex-016",
+                               "expectedVerdict":  "out_of_scope"
+                           },
+                           {
+                               "questionId":  "mondo-ex-017",
+                               "expectedVerdict":  "out_of_scope"
+                           },
+                           {
+                               "questionId":  "mondo-ex-018",
+                               "expectedVerdict":  "out_of_scope"
+                           },
+                           {
+                               "questionId":  "mondo-ex-019",
+                               "expectedVerdict":  "supported"
+                           },
+                           {
+                               "questionId":  "mondo-ex-020",
+                               "expectedVerdict":  "supported"
+                           },
+                           {
+                               "questionId":  "mondo-ex-021",
+                               "expectedVerdict":  "supported"
+                           },
+                           {
+                               "questionId":  "mondo-ex-022",
+                               "expectedVerdict":  "out_of_scope"
+                           }
+                       ]
+}

@@ -1,5 +1,28 @@
 # Changelog
 
+## 0.9.0 - 2026-07-23
+
+### BREAKING CHANGES
+
+- **D4: `aggregateStatus` vocabulary change** — `AggregateAnswerStatus.VERIFIED` jsonName changed from `"verified"` to `"supported"` to maintain consistency with `Verdict.SUPPORTED`. The `verify_claims_batch` response field `aggregateStatus` now returns `"supported"` instead of `"verified"` when all required claims are supported. Downstream consumers checking `aggregateStatus == "verified"` MUST update to `aggregateStatus == "supported"`.
+- **D6: Out-of-scope pre-check dual check removed** — The claim-verification spec no longer requires entities to have explicit `Declaration` axioms; signature-only check (OR logic) is now the spec. Code already implemented OR logic; spec document was corrected to match. Entities referenced in axioms (e.g., SubClassOf) but without Declaration axioms now pass the scope pre-check.
+
+### Fixed
+
+- **D1: Per-ontology EntitySignatureCache (P0)** — Fixed cross-ontology cache eviction where loading large ontologies (HPO ~32K classes, Mondo ~30K classes) evicted small ontology entries (Pizza ~115 classes) from the global 50K-entry Caffeine cache, causing all 100 Pizza claims to return `out_of_scope`. Each `EntitySignatureCache` instance now holds its own Caffeine cache sized as `max(1000, classCount * 2)`, eliminating cross-ontology interference.
+- **D2: Precise cache invalidation on ontology reload** — `EntitySignatureCacheManager.onOntologyReloaded()` now calls `invalidate()` on the removed per-ontology instance only; other ontologies' caches remain intact. Removed redundant `EntitySignatureCache.invalidateAll()` static calls from `ReasonerServiceImpl` (per-ontology invalidation is handled by the manager listener).
+- **D3: Reserved predicate skip in detectMissingEntities (P1)** — `EvidenceGroundingService.detectMissingEntities()` no longer searches reserved structural keywords (e.g., `subClassOf`, `type`, `domain`) as property entities. Added `RESERVED_PREDICATES` constant set (21 OWL 2 axiom-type keywords). Predicates are only searched as property entities when they are IRIs (`http://` or `https://` prefix) and not in the reserved set.
+
+### Removed
+
+- **Public static API removal from `EntitySignatureCache`** — The following static methods were removed (replaced by per-instance methods): `invalidateAll()`, `put(kind, iri)`, `get(kind, iri)`, `stats()`, `estimatedSize()`, `cleanUp()`. Callers must use instance methods on `EntitySignatureCache` objects obtained from `EntitySignatureCacheManager`.
+
+### Added
+
+- `EntitySignatureCache.invalidate()` — per-instance method to clear this ontology's Caffeine cache.
+- `EntitySignatureCache.stats()`, `estimatedSize()`, `cleanUp()` — per-instance methods for per-ontology cache monitoring.
+- `EntitySignatureCacheManager.aggregatedStats()` — returns sum of `CacheStats` across all per-ontology instances for monitoring.
+
 ## 0.8.4 - 2026-07-11
 
 ### Added

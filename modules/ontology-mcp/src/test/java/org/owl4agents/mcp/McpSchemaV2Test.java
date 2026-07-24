@@ -174,7 +174,7 @@ class McpSchemaV2Test {
             assertEquals("claim-verification-result/2", result.get("schemaVersion"),
                 "serializeVerificationReport must include schemaVersion");
             assertEquals("test-answer", result.get("answerId"));
-            assertEquals("verified", result.get("aggregateStatus"));
+            assertEquals("supported", result.get("aggregateStatus"));
         }
 
         @Test

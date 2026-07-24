@@ -217,10 +217,10 @@ public class ReasonerServiceImpl implements ReasonerService, org.owl4agents.owla
         invalidateSourceConsistencyCache(ontologyId.id());
         // v0.8.5 P1: invalidate cached exact-check session for this ontology
         invalidateExactCheckSessionCache(ontologyId.id());
-        // v0.8.6 D4 task 5.3: invalidate the global EntitySignatureCache so
-        // stale entity IRIs from the old ontology version do not produce
-        // false-positive contains() results after reload.
-        EntitySignatureCache.invalidateAll();
+        // v0.9.0 D2: per-ontology EntitySignatureCache invalidation is handled
+        // by EntitySignatureCacheManager (registered as a reload listener in
+        // CliServiceFactory). No static invalidateAll() call here — that would
+        // wipe ALL ontologies' caches on a single-ontology reload.
     }
 
     @Override
@@ -231,10 +231,9 @@ public class ReasonerServiceImpl implements ReasonerService, org.owl4agents.owla
         sourceConsistencyCache.invalidateAll();
         // v0.8.5 P1: close all cached exact-check sessions
         closeAllExactCheckSessionCache();
-        // v0.8.6 D4 task 5.3: invalidate the global EntitySignatureCache so
-        // stale entity IRIs from the old ontologies do not produce
-        // false-positive contains() results after a full reload.
-        EntitySignatureCache.invalidateAll();
+        // v0.9.0 D2: per-ontology EntitySignatureCache invalidation is handled
+        // by EntitySignatureCacheManager.onAllOntologiesReloaded(). No static
+        // invalidateAll() call here.
     }
 
     @Override
@@ -1843,17 +1842,28 @@ public class ReasonerServiceImpl implements ReasonerService, org.owl4agents.owla
         // Override ELK to HermiT (small ontologies) or Openllet (large ontologies).
         // This override is Stage 4 only — Stage 3 (entailment) still uses the
         // claim-specified reasoner (ELK for fast subclass reasoning).
+        //
+        // v0.9.0 fix: For very large ontologies (>LARGE_ONTOLOGY_CLASS_THRESHOLD),
+        // Openllet is too slow (times out on 30K+ classes). Skip the override and
+        // keep ELK — ELK can still detect basic inconsistency (unsatisfiable classes),
+        // just not disjointness-based unsatisfiability. This is an acceptable tradeoff
+        // because Openllet would timeout anyway, producing no result.
         boolean d1Overridden = false;
         if ("ELK".equalsIgnoreCase(effectiveReasoner)) {
             int classCount = sourceOntology.getClassesInSignature().size();
-            String dlReasoner = (classCount > AutoReasonerSelector.LARGE_ONTOLOGY_CLASS_THRESHOLD)
-                ? "Openllet"
-                : "HermiT";
-            java.util.logging.Logger.getLogger(ReasonerServiceImpl.class.getName()).info(
-                "v0.8.8 D1: Stage 4 consistency check overriding reasoner from ELK to "
-                + dlReasoner + " for disjointness detection (classCount=" + classCount + ")");
-            effectiveReasoner = dlReasoner;
-            d1Overridden = true;
+            if (classCount > AutoReasonerSelector.LARGE_ONTOLOGY_CLASS_THRESHOLD) {
+                java.util.logging.Logger.getLogger(ReasonerServiceImpl.class.getName()).info(
+                    "v0.9.0: Stage 4 skipping DL reasoner override for large ontology "
+                    + "(classCount=" + classCount + " > " + AutoReasonerSelector.LARGE_ONTOLOGY_CLASS_THRESHOLD
+                    + "), keeping ELK to avoid Openllet timeout");
+            } else {
+                String dlReasoner = "HermiT";
+                java.util.logging.Logger.getLogger(ReasonerServiceImpl.class.getName()).info(
+                    "v0.8.8 D1: Stage 4 consistency check overriding reasoner from ELK to "
+                    + dlReasoner + " for disjointness detection (classCount=" + classCount + ")");
+                effectiveReasoner = dlReasoner;
+                d1Overridden = true;
+            }
         }
 
         // v0.8.5 P1: get or create cached exact-check session (base copy + reasoner).

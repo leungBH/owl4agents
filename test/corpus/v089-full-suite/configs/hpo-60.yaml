@@ -1,0 +1,9 @@
+name: hpo-60
+description: HPO ontology benchmark with 60 claims
+ontologyIds:
+  - hpo
+questionSetPath: d:/code/ARIS-owl4agents/owl4agents-v086/owl4agents/test/fixtures/v0.6/question-sets/hpo-60.jsonl
+reasoners:
+  - elk
+outputPath: d:/code/ARIS-owl4agents/owl4agents-v086/owl4agents/results/hpo-60-output.jsonl
+timeoutPerQuestion: 180

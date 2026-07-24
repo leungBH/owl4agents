@@ -11,7 +11,7 @@ Every workflow report MUST contain:
 | --- | --- |
 | `answerId` | Present, matches input `answerId` |
 | `ontologyId` | Present, matches the ontology used |
-| `aggregateStatus` | Present, one of: `invalid_input`, `contradicted`, `insufficient_evidence`, `out_of_scope`, `partially_verified`, `verified` |
+| `aggregateStatus` | Present, one of: `invalid_input`, `contradicted`, `insufficient_evidence`, `out_of_scope`, `partially_verified`, `supported` |
 | `claimResults` | Present, non-empty array |
 | `summary` | Present, contains verdict counts |
 
@@ -65,7 +65,7 @@ Every claim result MUST contain:
 
 ### v0.3 wrapped path (V05-WF-007)
 - Batch verdict for the wrapped claim matches v0.3 single-claim verdict for the same claim
-- `aggregateStatus` = `verified` (for supported claim)
+- `aggregateStatus` = `supported` (for supported claim)
 
 ## Evidence Context Assertions (V05-CTX-001)
 

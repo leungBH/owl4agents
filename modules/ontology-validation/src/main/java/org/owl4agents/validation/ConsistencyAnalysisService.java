@@ -16,6 +16,8 @@ import org.semanticweb.owlapi.search.EntitySearcher;
 import java.util.*;
 import java.util.stream.*;
 import java.nio.file.*;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 /**
  * Consistency-analysis service implementation.
@@ -23,6 +25,8 @@ import java.nio.file.*;
  * relation assertion checks, and ontology scope description.
  */
 public class ConsistencyAnalysisService {
+
+    private static final Logger LOG = Logger.getLogger(ConsistencyAnalysisService.class.getName());
 
     private final ReasonerLifecycleManager reasonerLifecycle;
     private final String workspaceBasePath;
@@ -501,12 +505,29 @@ public class ConsistencyAnalysisService {
             if (entitySignatureCacheManager != null) {
                 EntitySignatureCache cache = entitySignatureCacheManager.getOrCreate(ontologyId, ontology);
                 if (cache != null) {
-                    return cache.contains(kind, entityIRI);
+                    boolean found = cache.contains(kind, entityIRI);
+                    if (!found) {
+                        LOG.warning("isEntityDeclared CACHE MISS: ontology=" + ontologyId.id()
+                            + " kind=" + kind + " iri=" + entityIRI
+                            + " ontologyIRI=" + (ontology.getOntologyID().getOntologyIRI().isPresent()
+                                ? ontology.getOntologyID().getOntologyIRI().get().toString() : "(none)"));
+                    }
+                    return found;
+                } else {
+                    LOG.warning("isEntityDeclared cache NULL (build failed), falling back to stream scan: ontology="
+                        + ontologyId.id() + " iri=" + entityIRI);
                 }
             }
             // Fallback: v0.8.3 stream scan (deprecated constructors with manager=null)
-            return isEntityDeclaredStreamScan(ontology, entityIRI, kind);
+            boolean found = isEntityDeclaredStreamScan(ontology, entityIRI, kind);
+            if (!found) {
+                LOG.warning("isEntityDeclared STREAM SCAN MISS: ontology=" + ontologyId.id()
+                    + " kind=" + kind + " iri=" + entityIRI);
+            }
+            return found;
         } catch (Exception e) {
+            LOG.log(Level.WARNING, "isEntityDeclared exception for ontology=" + ontologyId.id()
+                + " iri=" + entityIRI, e);
             return false;
         }
     }
@@ -522,17 +543,22 @@ public class ConsistencyAnalysisService {
      * both Declaration axioms and the signature.</p>
      */
     private boolean isEntityDeclaredStreamScan(OWLOntology ontology, String entityIRI, String kind) {
-        // v0.8.4 R1 fix: OBO namespace check.
-        Optional<IRI> ontIriOpt = ontology.getOntologyID().getOntologyIRI();
-        if (ontIriOpt.isPresent()) {
-            String ontIriStr = ontIriOpt.get().toString();
-            if (ontIriStr.startsWith("http://purl.obolibrary.org/obo/") && ontIriStr.endsWith(".owl")) {
-                String fileName = ontIriStr.substring(ontIriStr.lastIndexOf('/') + 1);
-                String expectedPrefix = fileName.substring(0, fileName.length() - ".owl".length()).toUpperCase();
-                if (!entityIRI.contains("/" + expectedPrefix + "_")) {
-                    return false;
-                }
+        // v0.9.0 fix: RESTORED the OBO namespace prefix check with correct
+        // contains() logic (same fix as EntitySignatureCache.contains()).
+        // When the ontology has an OBO prefix (e.g., MONDO, HP), entities
+        // from other OBO namespaces (BFO_, RO_, IAO_, UBERON_, CL_) are
+        // rejected as out_of_scope. When oboPrefix is null (pizza, sosa),
+        // the check is skipped.
+        String oboPrefix = null;
+        if (ontology.getOntologyID().getOntologyIRI().isPresent()) {
+            String ontIri = ontology.getOntologyID().getOntologyIRI().get().toString();
+            if (ontIri.startsWith("http://purl.obolibrary.org/obo/") && ontIri.endsWith(".owl")) {
+                String fileName = ontIri.substring(ontIri.lastIndexOf('/') + 1);
+                oboPrefix = fileName.substring(0, fileName.length() - ".owl".length()).toUpperCase();
             }
+        }
+        if (oboPrefix != null && !entityIRI.contains("/" + oboPrefix + "_")) {
+            return false;
         }
 
         String k = kind == null ? "" : kind.toLowerCase().replace("_", "");

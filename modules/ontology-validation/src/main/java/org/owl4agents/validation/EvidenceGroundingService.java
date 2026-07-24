@@ -21,6 +21,24 @@ public class EvidenceGroundingService {
     private final ReasonerService reasonerService;
     private final ConsistencyAnalysisService consistencyService;
 
+    /**
+     * v0.9.0 D3 / task 4.1: Reserved structural keyword set for claim
+     * predicates. These short-form keywords (e.g., {@code "subClassOf"},
+     * {@code "type"}) represent OWL 2 axiom types, not ontology entities, and
+     * SHALL NOT be searched as property entities in
+     * {@link #detectMissingEntities(Claim)}. When the predicate is an IRI
+     * (starts with {@code http://} or {@code https://}) and is not in this
+     * set, it SHALL be searched as a property entity.
+     */
+    private static final Set<String> RESERVED_PREDICATES = Set.of(
+        "subClassOf", "equivalentClasses", "disjointClasses",
+        "subPropertyOf", "equivalentProperties", "propertyDisjointWith",
+        "type", "domain", "range", "inverseOf",
+        "hasKey", "hasValue", "allValuesFrom", "someValuesFrom",
+        "cardinality", "minCardinality", "maxCardinality",
+        "differentFrom", "sameAs", "propertyChainAxiom", "hasSelf"
+    );
+
     public EvidenceGroundingService(ReasonerService reasonerService,
                                      ConsistencyAnalysisService consistencyService) {
         this.reasonerService = reasonerService;
@@ -362,9 +380,14 @@ public class EvidenceGroundingService {
         checkEntity(claim.subject(), ontId, matched, ambiguous, missing, outOfScope);
         checkEntity(claim.object(), ontId, matched, ambiguous, missing, outOfScope);
 
-        // Check predicate if it looks like an entity IRI (not a reserved keyword)
+        // v0.9.0 D3 / task 4.2-4.3: Check predicate only when it is an IRI
+        // (starts with http:// or https://), is not an OWL builtin IRI, and is
+        // not a reserved structural keyword (e.g., "subClassOf", "type").
+        // Reserved keywords are claim structural fields, not ontology entities.
         if (claim.predicate() != null && !claim.predicate().isBlank()
-            && !claim.predicate().startsWith("http://www.w3.org/2002/07/owl#")) {
+            && (claim.predicate().startsWith("http://") || claim.predicate().startsWith("https://"))
+            && !claim.predicate().startsWith("http://www.w3.org/2002/07/owl#")
+            && !RESERVED_PREDICATES.contains(claim.predicate())) {
             // Treat predicate as a property entity
             MissingEntityResult.EntityMatch predicateMatch = checkPropertyEntity(claim.predicate(), ontId);
             classifyMatch(predicateMatch, matched, ambiguous, missing, outOfScope);

@@ -6,7 +6,9 @@ import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 import org.junit.jupiter.api.condition.DisabledIfSystemProperty;
+import org.owl4agents.core.OntologyId;
 import org.owl4agents.owlapi.EntitySignatureCache;
+import org.owl4agents.owlapi.EntitySignatureCacheManager;
 import org.semanticweb.owlapi.apibinding.OWLManager;
 import org.semanticweb.owlapi.model.OWLOntology;
 import org.semanticweb.owlapi.model.OWLOntologyManager;
@@ -21,108 +23,114 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 /**
- * v0.8.6 Section 5 / task 5.17: Long-running stability test that verifies
- * the cache governance fixes (P0-5) keep memory bounded under sustained
- * load. Exercises the previously-unbounded
- * {@link EntitySignatureCache} (now a global Caffeine LRU capped at 50K
- * entries per v0.8.6 D4).
+ * v0.8.6 Section 5 / task 5.17 (rewritten v0.9.0 D1 / task 6.4): Long-running
+ * stability test that verifies the per-ontology cache governance keeps memory
+ * bounded under sustained read load.
+ *
+ * <p><b>v0.9.0 D1 changes:</b> The old test inserted synthetic IRIs into the
+ * global static cache via {@code EntitySignatureCache.put()}. The per-ontology
+ * API no longer exposes {@code put()}/{@code get()} — entries are populated
+ * only via {@link EntitySignatureCache#build(OWLOntology)}. This rewritten test
+ * builds a per-ontology pizza cache via
+ * {@link EntitySignatureCacheManager#getOrCreate} and exercises the read path
+ * ({@code contains()}) under sustained load.</p>
  *
  * <p><b>Scenario:</b> 1000 simulated "claims" run sequentially. Each
- * iteration inserts 50 synthetic entity IRIs into the global signature
- * cache (50K total = exactly the cap) and performs a lookup. After all
- * iterations:
+ * iteration performs a {@code contains()} lookup (exercising the read path
+ * and driving hit/miss stats). After all iterations:
  * <ul>
- *   <li>{@link EntitySignatureCache#estimatedSize()} must be &le; 50_000.</li>
+ *   <li>Per-ontology {@link EntitySignatureCache#estimatedSize()} must be
+ *       bounded by {@code max(1000, classCount * 2)}.</li>
  *   <li>Used heap must be &lt; 50% of -Xmx4g (= 2 GiB).</li>
  * </ul>
  *
- * <p>The {@link org.owl4agents.reasoner.ReasonerLifecycleManager} LRU
- * (capped at 4) and {@code ReasonerServiceImpl.sourceConsistencyCache}
- * (capped at 200) are covered by unit tests 5.13-5.16 and 5.8
- * respectively; this acceptance test focuses on the end-to-end heap
- * stability guarantee under sustained load.</p>
- *
  * <p>Tagged {@code "acceptance"} and {@code @Timeout(1800)} (30 min) per
  * the task spec. Skipped when {@code skip.stability.test=true} system
- * property is set (for CI environments where a 30-min test is
- * impractical) or when the pizza ontology fixture is absent.</p>
+ * property is set or when the pizza ontology fixture is absent.</p>
  */
 @Tag("acceptance")
 @DisabledIfSystemProperty(named = "skip.stability.test", matches = "true")
-@DisplayName("v0.8.6 Section 5 / task 5.17: Long-running stability (cache governance)")
+@DisplayName("v0.8.6 Section 5 / task 5.17 (v0.9.0 D1): Long-running stability (per-ontology cache)")
 class LongRunningStabilityTest {
 
     private static final String PIZZA_PATH =
         "D:\\owl4agents\\data\\workspaces\\default\\ontologies\\pizza\\canonical\\ontology.owl";
+    private static final String PIZZA_NS = "http://www.co-ode.org/ontologies/pizza/pizza.owl#";
 
     private static final int CLAIM_COUNT = 1000;
-    private static final int SIGNATURE_INSERTS_PER_CLAIM = 50;
     private static final double HEAP_FRACTION_LIMIT = 0.50;
+
+    private EntitySignatureCacheManager manager;
 
     @AfterEach
     void cleanup() {
-        EntitySignatureCache.invalidateAll();
+        if (manager != null) {
+            manager.onAllOntologiesReloaded();
+        }
     }
 
     @Test
     @Timeout(value = 1800, unit = TimeUnit.SECONDS)
-    @DisplayName("1000 sequential claims keep signature cache bounded and heap < 50% of -Xmx4g")
+    @DisplayName("1000 sequential claims keep per-ontology cache bounded and heap < 50% of -Xmx4g")
     void cachesStayBoundedUnderSustainedLoad() throws Exception {
         Path pizza = Paths.get(PIZZA_PATH);
         assumeTrue(Files.exists(pizza),
             "Skipping: pizza ontology fixture not found at " + PIZZA_PATH);
 
         OWLOntology ontology = loadPizza(pizza);
-        assertTrue(ontology.getClassesInSignature().size() > 0,
+        int classCount = ontology.getClassesInSignature().size();
+        assertTrue(classCount > 0,
             "Pizza ontology must contain classes");
 
-        // Reset the global signature cache to a known-empty state.
-        EntitySignatureCache.invalidateAll();
+        // Build the per-ontology EntitySignatureCache via the manager.
+        manager = new EntitySignatureCacheManager();
+        OntologyId ontId = new OntologyId("pizza");
+        EntitySignatureCache cache = manager.getOrCreate(ontId, ontology);
+        assertTrue(cache != null, "Per-ontology cache must be built successfully");
 
-        // Build the EntitySignatureCache from pizza once (this populates the
-        // global Caffeine cache with pizza's ~115 class IRIs).
-        EntitySignatureCache.build(ontology);
-        long pizzaEntityCount = EntitySignatureCache.estimatedSize();
-        assertTrue(pizzaEntityCount > 0,
-            "Pizza signature must populate the cache");
+        // Verify pizza entities are in the cache.
+        assertTrue(cache.contains("class", PIZZA_NS + "Pizza"),
+            "Pizza class must be found in the per-ontology cache");
 
-        // 1000 simulated claims: each inserts 50 synthetic IRIs into the
-        // global signature cache (50K total = exactly the cache cap).
-        // Caffeine's W-TinyLFU must evict to keep size <= 50_000.
+        long initialSize = cache.estimatedSize();
+        assertTrue(initialSize > 0,
+            "Pizza signature must populate the per-ontology cache");
+
+        // 1000 simulated claims: each performs a contains() lookup to
+        // exercise the read path under sustained load.
         for (int i = 0; i < CLAIM_COUNT; i++) {
-            // Insert 50 synthetic class IRIs per claim.
-            for (int j = 0; j < SIGNATURE_INSERTS_PER_CLAIM; j++) {
-                String iri = "http://example.org/synthetic#" + i + "_" + j;
-                EntitySignatureCache.put("class", iri);
-            }
+            // Alternate between known entities (hits) and unknown entities (misses).
+            String knownIri = PIZZA_NS + "Pizza";
+            String unknownIri = "http://example.org/synthetic#" + i;
+            cache.contains("class", knownIri);
+            cache.contains("class", unknownIri);
 
-            // Periodic lookup to exercise the read path (drives hit/miss stats
-            // and forces Caffeine maintenance windows).
-            String lookupIri = "http://example.org/synthetic#" + (i / 2) + "_0";
-            EntitySignatureCache.get("class", lookupIri);
-
-            // Periodic cleanUp to let Caffeine run eviction maintenance.
-            // Without this, estimatedSize may temporarily report above the
-            // cap because eviction is asynchronous.
+            // Periodic cleanUp to let Caffeine run maintenance.
             if (i % 100 == 0) {
-                EntitySignatureCache.cleanUp();
+                cache.cleanUp();
             }
         }
 
         // === Final assertions ===
 
-        // Force Caffeine maintenance before checking the cap.
-        EntitySignatureCache.cleanUp();
-        long finalSignatureSize = EntitySignatureCache.estimatedSize();
-        assertTrue(finalSignatureSize <= 50_000,
-            "EntitySignatureCache must be capped at 50_000 after " + CLAIM_COUNT
-                + " claims (" + (CLAIM_COUNT * SIGNATURE_INSERTS_PER_CLAIM)
-                + " total inserts), but was " + finalSignatureSize);
+        // Force Caffeine maintenance before checking the size.
+        cache.cleanUp();
+        long finalSize = cache.estimatedSize();
+
+        // maxSize = max(1000, classCount * 2). Pizza has ~115 classes → maxSize = 1000.
+        // The cache should only contain pizza's entities (no synthetic inserts).
+        long expectedMaxSize = Math.max(1000, classCount * 2);
+        assertTrue(finalSize <= expectedMaxSize,
+            "Per-ontology cache must be bounded by max(1000, classCount*2) = " + expectedMaxSize
+                + " after " + CLAIM_COUNT + " claims, but was " + finalSize);
+
+        // Verify aggregatedStats works.
+        assertTrue(manager.aggregatedStats().requestCount() > 0,
+            "aggregatedStats() must report requests from the sustained load");
 
         // === Heap assertion: used heap must be < 50% of -Xmx4g (= 2 GiB) ===
-        // This is the primary stability guarantee from v0.8.6 Section 5.
         Runtime rt = Runtime.getRuntime();
-        long maxHeap = rt.maxMemory(); // -Xmx4g = ~4 GiB
+        long maxHeap = rt.maxMemory();
         long usedHeap = rt.totalMemory() - rt.freeMemory();
         double heapFraction = (double) usedHeap / maxHeap;
 

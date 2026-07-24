@@ -1,0 +1,9 @@
+name: sosa-84
+description: SOSA ontology benchmark with 126 claims covering all 14 claim types
+ontologyIds:
+  - sosa
+questionSetPath: d:/code/ARIS-owl4agents/owl4agents-v086/owl4agents/test/fixtures/v0.6/question-sets/sosa-84.jsonl
+reasoners:
+  - hermit
+outputPath: d:/code/ARIS-owl4agents/owl4agents-v086/owl4agents/results/v086/sosa-84-output.jsonl
+timeoutPerQuestion: 30

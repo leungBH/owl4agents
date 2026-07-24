@@ -1,0 +1,9 @@
+name: mondo-60
+description: Mondo ontology benchmark with 60 claims
+ontologyIds:
+  - mondo
+questionSetPath: d:/code/ARIS-owl4agents/owl4agents-v086/owl4agents/test/fixtures/v0.6/question-sets/mondo-60.jsonl
+reasoners:
+  - elk
+outputPath: d:/code/ARIS-owl4agents/owl4agents-v086/owl4agents/results/mondo-60-output.jsonl
+timeoutPerQuestion: 300

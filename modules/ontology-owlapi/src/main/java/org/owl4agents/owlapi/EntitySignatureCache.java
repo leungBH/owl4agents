@@ -21,6 +21,8 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 /**
  * Per-ontology cache of entity IRIs and asserted axiom indices.
@@ -34,32 +36,38 @@ import java.util.Set;
  * signature. Also builds SubClassOf and DisjointClasses indices for fast
  * asserted-axiom lookups in the claim verification hot path.</p>
  *
- * <p><b>v0.8.6 D4 (Cache Governance):</b> The four signature sets
- * ({@code declaredClassIRIs}, {@code declaredObjectPropertyIRIs},
- * {@code declaredDataPropertyIRIs}, {@code declaredIndividualIRIs}) were
- * migrated from unbounded {@link HashSet} to a single global bounded
- * Caffeine {@link Cache} ({@link #SIGNATURE_CACHE}). The cache is
- * <b>global</b> (single static instance, not per-ontology) — entity IRIs
- * from all loaded ontologies share the same 50K-entry LRU. With pizza +
- * HPO + Mondo loaded simultaneously, total class entries ≈ 62K which
- * exceeds 50K; Caffeine's W-TinyLFU eviction policy keeps hot entries
- * (e.g., pizza's actively-queried classes) while evicting cold ones.
- * Per-ontology structure ({@code oboPrefix}, {@code subClassOfIndex},
- * {@code disjointClassesIndex}) is retained on the instance.</p>
+ * <p><b>v0.9.0 D1 (Per-ontology Cache):</b> The signature storage was
+ * migrated from a single global static Caffeine cache to a
+ * <b>per-ontology</b> Caffeine {@link Cache} instance held by each
+ * {@code EntitySignatureCache} object. Each instance's cache is sized
+ * independently as {@code max(1000, classCount * 2)} so that loading large
+ * ontologies (e.g., HPO ~32K classes, Mondo ~30K classes) cannot evict
+ * entries from a small ontology's cache (e.g., Pizza ~115 classes). This
+ * fixes the v0.8.8 P0 regression where Pizza's 100 claims all returned
+ * {@code out_of_scope} because the global 50K-entry W-TinyLFU cache evicted
+ * Pizza's cold entries under HPO+Mondo pressure. Per-ontology structure
+ * ({@code oboPrefix}, {@code subClassOfIndex}, {@code disjointClassesIndex})
+ * is retained on the instance.</p>
  */
 public final class EntitySignatureCache {
 
-    /** Kind tag for class IRIs in {@link #SIGNATURE_CACHE}. */
+    private static final Logger LOG = Logger.getLogger(EntitySignatureCache.class.getName());
+
+    /** Kind tag for class IRIs in {@link #signatureCache}. */
     private static final String KIND_CLASS = "class";
-    /** Kind tag for object property IRIs in {@link #SIGNATURE_CACHE}. */
+    /** Kind tag for object property IRIs in {@link #signatureCache}. */
     private static final String KIND_OBJ_PROP = "objprop";
-    /** Kind tag for data property IRIs in {@link #SIGNATURE_CACHE}. */
+    /** Kind tag for data property IRIs in {@link #signatureCache}. */
     private static final String KIND_DATA_PROP = "dataprop";
-    /** Kind tag for individual IRIs in {@link #SIGNATURE_CACHE}. */
+    /** Kind tag for individual IRIs in {@link #signatureCache}. */
     private static final String KIND_INDIVIDUAL = "individual";
 
+    /** Minimum cache capacity floor (ensures small ontologies still have headroom). */
+    private static final int MIN_CACHE_SIZE = 1000;
+
     /**
-     * v0.8.6 D4: Global bounded LRU cache for entity signature IRIs.
+     * v0.9.0 D1: Per-ontology bounded LRU cache for this ontology's entity
+     * signature IRIs.
      *
      * <p>Key format: {@code "<kind>|<iri>"} where {@code <kind>} is one of
      * {@code class}, {@code objprop}, {@code dataprop}, {@code individual}.
@@ -67,47 +75,50 @@ public final class EntitySignatureCache {
      *
      * <p>Configuration:
      * <ul>
-     *   <li>{@code maximumSize(50_000)} — bounds memory; with HPO (32K) +
-     *       Mondo (30K) + pizza (115) loaded simultaneously, the W-TinyLFU
-     *       policy retains hot entries.</li>
+     *   <li>{@code maximumSize(max(1000, classCount * 2))} — bounds memory
+     *       per ontology; scales with ontology size so all entities fit.</li>
      *   <li>{@code expireAfterAccess(2h)} — entries not accessed within 2h
-     *       are eligible for eviction (long-running benchmarks typically
-     *       complete in under 2h; stale entries after ontology reload are
-     *       invalidated explicitly via {@link #invalidateAll()}).</li>
-     *   <li>{@code recordStats()} — exposes hit rate, eviction count, etc.
-     *       via {@link #stats()} for the upcoming monitoring endpoint.</li>
+     *       are eligible for eviction.</li>
+     *   <li>{@code recordStats()} — exposes per-ontology hit rate, eviction
+     *       count, etc. via {@link #stats()}.</li>
      * </ul>
      */
-    private static final Cache<String, Boolean> SIGNATURE_CACHE = Caffeine.newBuilder()
-        .maximumSize(50_000)
-        .expireAfterAccess(Duration.ofHours(2))
-        .recordStats()
-        .build();
+    private final Cache<String, Boolean> signatureCache;
 
     private final String oboPrefix;
     private final Map<String, Set<String>> subClassOfIndex;
     private final Map<String, Set<String>> disjointClassesIndex;
 
-    private EntitySignatureCache(String oboPrefix,
+    private EntitySignatureCache(Cache<String, Boolean> signatureCache,
+                                  String oboPrefix,
                                   Map<String, Set<String>> subClassOfIndex,
                                   Map<String, Set<String>> disjointClassesIndex) {
+        this.signatureCache = signatureCache;
         this.oboPrefix = oboPrefix;
         this.subClassOfIndex = subClassOfIndex;
         this.disjointClassesIndex = disjointClassesIndex;
     }
 
     public static EntitySignatureCache build(OWLOntology ontology) {
+        int classCount = ontology.getClassesInSignature(Imports.EXCLUDED).size();
+        int maxEntries = Math.max(MIN_CACHE_SIZE, classCount * 2);
+        Cache<String, Boolean> cache = Caffeine.newBuilder()
+            .maximumSize(maxEntries)
+            .expireAfterAccess(Duration.ofHours(2))
+            .recordStats()
+            .build();
+
         for (OWLDeclarationAxiom decl : ontology.getAxioms(AxiomType.DECLARATION, Imports.EXCLUDED)) {
             OWLEntity entity = decl.getEntity();
             String iri = entity.getIRI().toString();
             if (entity.isOWLClass()) {
-                putSignature(KIND_CLASS, iri);
+                putSignature(cache, KIND_CLASS, iri);
             } else if (entity.isOWLObjectProperty()) {
-                putSignature(KIND_OBJ_PROP, iri);
+                putSignature(cache, KIND_OBJ_PROP, iri);
             } else if (entity.isOWLDataProperty()) {
-                putSignature(KIND_DATA_PROP, iri);
+                putSignature(cache, KIND_DATA_PROP, iri);
             } else if (entity.isOWLNamedIndividual()) {
-                putSignature(KIND_INDIVIDUAL, iri);
+                putSignature(cache, KIND_INDIVIDUAL, iri);
             }
         }
 
@@ -117,16 +128,16 @@ public final class EntitySignatureCache {
         // entities used in ClassAssertion, ObjectPropertyAssertion, SubClassOf,
         // etc. that lack explicit Declaration axioms.
         for (OWLClass cls : ontology.getClassesInSignature(Imports.EXCLUDED)) {
-            putSignature(KIND_CLASS, cls.getIRI().toString());
+            putSignature(cache, KIND_CLASS, cls.getIRI().toString());
         }
         for (OWLObjectProperty prop : ontology.getObjectPropertiesInSignature(Imports.EXCLUDED)) {
-            putSignature(KIND_OBJ_PROP, prop.getIRI().toString());
+            putSignature(cache, KIND_OBJ_PROP, prop.getIRI().toString());
         }
         for (OWLDataProperty prop : ontology.getDataPropertiesInSignature(Imports.EXCLUDED)) {
-            putSignature(KIND_DATA_PROP, prop.getIRI().toString());
+            putSignature(cache, KIND_DATA_PROP, prop.getIRI().toString());
         }
         for (OWLNamedIndividual ind : ontology.getIndividualsInSignature(Imports.EXCLUDED)) {
-            putSignature(KIND_INDIVIDUAL, ind.getIRI().toString());
+            putSignature(cache, KIND_INDIVIDUAL, ind.getIRI().toString());
         }
 
         String oboPrefix = null;
@@ -141,11 +152,19 @@ public final class EntitySignatureCache {
         Map<String, Set<String>> subClassOfIndex = buildSubClassOfIndex(ontology);
         Map<String, Set<String>> disjointClassesIndex = buildDisjointClassesIndex(ontology);
 
-        return new EntitySignatureCache(
+        EntitySignatureCache instance = new EntitySignatureCache(
+            cache,
             oboPrefix,
             Collections.unmodifiableMap(subClassOfIndex),
             Collections.unmodifiableMap(disjointClassesIndex)
         );
+        LOG.info("EntitySignatureCache built: oboPrefix=" + oboPrefix
+            + " cacheSize=" + cache.estimatedSize()
+            + " subClassOfEntries=" + subClassOfIndex.size()
+            + " disjointEntries=" + disjointClassesIndex.size()
+            + " ontologyIRI=" + (ontology.getOntologyID().getOntologyIRI().isPresent()
+                ? ontology.getOntologyID().getOntologyIRI().get().toString() : "(none)"));
+        return instance;
     }
 
     private static Map<String, Set<String>> buildSubClassOfIndex(OWLOntology ontology) {
@@ -181,6 +200,18 @@ public final class EntitySignatureCache {
     public boolean contains(String kind, String iri) {
         if (iri == null || iri.isBlank()) return false;
 
+        // v0.9.0 fix: RESTORED the oboPrefix check with correct contains()
+        // logic. The original check incorrectly used startsWith() on the full
+        // IRI, which rejected valid MONDO_/HP_ entities (their IRIs start with
+        // "http://", not "MONDO_"). The v0.9.0 "fix" removed the check entirely,
+        // which caused a regression: upper-level ontology entities (BFO_, RO_,
+        // IAO_, UBERON_, CL_) that appear in the ontology signature were
+        // incorrectly accepted, making claims that should be out_of_scope
+        // return supported/unknown/contradicted instead.
+        //
+        // The correct check uses contains("/" + oboPrefix + "_") to match
+        // OBO-style IRIs like http://purl.obolibrary.org/obo/MONDO_0000005.
+        // When oboPrefix is null (e.g., pizza, sosa), the check is skipped.
         if (oboPrefix != null && !iri.contains("/" + oboPrefix + "_")) {
             return false;
         }
@@ -198,6 +229,10 @@ public final class EntitySignatureCache {
         if (k.equals("individual") || k.isEmpty()) {
             if (getSignature(KIND_INDIVIDUAL, iri) != null) return true;
         }
+        if (LOG.isLoggable(Level.FINE)) {
+            LOG.fine("EntitySignatureCache.contains MISS: kind=" + kind + " iri=" + iri
+                + " oboPrefix=" + oboPrefix + " cacheSize=" + signatureCache.estimatedSize());
+        }
         return false;
     }
 
@@ -209,27 +244,28 @@ public final class EntitySignatureCache {
         return disjointClassesIndex.getOrDefault(classIRI, Collections.emptySet());
     }
 
-    // ── v0.8.6 D4: Global Caffeine cache helpers ────────────────────────
+    // ── v0.9.0 D1: Per-ontology Caffeine cache helpers ──────────────────
 
     /**
-     * Put a signature entry into the global cache.
+     * Put a signature entry into this ontology's cache.
      *
-     * @param kind one of {@code class}, {@code objprop}, {@code dataprop}, {@code individual}
-     * @param iri  the entity IRI
+     * @param cache the per-ontology cache instance
+     * @param kind  one of {@code class}, {@code objprop}, {@code dataprop}, {@code individual}
+     * @param iri   the entity IRI
      */
-    private static void putSignature(String kind, String iri) {
-        SIGNATURE_CACHE.put(cacheKey(kind, iri), Boolean.TRUE);
+    private static void putSignature(Cache<String, Boolean> cache, String kind, String iri) {
+        cache.put(cacheKey(kind, iri), Boolean.TRUE);
     }
 
     /**
-     * Get a signature entry from the global cache.
+     * Get a signature entry from this ontology's cache.
      *
      * @param kind one of {@code class}, {@code objprop}, {@code dataprop}, {@code individual}
      * @param iri  the entity IRI
      * @return {@link Boolean#TRUE} if present, {@code null} otherwise
      */
-    private static Boolean getSignature(String kind, String iri) {
-        return SIGNATURE_CACHE.getIfPresent(cacheKey(kind, iri));
+    private Boolean getSignature(String kind, String iri) {
+        return signatureCache.getIfPresent(cacheKey(kind, iri));
     }
 
     private static String cacheKey(String kind, String iri) {
@@ -237,74 +273,47 @@ public final class EntitySignatureCache {
     }
 
     /**
-     * v0.8.6 D4 / task 5.3: Invalidate all entries in the global signature
-     * cache. Called from {@link org.owl4agents.reasoner.ReasonerServiceImpl#onOntologyReloaded}
-     * and {@link org.owl4agents.reasoner.ReasonerServiceImpl#onAllOntologiesReloaded}
-     * to ensure stale entries (from a reloaded ontology) do not produce
-     * false-positive {@code contains} results.
+     * v0.9.0 D1: Invalidate all entries in this ontology's signature cache.
+     * Called from {@link EntitySignatureCacheManager#onOntologyReloaded} and
+     * {@link EntitySignatureCacheManager#onAllOntologiesReloaded} to ensure
+     * stale entries (from a reloaded ontology) do not produce false-positive
+     * {@code contains} results. Other ontologies' caches are unaffected.
      */
-    public static void invalidateAll() {
-        SIGNATURE_CACHE.invalidateAll();
+    public void invalidate() {
+        signatureCache.invalidateAll();
     }
 
     /**
-     * v0.8.6 D4 / task 5.4: Return aggregated {@link CacheStats} for the
-     * global signature cache. Exposed for the upcoming monitoring endpoint
-     * (v1.0.1) and for unit tests verifying hit rate and eviction count.
+     * v0.9.0 D1: Return per-ontology {@link CacheStats} for this ontology's
+     * signature cache. Exposed for monitoring and unit tests verifying hit
+     * rate and eviction count per ontology.
      *
-     * @return the current snapshot of cache statistics
+     * @return the current snapshot of this ontology's cache statistics
      */
-    public static CacheStats stats() {
-        return SIGNATURE_CACHE.stats();
+    public CacheStats stats() {
+        return signatureCache.stats();
     }
 
     /**
-     * v0.8.6 D4: Return the estimated size of the global signature cache.
-     * This is a near-O(1) approximation (Caffeine uses sampling). Used by
-     * unit tests to assert LRU eviction behavior.
+     * v0.9.0 D1: Return the estimated size of this ontology's signature
+     * cache. This is a near-O(1) approximation (Caffeine uses sampling). Used
+     * by unit tests to assert LRU eviction behavior per ontology.
      *
-     * @return the estimated number of entries currently in the cache
+     * @return the estimated number of entries currently in this ontology's cache
      */
-    public static long estimatedSize() {
-        return SIGNATURE_CACHE.estimatedSize();
+    public long estimatedSize() {
+        return signatureCache.estimatedSize();
     }
 
     /**
-     * v0.8.6 D4: Force Caffeine maintenance (including pending evictions)
-     * to run synchronously. Tests MUST call this before asserting on
-     * {@link #estimatedSize()} or {@link #stats()} because Caffeine's
-     * eviction is normally asynchronous — without {@code cleanUp()}, an
-     * over-capacity cache may still report {@code estimatedSize > maximumSize}.
+     * v0.9.0 D1: Force Caffeine maintenance (including pending evictions) to
+     * run synchronously for this ontology's cache. Tests MUST call this
+     * before asserting on {@link #estimatedSize()} or {@link #stats()}
+     * because Caffeine's eviction is normally asynchronous — without
+     * {@code cleanUp()}, an over-capacity cache may still report
+     * {@code estimatedSize > maximumSize}.
      */
-    public static void cleanUp() {
-        SIGNATURE_CACHE.cleanUp();
-    }
-
-    /**
-     * v0.8.6 D4: Public test/helper entry point for inserting a signature
-     * entry into the global cache. Used by LRU/stats unit tests to drive
-     * eviction and hit-rate assertions without loading an ontology. Also
-     * used by the v0.8.6 acceptance test (LongRunningStabilityTest) to
-     * simulate sustained cache load.
-     *
-     * @param kind one of {@code class}, {@code objprop}, {@code dataprop}, {@code individual}
-     * @param iri  the entity IRI
-     */
-    public static void put(String kind, String iri) {
-        putSignature(kind, iri);
-    }
-
-    /**
-     * v0.8.6 D4: Public test/helper entry point for reading a signature
-     * entry from the global cache. Used by stats unit tests to register
-     * hits/misses and by the v0.8.6 acceptance test to exercise the read
-     * path under sustained load.
-     *
-     * @param kind one of {@code class}, {@code objprop}, {@code dataprop}, {@code individual}
-     * @param iri  the entity IRI
-     * @return {@link Boolean#TRUE} if present, {@code null} otherwise
-     */
-    public static Boolean get(String kind, String iri) {
-        return getSignature(kind, iri);
+    public void cleanUp() {
+        signatureCache.cleanUp();
     }
 }

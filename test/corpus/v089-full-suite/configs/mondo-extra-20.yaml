@@ -1,0 +1,9 @@
+name: mondo-extra-20
+description: Mondo ontology extra claims with non-subclass types
+ontologyIds:
+  - mondo
+questionSetPath: d:/code/ARIS-owl4agents/owl4agents-v086/owl4agents/test/fixtures/v0.6/question-sets/mondo-extra-20.jsonl
+reasoners:
+  - elk
+outputPath: d:/code/ARIS-owl4agents/owl4agents-v086/owl4agents/results/mondo-extra-20-output.jsonl
+timeoutPerQuestion: 300
