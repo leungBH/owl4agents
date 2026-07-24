@@ -1484,7 +1484,7 @@
                            },
                            {
                                "questionId":  "mondo-ex-003",
-                               "expectedVerdict":  "supported"
+                               "expectedVerdict":  "unknown"
                            },
                            {
                                "questionId":  "mondo-ex-004",

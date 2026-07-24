@@ -33,7 +33,8 @@ test/corpus/benchmarks/ore/
 test/corpus/v086-repro/
 
 # Large ontology files that exceed GitHub's 100MB file size limit
-# Download manually from:
+# Git LFS is configured (.gitattributes) but LFS upload requires HTTPS
+# which is blocked in some environments. Download manually from:
 #   hp.owl:    https://github.com/obophenotype/human-phenotype-ontology/releases
 #   mondo.owl: https://github.com/monarch-initiative/mondo/releases
 test/corpus/v089-full-suite/ontologies/hp.owl

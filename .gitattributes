@@ -1,0 +1,2 @@
+test/corpus/v089-full-suite/ontologies/hp.owl filter=lfs diff=lfs merge=lfs -text
+test/corpus/v089-full-suite/ontologies/mondo.owl filter=lfs diff=lfs merge=lfs -text
