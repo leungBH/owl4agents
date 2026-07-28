@@ -58,6 +58,118 @@
 - `EntitySignatureCache.stats()`, `estimatedSize()`, `cleanUp()` — per-instance methods for per-ontology cache monitoring.
 - `EntitySignatureCacheManager.aggregatedStats()` — returns sum of `CacheStats` across all per-ontology instances for monitoring.
 
+## 0.8.8 - 2026-07-23
+
+### Fixed
+
+- **D1: Stage 4 forced DL profile reasoner (A1 fix)** — `ReasonerServiceImpl.checkConsistencyAfterAdding` now forces a full DL profile reasoner (HermiT for `classCount <= 20_000`, Openllet for larger ontologies) during Stage 4 exact consistency check, even when the claim specifies `reasoner=elk`. ELK (OWL 2 EL) cannot detect disjointness-based unsatisfiability. Stage 3 entailment check continues to use the claim-specified reasoner. Affects 6 HPO/Mondo `disjoint_classes` claims that previously returned UNKNOWN instead of CONTRADICTED.
+- **D2: Class satisfiability check (A2 fix)** — `ClaimVerificationService.verifyWith5StageFlow` now checks claim subject/object class satisfiability when Stage 4 returns CONSISTENT. When `O ∪ {α}` is consistent but a subject or object class became unsatisfiable (compared to `O`), verdict upgrades from UNKNOWN to CONTRADICTED. Satisfiability check reuses the `CachedExactCheckSession` reasoner (no reload). Affects 11 Pizza class-level claims (`pizza-sc-005~009`, `pizza-ec-005~007`, `pizza-dc-005~007`).
+- **D4: pizza-op-008 `CLAIM_CONSISTENCY_CHECK_FAILED`** — Fixed `object_property_assertion` (predicate=`subPropertyOf`) claim failing in Stage 4. Object properties are excluded from the D2 satisfiability check (properties have no satisfiability concept).
+
+### Changed
+
+- **D3: Verdict mapping extended to 3-state** — Stage 4 verdict mapping expanded from binary (CONSISTENT → UNKNOWN, INCONSISTENT → CONTRADICTED) to ternary: INCONSISTENT → CONTRADICTED; CONSISTENT + subject/object unsatisfiable → CONTRADICTED; CONSISTENT + all satisfiable → UNKNOWN. Satisfiability check only applies to `subclass`, `equivalent_classes`, and `disjoint_classes` claim types.
+- V086 repro package accuracy: 92.53% (359/388) → 97.42% (378/388). 18 code-fixable claims fixed (A1: 6, A2: 11, pizza-op-008: 1); remaining 10 require gold label confirmation (8 B1/B2/C1) or entity resolution fixes (2 C2).
+
+### Added
+
+- `OWLReasonerAdapter.isSatisfiable(OWLClassExpression)` — interface method for class satisfiability check.
+- `TransientReasonerSession.isSatisfiable(OWLClassExpression)` — delegates to underlying reasoner adapter.
+- `HermiTAdapter`, `OpenlletAdapter`, `ELKAdapter` — `isSatisfiable` implementations (ELK for API completeness; Stage 4 does not invoke ELK).
+- `ConsistencyAfterAdditionResult.unsatisfiableClasses` — field carrying unsatisfiable class IRIs from Stage 4 to `ClaimVerificationService`.
+- `SATISFIABILITY_CHECK` evidence kind — lists unsatisfiable class IRIs for CONTRADICTED verdicts from the satisfiability branch.
+
+## 0.8.7 - 2026-07-22
+
+### Added
+
+- **8 new readonly MCP tools** — Tool count increased from 56 to 64:
+  - SHACL validation (3): `ontology_validate_shacl`, `ontology_list_shape_sets`, `ontology_get_shape_set`
+  - ToolCall contracts (2): `ontology_get_tool_contract`, `ontology_list_tool_contracts`
+  - ToolCall validation pipeline (3): `ontology_validate_tool_call`, `ontology_explain_tool_call`, `ontology_preview_tool_call_effects`
+- **1 new write MCP tool** — `ontology_import` (enabled only with `--readonly=false`); accepts `content_base64` or `file_path`, 50MB size limit, path traversal protection, `allowed-roots` directory restriction. Write mode tool count: 65.
+- **3 new CLI commands** — Command count increased from 47 to 50: `shacl-validate`, `shacl-register`, `toolcall validate`.
+- **3 new Gradle modules** — `ontology-shacl` (Apache Jena SHACL 5.3.0 integration), `ontology-overlay` (TransientOntologyOverlayService), `ontology-toolcall` (ToolCall validation pipeline).
+- **SHACL validation** — `ShaclValidationService` interface with `validate(Model, Model, Options)` and `validateRegisteredShapes(shapeSetId, Model, Options)`. Unified `ShaclViolation` model (10 fields: violationId, sourceShape, sourceConstraintComponent, focusNode, resultPath, value, severity, message, evidenceTriples, repairHint). `ShapeRegistry` with trusted ShapeSet registration (SHA256 checksum, cache invalidation on file change). MCP tools accept only registered `shape_set_id` (no inline SHACL-SPARQL upload).
+- **TransientOntologyOverlayService** — Generalizes v0.8.5 `TemporaryOntologyFactory` for dynamic ABox overlay: `createOverlay(OntologyId, Collection<OWLAxiom>, OverlayOptions)`. Supports Turtle/JSON-LD/N-Triples and Java structured objects (`EnvironmentSnapshot`, `DeviceSnapshot`, `UserContext`, `ToolCallCandidate`) with equivalence guarantee. TOCTOU protection via snapshot version + state hash + 5s TTL.
+- **ToolCall data model** — `ToolCallCandidate`, `ToolContract` (JSON Schema + semantic contract), `ToolCallValidationReport` (schemaVersion, callId, executionStatus, decision, riskLevel, jsonSchemaViolations, owlClaimResults, shaclViolations, stateVersion, evidence, repairSpace, perStageTiming, totalMs). Decision enum: EXECUTE/AUTO_REPAIR/CLARIFY/REQUEST_CONFIRMATION/REJECT/RETRY_VALIDATION/SYSTEM_ERROR.
+- **10-stage ToolCall validation pipeline** — Parse → Load Contract → JSON Schema validation → Build transient overlay → OWL claim decomposition → OWL batch verification → SHACL validation → Risk evaluation → Decision → Structured report. Short-circuit strategy skips expensive stages on early errors. High-risk actions (`unlock_door`, `disable_alarm`, `turn_off_smoke_detector`, `activate_high_heat_device`, `open_garage_door`, `modify_security_camera`) force `REQUEST_CONFIRMATION` even when all stages pass.
+- **Claim decomposition** — One tool call decomposed into multiple semantic claims (target class, location, capability, permission, datatype). Reuses `ClaimWorkflowService.verifyBatch` for shared reasoner/ontology load. OWL claims handle class membership/capability inheritance/disjointness/inconsistency; SHACL handles closed-world constraints/cardinality/cross-field relations.
+- **`--readonly=false` opt-in write mode** — Removed CLI hard protection on `--readonly=false`; `McpServerAdapter` conditionally registers write tools. Default behavior unchanged (readonly). Startup stderr warning when write mode enabled.
+- **`IsolatedReasonerWorker`** — Independent JVM worker process for reasoner isolation on large ontologies (`owl4agents.reasoner.isolation.enabled=true`, default false). `ProcessBuilder` + stdin/stdout JSON communication; `destroyForcibly()` on timeout guarantees resource release.
+- **ADR-001** — Architecture decision record documenting runtime vs research repository boundary, dynamic state non-persistence, SHACL Shapes non-upload, MCP default readonly with opt-in write.
+
+### Changed
+
+- **`mcp-readonly-tools` spec** — "MCP write rejection" requirement relaxed: write calls rejected only in readonly mode; `--readonly=false` allows write tools. Default behavior unchanged.
+- `cli-interface` — New `shacl-validate`, `shacl-register`, `toolcall validate` commands delegating to shared service layer.
+- `reasoner-runtime` — Reasoner selection strategy documented: OWL 2 EL → ELK; OWL 2 DL → HermiT (small)/ELK (large, size-aware); Explanation → Openllet. Independent JVM worker for process-level isolation.
+- `cache-governance` — Dynamic ABox must not enter long-term `OntologyCache`; per-overlay isolation via independent `OWLOntologyManager`; same ontology different households isolated via `ontologyId` naming convention.
+
+## 0.8.6 - 2026-07-21
+
+### Fixed
+
+- **P0-1: Batch reasoner override ignored** — `executeVerifyClaimsBatch` now reads `args.get("reasoner")` and `args.get("options")` (with `options.reasoner` fallback), injecting the resolved reasoner into every `Claim` before calling `verifyBatch`. Priority: top-level `reasoner` > `options.reasoner` > claim-level `reasoner` > `auto`. Single-claim and batch paths share `resolveReasonerFromArgs()` helper.
+- **P0-2: AutoReasonerSelector OOM on large ontologies** — `AutoReasonerSelector.select()` gains `classCount` and `explicitOverride` parameters. When `classCount > 20_000` and profile is not OWL 2 EL, returns `"ELK"` first (ELK fails fast on non-EL axioms). `explicitOverride=true` bypasses size-aware branch (user accepts OOM risk). New error code `REASONER_EXPLANATION_UNSUPPORTED_FOR_LARGE_ONTOLOGY` when explanation requested on large ontologies.
+- **P0-3: Stage 2 source consistency check had no timeout** — `ReasonerServiceImpl.checkSourceOntologyConsistency` now wraps the reasoner call in `ReasonerCallWrapper.callWithElkFallback()` with 30s timeout + ELK fallback. Eliminates the Stage 2/Stage 4 timeout asymmetry.
+- **P0-4: OOM process unkillable** — Launch scripts (`owl4agents.bat`, `owl4agents.ps1`) and `shadowJar` manifest now hardcode `-XX:+ExitOnOutOfMemoryError -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=./owl4agents-heapdump.hprof`. JVM exits with code 3 on OOM; watchdog restarts cleanly.
+- **P0-5: Memory leak (49MB → 4.3GB in 6 minutes)** — `EntitySignatureCache` replaces unbounded `HashSet` with Caffeine `Cache` (`maximumSize=50_000`, `expireAfterAccess=2h`). `ReasonerLifecycleManager.activeReasoners` adds `maxActive=4` LRU eviction with reference counting (`inUseCount: Map<String, AtomicLong>`) — custom `evictIfFull()` disposes only eldest in-use-safe reasoner. HTTP session TTL reduced from 30 minutes to 5 minutes.
+- **P1-1: Benchmark requires server-local question set path** — `executeBenchmarkRun` accepts `question_set_content` inline arg; writes to temp file (`deleteOnExit`). `ExperimentConfigParser.parse()` gains `questionSetPathOverride` parameter. Error code transparency: preserves `QUESTION_SET_NOT_FOUND` instead of wrapping as `INVALID_EXPERIMENT_CONFIG`.
+- **P1-2: claimId/id field inconsistency** — `parseClaimFromMcpArgs` accepts both `claimId` (MCP single-claim) and `id` (question set files) as aliases. `claimId` takes precedence when both present. Error message clarifies the duality.
+- **P2-1: SERVER_VERSION hardcoded** — `McpServerAdapter.SERVER_VERSION` now read from JVM-standard jar manifest `Implementation-Version` (set by `shadowJar`/`jar` tasks to `project.version`). Falls back to `System.getProperty("owl4agents.version")` (gradle run/test/IDE), then `"0.8.6-dev"`.
+- **P2-2: Watchdog wrong memory percentage** — `watchdog-owl4agents.ps1` `Get-Owl4AgentsJava` rewritten to use `Get-CimInstance Win32_Process -Filter "Name = 'java.exe'"` (filtered at source) with `WorkingSet64` for accurate MB. Threshold: 3700MB (90% of 4GB heap).
+
+### Added
+
+- **`ReasonerCallWrapper`** — Unified wrapper for all reasoner calls (`checkSourceOntologyConsistency`, `checkAxiomEntailment`, `checkConsistencyAfterAdding`). Provides `Future.get(timeoutSec)` enforcement, `future.cancel(true)` on timeout, executor recovery (`shutdownNow()` + fresh `ThreadPoolExecutor` swap via `AtomicReference`), ELK fallback, and structured logging. Single-thread `SynchronousQueue` + `AbortPolicy` executor enforces strict serial execution (concurrent calls return `REASONER_BUSY`).
+- **Cache governance** — Caffeine LRU for `EntitySignatureCache` (50K entries, 2h TTL), `ReasonerLifecycleManager` (4 active reasoners with reference counting), source consistency cache (200 entries). All caches expose `stats()`.
+- New error codes: `REASONER_BUSY`, `REASONER_REJECTED_ONTOLOGY`, `REASONER_INTERNAL_ERROR`, `REASONER_INTERRUPTED`, `REASONER_EXPLANATION_UNSUPPORTED_FOR_LARGE_ONTOLOGY`.
+- `ReasonerCallMetadata` record (`reasonerName`, `fallbackFrom`, `executorRecovered`, `timeoutMs`) carried through `ServiceResult.metadata` → `ClaimVerificationResult.metadata` (last reasoner call wins).
+- `ServiceResult<T>` gains nullable `metadata` field; existing factory methods retained (produce `metadata = null`).
+- 8 new integration tests: `McpVerifyClaimsBatchReasonerOverrideTest`, `AutoReasonerSelectorLargeOntologyFallbackTest`, `ReasonerTimeoutProtectionTest`, `ServerKillableAfterOomTest`, `LongRunningStabilityTest`, `RemoteBenchmarkRunQuestionSetInlineTest`, `ClaimSchemaFieldNameAliasTest`, `VersionConsistencyTest`.
+- New dependency: `com.github.ben-manes.caffeine:caffeine:3.1.8` (explicit declaration; already transitive via OWL API).
+
+### Changed
+
+- `AutoReasonerSelector.select()` signature: 2-arg form deprecated (delegates with `classCount=0, explicitOverride=false`); new 4-arg form with size-aware ELK-first fallback.
+- `ReasonerLifecycleManager.activeReasoners`: unbounded `ConcurrentHashMap` → bounded `LinkedHashMap(accessOrder=true)` with `evictIfFull()` + `inUseCount` reference counting. `releaseReasoner(key)` called by caller in `finally` block.
+- `EntitySignatureCache`: unbounded `HashSet` → Caffeine `Cache<String, Boolean>` (50K entries, 2h expireAfterAccess, recordStats).
+- `build.gradle.kts` `shadowJar`/`jar` manifest: `Implementation-Version` + `JVM-Args` attributes. `test` task: `systemProperty("owl4agents.version", project.version)`.
+- v0.8.5 `checkConsistencyAfterAdding` ad-hoc `Future.get(timeout)` refactored to delegate to `ReasonerCallWrapper`.
+
+## 0.8.5 - 2026-07-14
+
+### BREAKING CHANGES
+
+- **CONTRADICTED requires exact consistency check** — `CONTRADICTED` verdicts MUST come from exact consistency check (`O ∪ {α} is inconsistent`) on an isolated temporary ontology. Structural proxies (e.g., `DisjointClasses` detection) become hints only (`STRUCTURAL_CONFLICT_HINT` evidence kind), never final verdicts. Claims like `C SubClassOf D` with `DisjointClasses(C,D)` but no individual witness now return UNKNOWN (previously CONTRADICTED).
+- **Result schema v1 → v2 (`claim-verification-result/2`)** — `verdict` field renamed to `semanticVerdict` (nullable when `executionStatus != COMPLETED`). New `executionStatus` field: `COMPLETED` / `TIMEOUT` / `ERROR`. New `errorCode` field (`Optional<ErrorCode>`, present when `executionStatus != COMPLETED`). New `perStageTiming` field (8-stage timing breakdown: axiomBuildMs, sourceConsistencyMs, entailmentMs, temporaryCopyMs, reasonerInitMs, consistencyCheckMs, explanationMs, totalMs). No automatic fallback to v1; all consumers must update.
+- **Timeout/error separated from UNKNOWN** — Reasoner timeouts and axiom-build failures MUST return `REASONER_TIMEOUT` / `CLAIM_CONSISTENCY_CHECK_FAILED` with `semanticVerdict = null`, no longer masked as `UNKNOWN`. Callers can now distinguish execution failures from semantic UNKNOWN.
+
+### Added
+
+- **5-stage verification flow** — Pipeline: (1) scope check → (2) source ontology consistency → (3) entailment (with asserted-axiom fast-path: if claim axiom α is in O's asserted axioms, return SUPPORTED without invoking reasoner) → (4) exact consistency after adding claim axiom → (5) final verdict. Each stage can short-circuit.
+- **`ClaimAxiomBuilder`** — Unified axiom construction for 12 axiom-backed claim types (SUBCLASS, EQUIVALENT_CLASSES, DISJOINT_CLASSES, INDIVIDUAL_MEMBERSHIP, OBJECT_PROPERTY_ASSERTION, DATA_PROPERTY_ASSERTION, OBJECT_PROPERTY_DOMAIN, OBJECT_PROPERTY_RANGE, DATA_PROPERTY_DOMAIN, DATA_PROPERTY_RANGE, DIFFERENT_INDIVIDUALS, OBJECT_PROPERTY_SUBPROPERTY). Same axiom instance used for both entailment and exact consistency check (guarantees `entailment axiom == exact consistency axiom`).
+- **`TemporaryOntologyFactory`** — Creates isolated temporary ontology using independent `OWLOntologyManager` (not shared). Includes imports closure of source ontology + claim axiom. Does not write to disk, register in main cache, or modify source ontology. Source axiom count and hash unchanged before/after check.
+- **`TransientReasonerSession`** — Disposable reasoner per exact check (not registered in main `ReasonerLifecycleManager`). Disposed in `finally` block on all paths: normal completion, exception, and timeout. Thread-safe disposal via `ReentrantLock` with `tryLock(timeout)`.
+- **`ReasonerService.checkConsistencyAfterAdding()`** — New method with timeout support via `Future.get(timeout)` + `ExecutorService` (platform threads, not virtual threads — HermiT/Openllet use `synchronized` blocks that pin carriers).
+- **Source ontology consistency cache** — Cache key: `ontologyId` + fingerprint (SHA-256) + reasoner name + imports state. Invalidated on ontology reload, checksum change, import/reasoner/workspace change. Reduces 388-claim batch source checks from 388 to ≤5.
+- **Reasoner capability matrix** — Each reasoner declares `supportsConsistency`, `supportsTemporaryOntology`, `supportsExplanation`, `supportedProfiles`. Auto-selection: OWL 2 DL → HermiT; explanation → Openllet; ELK only when profile/axiom support complete. Unsupported reasoner returns `PROFILE_NOT_SUPPORTED` (not UNKNOWN).
+- New error codes: `SOURCE_ONTOLOGY_INCONSISTENT`, `REASONER_TIMEOUT`, `CLAIM_AXIOM_BUILD_FAILED`, `CLAIM_CONSISTENCY_CHECK_FAILED`, `TEMPORARY_ONTOLOGY_CREATION_FAILED`, `TRANSIENT_REASONER_INIT_FAILED`.
+- New evidence kinds: `CONSISTENCY_REPORT` (CONTRADICTED — adding claim axiom makes ontology inconsistent), `INCONSISTENCY_JUSTIFICATION` (CONTRADICTED with Openllet explanation — conflict axiom set), `STRUCTURAL_CONFLICT_HINT` (proxy hints — explicitly not formal contradiction evidence).
+- Special claim type dispatch: `ONTOLOGY_CONSISTENCY` (bypasses source consistency precondition), `CLASS_COMPATIBILITY` (uses `isSatisfiable(C ⊓ D)` instead of exact consistency), `ONTOLOGY_SCOPE` / `LITERAL_VALIDITY` (unchanged).
+- 15 new semantic test fixtures covering disjoint with/without witness, empty class, existential with/without witness, negative membership, negative property assertion, equivalent-disjoint, source inconsistent, imports closure, timeout, data-property facet conflict, different-individuals witness, subproperty hierarchy conflict.
+- 388-claim final results output (`exact-results-388.jsonl`) with per-claim axiom, consistency status, verdict, reasoner, timing, fingerprint.
+- CLI `verify-claim` `--timeout <duration>` flag (e.g., `--timeout 30s`, `--timeout 2m`; default 60s).
+- JSON Schema: `docs/schemas/claim-verification-result-2.schema.json`.
+
+### Changed
+
+- `ClaimVerificationResult` record: `verdict` field type changed from `Verdict` (non-null) to `Optional<Verdict>` (nullable when `executionStatus != COMPLETED`). Added `executionStatus` (`ExecutionStatus` enum), `errorCode` (`Optional<ErrorCode>`), `perStageTiming` (`PerStageTiming` record with 8 fields).
+- `ClaimVerificationService` major refactor: 5-stage flow, `ClaimAxiomBuilder` integration, special type dispatch, timeout/error propagation.
+- CLI (`verify-claim`, `verify-answer`, `review-answer`, `evidence-context`), MCP (`verify` tool), and batch interfaces updated for schema v2 — identical verdicts, error codes, and evidence across all interfaces.
+- `evidence-grounding`: CONTRADICTED and UNKNOWN evidence structure updated for exact consistency semantics.
+
 ## 0.8.4 - 2026-07-11
 
 ### Added

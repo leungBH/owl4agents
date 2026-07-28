@@ -1,6 +1,6 @@
 # owl4agents — Features and Tool Reference
 
-> **Version:** v0.8.4 (released 2026-07-11, claim verification performance optimization: 7 decisions including EntitySignatureCache, per-request ontology single loading, asserted axiom indexing, inferred hierarchy index, OntologyCache TTL window).
+> **Version:** v0.9.1 (released 2026-07-24, project structure reorganization following CONVENTIONS.md; v0.8.7 added 8 readonly MCP tools bringing total to 64, plus 3 CLI commands bringing total to 50).
 > **Audience:** programmers who want to **use** owl4agents (CLI or MCP) and understand what each command / tool does, what it takes as input, and what it returns. We assume you're a CS graduate — comfortable with JSON, HTTP, regex, and reading API docs — but you may or may not have touched OWL or SPARQL before.
 > **Pair this with:** [README.md](../README.md) for the elevator pitch and 5-minute quick start. This file is the deep reference.
 
@@ -35,7 +35,7 @@
 This is a long reference, on purpose. You almost never need all of it; pick the section that matches what you're doing.
 
 - **First time here?** Read [§1](#1-owl-and-sparql-in-5-minutes--the-primer-you-actually-need) (OWL primer) and [§3](#3-a-real-walkthrough--load-an-ontology-ask-questions-verify-a-claim) (a real walkthrough) end to end. After that you can jump around.
-- **Driving owl4agents from the CLI?** Jump to [§4](#4-cli-reference--every-command-with-real-input-and-real-output). Every command has a "Run it" code block you can copy, and a "What you get" block showing the real output we got from a v0.8 server running on this repo.
+- **Driving owl4agents from the CLI?** Jump to [§4](#4-cli-reference--every-command-with-real-input-and-real-output). Every command has a "Run it" code block you can copy, and a "What you get" block showing the real output we got from a v0.9 server running on this repo.
 - **Driving owl4agents from an MCP client (Claude / Cursor / Trae / your own agent)?** Jump to [§5](#5-mcp-tool-reference--every-tool-with-real-json-rpc-request-and-response). Every tool has a sample JSON-RPC request and the matching response.
 - **Building an answer-verification pipeline?** §3 then [§6](#6-claim-verification-and-evidence-grounding--wiring-owl4agents-into-an-llm-answer-pipeline).
 - **Debugging an error?** [§9](#9-error-codes-troubleshooting-and-limits).
@@ -44,7 +44,7 @@ This is a long reference, on purpose. You almost never need all of it; pick the 
 
 **Conventions in this document**:
 
-- "We ran" or "Real output" means we executed the command on the actual owl4agents v0.8 jar against the actual fixture and pasted the output here (with one or two cosmetic line wraps).
+- "We ran" or "Real output" means we executed the command on the actual owl4agents v0.9 jar against the actual fixture and pasted the output here (with one or two cosmetic line wraps).
 - Code blocks in `json` are real request / response bodies. Code blocks in `powershell` or `bash` are real commands you can run.
 - `<like-this>` is a placeholder you should replace.
 
@@ -201,7 +201,7 @@ owl4agents is built as 11 Gradle modules. The first six implement the core domai
 |                                                                     |
 |  +-----------------------------+   +-----------------------------+  |
 |  | CLI layer (Picocli)         |   | MCP server (JSON-RPC + SSE) |  |
-|  | 47 subcommands              |   | 56 readonly tools           |  |
+|  | 50 subcommands              |   | 64 readonly tools           |  |
 |  +-------------+---------------+   +-------------+---------------+  |
 |                |                                 |                  |
 |                +-------------+-------------------+                  |
@@ -253,7 +253,7 @@ owl4agents is built as 11 Gradle modules. The first six implement the core domai
 | `ontology-retrieval` | Entity context, graph neighborhood, QA context builder | `EntityContextService`, `GraphNeighborhoodService`, `QaContextService` |
 | `ontology-validation` | Claim verification, literal validation, entailment, consistency analysis, evidence path, claim workflow, batch evidence context | `ClaimVerificationService`, `LiteralValidator`, `EntailmentChecker`, `ConsistencyAnalysisService`, `EvidenceGroundingService`, `ClaimWorkflowService`, `EvidenceContextBuilder`, `ClaimBatchValidator` |
 | `ontology-benchmark` | Benchmark runner, QA evaluator, batch context, question set validator | `BenchmarkService`, `QaEvaluationService`, `ContextBatchService`, `ExperimentConfigParser`, `BenchmarkQuestionSetValidator`, `BenchmarkReportGenerator` |
-| `ontology-cli` | Picocli command adapters (47 subcommands), mcp-config generator | `Owl4AgentsCli`, `McpCommand`, `ImportCommand`, `VerifyClaimCommand`, `McpConfigCommand` |
+| `ontology-cli` | Picocli command adapters (50 subcommands), mcp-config generator | `Owl4AgentsCli`, `McpCommand`, `ImportCommand`, `VerifyClaimCommand`, `McpConfigCommand` |
 | `ontology-mcp` | MCP server (stdio / HTTP / SSE), tool registry, call logger, session manager | `HttpMcpServer`, `McpServerAdapter`, `McpToolRegistry`, `McpSessionManager`, `McpToolCallLogger` |
 | `ontology-distribution` | Cross-version end-to-end acceptance (V01..V08) | `V03AcceptanceSuite`, `V04AcceptanceSuite`, ... |
 
@@ -679,7 +679,7 @@ Every cell above is documented in detail below.
 
 ## 4. CLI reference — every command, with real input and real output
 
-The CLI is a Picocli sub-command tree. The top-level command is the launcher `node tools/npm/bin/owl4agents.js <subcommand> [...]`; under it sit 47 subcommands. They group into 10 areas:
+The CLI is a Picocli sub-command tree. The top-level command is the launcher `node tools/npm/bin/owl4agents.js <subcommand> [...]`; under it sit 50 subcommands. They group into 10 areas:
 
 1. **Workspace & import** (1.1): `init`, `import`, `imports`, `list`, `summary`
 2. **Browse & search** (1.2): `search`, `entity`, `scope`
@@ -1509,11 +1509,12 @@ The MCP server exposes 56 readonly tools. They group into 8 categories (mirrorin
 3. **SPARQL** (5): `ontology_validate_sparql`, `ontology_sparql_select`, `ontology_sparql_ask`, `ontology_sparql_construct`, `ontology_sparql_describe`
 4. **QA context** (1): `ontology_get_qa_context`
 5. **Reasoner** (12): `ontology_list_reasoners`, `ontology_run_reasoner`, `ontology_classify`, `ontology_realize_instances`, `ontology_check_consistency`, `ontology_explain_inconsistency`, `ontology_explain_unsat_class`, `ontology_get_unsat_classes`, `ontology_get_reasoning_report`, `ontology_get_inferred_facts`, `ontology_check_entailment`, `ontology_check_class_compatibility`
-6. **Detailed entity inspection** (13): `ontology_check_individual_membership`, `ontology_check_relation_assertion`, `ontology_get_class_restrictions`, `ontology_get_property_characteristics`, `ontology_get_equivalent_properties`, `ontology_get_disjoint_properties`, `ontology_get_datatype_constraints`, `ontology_validate_literal`, `ontology_find_relations_between_entities`, `ontology_get_object_property_assertions`, `ontology_get_data_property_assertions`, `ontology_get_same_individuals`, `ontology_get_different_individuals` (13 here, total 56 after the rest)
+6. **Detailed entity inspection** (13): `ontology_check_individual_membership`, `ontology_check_relation_assertion`, `ontology_get_class_restrictions`, `ontology_get_property_characteristics`, `ontology_get_equivalent_properties`, `ontology_get_disjoint_properties`, `ontology_get_datatype_constraints`, `ontology_validate_literal`, `ontology_find_relations_between_entities`, `ontology_get_object_property_assertions`, `ontology_get_data_property_assertions`, `ontology_get_same_individuals`, `ontology_get_different_individuals`
 7. **Claim verification & evidence** (8): `ontology_verify_claim`, `ontology_get_evidence_path`, `ontology_find_counterexamples`, `ontology_explain_unknown`, `ontology_detect_missing_entities`, `ontology_verify_claims_batch`, `ontology_build_evidence_context`, `ontology_review_answer_claims`
 8. **Benchmark & evaluation** (3): `ontology_benchmark_run`, `ontology_eval_qa`, `ontology_context_batch`
+9. **SHACL & ToolCall validation** (8, added in v0.8.7): `ontology_validate_shacl`, `ontology_list_shape_sets`, `ontology_get_shape_set`, `ontology_get_tool_contract`, `ontology_list_tool_contracts`, `ontology_validate_tool_call`, `ontology_explain_tool_call`, `ontology_preview_tool_call_effects`
 
-Below: the full list of 56 with name, parameters, response shape, a real JSON-RPC request, and the matching real response. All examples are against the v0.8 server + `v03_demo` ontology from [§3](#3-a-real-walkthrough--load-an-ontology-ask-questions-verify-a-claim).
+Below: the full list of 64 with name, parameters, response shape, a real JSON-RPC request, and the matching real response. All examples are against the v0.9 server + `v03_demo` ontology from [§3](#3-a-real-walkthrough--load-an-ontology-ask-questions-verify-a-claim).
 
 ### 5.0 Common protocol shape
 
@@ -2505,7 +2506,7 @@ node tools/npm/bin/owl4agents.js mcp --readonly --transport http --port 8080 \
 | `--max-sse-connections` | 100 | Concurrent open SSE streams. (N+1)th returns 503 + `Retry-After: 30`. |
 | `--session-ttl-minutes` | 30 | Sessions whose `lastAccessAt` is older than this are swept. |
 | `--sse-heartbeat-seconds` | 15 | Keep-alive comment frame interval (RFC 8895). |
-| `--readonly` | off | The only safe mode. Hides nothing today (all 56 tools are readonly), but it's a contract for future writes. |
+| `--readonly` | off | The only safe mode. Hides nothing today (all 64 tools are readonly), but it's a contract for future writes. |
 | `--workspace` | `default` | Which workspace the server exposes. |
 | `--home` | `$OWL4AGENTS_HOME` or `~/.owl4agents` | Workspace root. |
 
@@ -2677,7 +2678,7 @@ Increase `--max-context-tokens`. In `jsonl` format, the per-line `truncated` fla
 - **No nominal reasoning at scale**: large nominal sets (e.g. `{a,b,c,d,...}` enumerations with thousands of elements) slow HermiT dramatically.
 - **Import path is local only**: `owl:imports` URIs must be resolvable to local files. Remote imports are not fetched.
 - **No versioning of ontologies**: re-importing the same `ontology_id` overwrites the previous one. Use `--force`.
-- **`--readonly` is contractual, not enforced** (today): all 56 tools are already read-only. The flag is a contract for future writes.
+- **`--readonly` is contractual, not enforced** (today): all 64 tools are already read-only. The flag is a contract for future writes.
 
 ---
 
@@ -2714,7 +2715,7 @@ After a clean v0.8 release, every one of the 56 MCP tools was called with a real
 - **Status `PASS`** — the response was a `success` result with the expected keys.
 - **Status `ISERR`** — the tool correctly returned an `isError: true` with a specific error code. This is **expected** behaviour for some tools when called on a particular ontology (e.g. `explain_inconsistency` on a consistent ontology returns `ONTOLOGY_CONSISTENT`; `find_counterexamples` on a supported claim returns `EVIDENCE_NOT_AVAILABLE`).
 
-`v0.8.0_56tool_scoreboard.csv` is the evidence that all 56 tools work.
+`v0.8.0_56tool_scoreboard.csv` is the evidence that all 56 v0.8.0 tools work; v0.8.7 added 8 more tools (SHACL, ToolCall, Pipeline) bringing the total to 64.
 
 ### 10.3 Reproducing the acceptance gate
 

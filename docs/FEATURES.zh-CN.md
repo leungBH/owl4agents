@@ -1,6 +1,6 @@
 # owl4agents — 功能与工具参考手册
 
-> **版本:** v0.8.4(发布于 2026-07-11,claim 验证性能优化:7 项决策包括 EntitySignatureCache、单次本体加载、断言公理索引、推理层次索引、OntologyCache TTL 窗口)。
+> **版本:** v0.9.1(发布于 2026-07-24,项目结构重组遵循 CONVENTIONS.md;v0.8.7 新增 8 个只读 MCP 工具,总数达 64,另新增 3 个 CLI 命令,总数达 50)。
 > **目标读者:** 想要**使用** owl4agents(CLI 或 MCP)、并希望了解每个命令/工具做什么、需要什么入参、返回什么结果的程序员。我们假设你是 CS 毕业生 —— 熟悉 JSON、HTTP、正则、能读 API 文档 —— 但 OWL 或 SPARQL 接触不接触都可以。
 > **配套阅读:** [README.zh-CN.md](../README.zh-CN.md) 用于电梯演讲和 5 分钟快速启动;本文是深度参考。
 
@@ -34,7 +34,7 @@
 这是一份故意写得很长的参考手册。你几乎不会需要它的全部;选最匹配你当前任务的章节就行。
 
 - **第一次看?** 通读 [§1](#1-5-分钟-owl-与-sparql-入门--你真正需要的预备知识)(OWL 入门)和 [§3](#3-真实走读--加载本体提问验证一条-claim)(真实走读)。之后就可以跳着看了。
-- **用 CLI 驱动 owl4agents?** 跳到 [§4](#4-cli-参考--每个命令带真实入参和真实输出)。每个命令都有可直接复制的"运行一下"代码块,以及一份"实际输出"展示我们在本仓库 v0.8 服务器上跑出的真实结果。
+- **用 CLI 驱动 owl4agents?** 跳到 [§4](#4-cli-参考--每个命令带真实入参和真实输出)。每个命令都有可直接复制的"运行一下"代码块,以及一份"实际输出"展示我们在本仓库 v0.9 服务器上跑出的真实结果。
 - **用 MCP 客户端(Claude / Cursor / Trae / 自研代理)驱动 owl4agents?** 跳到 [§5](#5-mcp-工具参考--每个工具带真实-json-rpc-请求和响应)。每个工具都有 JSON-RPC 请求样例和匹配的响应。
 - **搭建答案验证流水线?** 先看 §3,再 [§6](#6-claim-验证与证据落地--把-owl4agents-接入-llm-答案流水线)。
 - **调试错误?** [§9](#9-错误码故障排查与限制)。
@@ -43,7 +43,7 @@
 
 **本文档约定:**
 
-- "我们跑了"或"实际输出"意味着我们用真实的 owl4agents v0.8 jar 对真实 fixture 跑过命令,原样粘贴(可能有一两处换行美化)。
+- "我们跑了"或"实际输出"意味着我们用真实的 owl4agents v0.9 jar 对真实 fixture 跑过命令,原样粘贴(可能有一两处换行美化)。
 - `json` 代码块是真实的请求/响应体。`powershell` 或 `bash` 代码块是真实可执行的命令。
 - `<like-this>` 形如这种的是占位符,记得替换成你自己的值。
 
@@ -200,7 +200,7 @@ owl4agents 由 11 个 Gradle 模块构成。前 6 个实现核心域(storage、O
 |                                                                     |
 |  +-----------------------------+   +-----------------------------+  |
 |  | CLI 层 (Picocli)             |   | MCP 服务器 (JSON-RPC + SSE)|  |
-|  | 47 个子命令                   |   | 56 个只读工具              |  |
+|  | 50 个子命令                   |   | 64 个只读工具              |  |
 |  +-------------+---------------+   +-------------+---------------+  |
 |                |                                 |                  |
 |                +-------------+-------------------+                  |
@@ -252,7 +252,7 @@ owl4agents 由 11 个 Gradle 模块构成。前 6 个实现核心域(storage、O
 | `ontology-retrieval` | 实体 context、图邻居、QA context 构造 | `EntityContextService`、`GraphNeighborhoodService`、`QaContextService` |
 | `ontology-validation` | claim 验证、literal 校验、entailment、一致性分析、证据路径、claim 工作流、批量证据 context | `ClaimVerificationService`、`LiteralValidator`、`EntailmentChecker`、`ConsistencyAnalysisService`、`EvidenceGroundingService`、`ClaimWorkflowService`、`EvidenceContextBuilder`、`ClaimBatchValidator` |
 | `ontology-benchmark` | 基准运行器、QA 评估、批 context、问题集校验 | `BenchmarkService`、`QaEvaluationService`、`ContextBatchService`、`ExperimentConfigParser`、`BenchmarkQuestionSetValidator`、`BenchmarkReportGenerator` |
-| `ontology-cli` | Picocli 命令适配器(47 个子命令)、mcp-config 生成器 | `Owl4AgentsCli`、`McpCommand`、`ImportCommand`、`VerifyClaimCommand`、`McpConfigCommand` |
+| `ontology-cli` | Picocli 命令适配器(50 个子命令)、mcp-config 生成器 | `Owl4AgentsCli`、`McpCommand`、`ImportCommand`、`VerifyClaimCommand`、`McpConfigCommand` |
 | `ontology-mcp` | MCP 服务器(stdio / HTTP / SSE)、工具注册表、调用日志、会话管理 | `HttpMcpServer`、`McpServerAdapter`、`McpToolRegistry`、`McpSessionManager`、`McpToolCallLogger` |
 | `ontology-distribution` | 跨版本端到端验收(V01..V08) | `V03AcceptanceSuite`、`V04AcceptanceSuite`、... |
 
@@ -678,7 +678,7 @@ curl.exe -sS -X POST http://127.0.0.1:8091/mcp `
 
 ## 4. CLI 参考 —— 每个命令,带真实入参和真实输出
 
-CLI 是一个 Picocli 子命令树。顶层命令是 launcher `node tools/npm/bin/owl4agents.js <subcommand> [...]`;它下面挂着 47 个子命令,分为 10 大区:
+CLI 是一个 Picocli 子命令树。顶层命令是 launcher `node tools/npm/bin/owl4agents.js <subcommand> [...]`;它下面挂着 50 个子命令,分为 10 大区:
 
 1. **工作区与导入**(1.1):`init`、`import`、`imports`、`list`、`summary`
 2. **浏览与搜索**(1.2):`search`、`entity`、`scope`
@@ -1501,18 +1501,19 @@ node tools/npm/bin/owl4agents.js --help       # → 完整命令列表
 
 ## 5. MCP 工具参考 —— 每个工具,带真实 JSON-RPC 请求和响应
 
-MCP 服务器暴露 56 个只读工具,分为 8 个区(对应 v0.7 的 FEATURES.md 章节):
+MCP 服务器暴露 64 个只读工具,分为 9 个区(对应 v0.7 的 FEATURES.md 章节 + v0.8.7 新增):
 
 1. **元数据与浏览**(7):`ontology_list`、`ontology_summary`、`ontology_get_metadata`、`ontology_get_profile`、`ontology_list_graphs`、`ontology_get_imports`、`ontology_get_scope`
 2. **实体搜索与 context**(7):`ontology_search_entities`、`ontology_get_entity_context`、`ontology_get_class_context`、`ontology_get_object_property_context`、`ontology_get_data_property_context`、`ontology_get_individual_context`、`ontology_get_graph_neighborhood`
 3. **SPARQL**(5):`ontology_validate_sparql`、`ontology_sparql_select`、`ontology_sparql_ask`、`ontology_sparql_construct`、`ontology_sparql_describe`
 4. **QA context**(1):`ontology_get_qa_context`
 5. **推理机**(12):`ontology_list_reasoners`、`ontology_run_reasoner`、`ontology_classify`、`ontology_realize_instances`、`ontology_check_consistency`、`ontology_explain_inconsistency`、`ontology_explain_unsat_class`、`ontology_get_unsat_classes`、`ontology_get_reasoning_report`、`ontology_get_inferred_facts`、`ontology_check_entailment`、`ontology_check_class_compatibility`
-6. **详细实体检查**(13):`ontology_check_individual_membership`、`ontology_check_relation_assertion`、`ontology_get_class_restrictions`、`ontology_get_property_characteristics`、`ontology_get_equivalent_properties`、`ontology_get_disjoint_properties`、`ontology_get_datatype_constraints`、`ontology_validate_literal`、`ontology_find_relations_between_entities`、`ontology_get_object_property_assertions`、`ontology_get_data_property_assertions`、`ontology_get_same_individuals`、`ontology_get_different_individuals`(13 个,加上其它共 56)
+6. **详细实体检查**(13):`ontology_check_individual_membership`、`ontology_check_relation_assertion`、`ontology_get_class_restrictions`、`ontology_get_property_characteristics`、`ontology_get_equivalent_properties`、`ontology_get_disjoint_properties`、`ontology_get_datatype_constraints`、`ontology_validate_literal`、`ontology_find_relations_between_entities`、`ontology_get_object_property_assertions`、`ontology_get_data_property_assertions`、`ontology_get_same_individuals`、`ontology_get_different_individuals`
 7. **Claim 验证与证据**(8):`ontology_verify_claim`、`ontology_get_evidence_path`、`ontology_find_counterexamples`、`ontology_explain_unknown`、`ontology_detect_missing_entities`、`ontology_verify_claims_batch`、`ontology_build_evidence_context`、`ontology_review_answer_claims`
 8. **基准与评估**(3):`ontology_benchmark_run`、`ontology_eval_qa`、`ontology_context_batch`
+9. **SHACL 与 ToolCall 验证**(8,v0.8.7 新增):`ontology_validate_shacl`、`ontology_list_shape_sets`、`ontology_get_shape_set`、`ontology_get_tool_contract`、`ontology_list_tool_contracts`、`ontology_validate_tool_call`、`ontology_explain_tool_call`、`ontology_preview_tool_call_effects`
 
-下面:56 个工具的完整列表,包括名称、参数、响应形态、一条真实 JSON-RPC 请求和匹配的真实响应。例子都跑在 v0.8 服务器 + `v03_demo` 本体上(见 [§3](#3-真实走读--加载本体提问验证一条-claim))。
+下面:64 个工具的完整列表,包括名称、参数、响应形态、一条真实 JSON-RPC 请求和匹配的真实响应。例子都跑在 v0.9 服务器 + `v03_demo` 本体上(见 [§3](#3-真实走读--加载本体提问验证一条-claim))。
 
 ### 5.0 公共协议形态
 
@@ -2496,7 +2497,7 @@ node tools/npm/bin/owl4agents.js mcp --readonly --transport http --port 8080 \
 | `--max-sse-connections` | 100 | 同时打开的 SSE 流数量。第 101 个返回 503 + `Retry-After: 30`。 |
 | `--session-ttl-minutes` | 30 | `lastAccessAt` 超过这个时间的会话会被清扫。 |
 | `--sse-heartbeat-seconds` | 15 | keep-alive 注释帧间隔(RFC 8895)。 |
-| `--readonly` | off | 唯一安全的模式。今天还没"藏"什么工具(56 个都是只读),但这是为未来写入功能留的契约。 |
+| `--readonly` | off | 唯一安全的模式。今天还没"藏"什么工具(64 个都是只读),但这是为未来写入功能留的契约。 |
 | `--workspace` | `default` | 服务器暴露的工作区。 |
 | `--home` | `$OWL4AGENTS_HOME` 或 `~/.owl4agents` | 工作区根。 |
 
@@ -2668,7 +2669,7 @@ SELECT ?s WHERE { ?s <http://www.w3.org/2000/01/rdf-schema#subClassOf> <http://e
 - **大规模 nominal 推理不行**:大 nominal 集(例如 `{a,b,c,d,...}` 几千个元素的枚举)会让 HermiT 显著变慢。
 - **Import 路径仅本地**:`owl:imports` URI 必须能解析到本地文件。不抓取远程 import。
 - **本体无版本管理**:对同一个 `ontology_id` 重新 import 会覆盖前一个。用 `--force`。
-- **`--readonly` 是契约性而非强制的**(今天):56 个工具本来就只读。这个 flag 是为未来写入功能留的契约。
+- **`--readonly` 是契约性而非强制的**(今天):64 个工具本来就只读。这个 flag 是为未来写入功能留的契约。
 
 ---
 

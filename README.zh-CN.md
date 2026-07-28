@@ -2,15 +2,17 @@
 
 **本地 OWL 本体运行时、推理机集成、SPARQL 查询层,以及面向 LLM 代理的只读 MCP 服务器。**
 
-`owl4agents` 把一个装满 OWL/RDF 文件的目录变成可查询的本地知识库。它负责加载本体、运行 OWL 推理机(HermiT / ELK / Openllet)、执行 SPARQL,并把结果通过 56 个工具的只读 MCP 服务器暴露给任何 LLM 代理(Claude Desktop、Trae IDE、Cursor……),全程不离开本机。
+`owl4agents` 把一个装满 OWL/RDF 文件的目录变成可查询的本地知识库。它负责加载本体、运行 OWL 推理机(HermiT / ELK / Openllet)、执行 SPARQL,并把结果通过 64 个工具的只读 MCP 服务器暴露给任何 LLM 代理(Claude Desktop、Trae IDE、Cursor……),全程不离开本机。
 
-> **v0.8** 新增 MCP Streamable HTTP 传输(基于 `GET /mcp` 的 SSE、`Mcp-Session-Id` 往返、内容协商)。v0.7 的 plain-JSON HTTP 传输保留为无回归基线;stdio 和报文格式保持不变。
+> **v0.9.1** 重组项目结构以遵循 CONVENTIONS.md(合并 `doc/` 到 `docs/`、移动脚本到 `tools/`、清理 84 个根级日志文件和垃圾目录)。文档和配置中的文件引用全部更新。见 [CHANGELOG.md](CHANGELOG.md) §"0.9.1"。
 >
-> **v0.8.4**(推荐)优化 claim 验证性能,包含 7 项决策:推理机分类状态跟踪(跳过冗余 `precomputeInferences`)、profile 缓存、单次本体加载、`EntitySignatureCache` O(1) 实体签名查询、断言公理索引(SubClassOf + DisjointClasses)、内存推理层次索引、`OntologyCache` 5 秒 TTL 窗口。Pizza 热路径 ~85ms → ~30-40ms。见 [CHANGELOG.md](CHANGELOG.md) §"0.8.4"。
+> **v0.9.0** 修复 per-ontology `EntitySignatureCache` 跨本体驱逐(D1)、本体重载时精准缓存失效(D2)、实体检测中跳过保留谓词(D3)。Breaking change:`aggregateStatus` 词汇 `"verified"` → `"supported"`(D4);out-of-scope 预检查简化为 signature-only OR 逻辑(D6)。见 [CHANGELOG.md](CHANGELOG.md) §"0.9.0"。
 >
-> **v0.8.3** 修复 claim 验证中的 7 项语义准确度问题(R1, R2, R4-R7:OOS 预检查、矛盾代理、EquivalentClasses 复杂表达式、个体级不相交、属性层次、ObjectPropertyDomain 复杂 domain;D7:ClaimType 反序列化加固)——解决了升级包中的 9 个错误 claim。见 [CHANGELOG.md](CHANGELOG.md) §"0.8.3"。
+> **v0.8.7** 新增 8 个只读 MCP 工具(SHACL 验证、ToolCall 契约、Pipeline 验证),工具总数从 56 增至 64;新增 3 个 CLI 命令(`shacl-validate`、`shacl-register`、`toolcall-validate`),命令总数从 47 增至 50。见 [CHANGELOG.md](CHANGELOG.md) §"0.8.7"。
 >
-> **v0.8.1**修复 v0.8.0 的 5 个 claim verification 准确率缺陷(ISSUE-01…ISSUE-05)—— 见 [CHANGELOG.md](CHANGELOG.md) §"0.8.1"。80 个策展 claim 的准确率门禁从 75/80 提升到 80/80。新增两个 claim 类型(`different_individuals`、`object_property_subproperty`),并支持在 `subject` / `object` 上使用可选的 `expression` 字段表达复杂类表达式。
+> **v0.8.5** 用 exact consistency check(`O ∪ {α} is inconsistent`)替代结构代理判定。5 阶段流水线(scope → source consistency → entailment → exact consistency → verdict)对全部 15 个测试 fixture 产出语义正确的判定。Breaking change:`ClaimVerificationResult` schema v2 新增 `executionStatus`(COMPLETED/TIMEOUT/ERROR),`semanticVerdict` 可为 null。见 [MIGRATION.md](docs/MIGRATION.md) 的 v1 → v2 迁移指南。
+>
+> **v0.8.5 已知限制:** (1) Java interrupt 可能无法可靠地停止推理机超时 —— `future.cancel(true)` 中断线程,但 HermiT/ELK 可能在后台继续运行;未来可能使用独立 JVM worker 实现可靠取消。(2) Windows `parkNanos` 定时器精度约 1ms —— 亚毫秒级超时可能不可靠;使用 `Duration.ZERO` 实现立即超时。(3) ELK 推理机(OWL 2 EL)静默忽略 OWL 2 DL 构造如 `NegativeObjectPropertyAssertion` —— OWL 2 DL 本体请始终显式指定 HermiT。
 
 ---
 
@@ -44,14 +46,14 @@ OWL / RDF / Turtle 文件
         ▼
   owl4agents (Java 22 + OWL API + HermiT/ELK/Openllet + Jena ARQ)
         │
-        ├── CLI  (47 个命令: import、query、reason、verify-claim、……)
-        └── MCP  (56 个只读工具,支持 stdio、HTTP 或 SSE —— 禁止写入)
+        ├── CLI  (50 个命令: import、query、reason、verify-claim、shacl-validate、……)
+        └── MCP  (64 个只读工具,支持 stdio、HTTP 或 SSE —— 禁止写入)
 ```
 
 - **本地优先**: 所有数据在 `~/.owl4agents/workspaces/<name>/`;不上云,不打网络。
 - **可复现**: 推理机输出写入磁盘(`reasoning-report.json`、`inferred-class-hierarchy.jsonl` 等),同一本体的两次运行产出完全一致。
 - **可审计**: 每次 MCP 工具调用追加到 `mcp-tool-calls.jsonl`(原子 JSON 行)。
-- **默认只读安全**: MCP 服务器使用 `--readonly` 启动,只暴露 56 个读/验证工具。变更操作(import、delete)只通过 CLI 进行。
+- **默认只读安全**: MCP 服务器使用 `--readonly` 启动,只暴露 64 个读/验证工具。变更操作(import、delete)只通过 CLI 进行。
 - **标准协议**: MCP `2025-03-26` Streamable HTTP、JSON-RPC 2.0、SPARQL 1.1、OWL 2 (DL/EL/QL/RL)。
 
 ---
@@ -106,7 +108,7 @@ node tools/npm/bin/owl4agents.js query v03_demo `
 +--------------------+                            |  ┌────────┐  ┌────────┐   |
         │                                         |  │ CLI    |  │ MCP    |   |
         │  $env:OWL4AGENTS_HOME = ...             |  │(Picocli|  │(JSON-  |   |
-        ▼                                         |│  │ 47    │  │ RPC +  │   │|
+        ▼                                         |│  │ 50    │  │ RPC +  │   |
 ~/.owl4agents/workspaces/                          |  │ cmds)  |  │ SSE)   |   |
 └── default/                                       |  └───┬────┘  └───┬────┘   |
     ├── catalog.json                                |      │           │       |
@@ -139,7 +141,7 @@ node tools/npm/bin/owl4agents.js mcp-config --client generic
 # Cursor。
 node tools/npm/bin/owl4agents.js mcp-config --client cursor
 
-# Trae IDE —— 生成的配置 URL 以 /mcp 结尾,Trae 会向 v0.8 服务器
+# Trae IDE —— 生成的配置 URL 以 /mcp 结尾,Trae 会向 v0.9 服务器
 # 同时发出 POST /mcp 和 GET /mcp(SSE)。
 node tools/npm/bin/owl4agents.js mcp-config --client trae
 
@@ -182,11 +184,11 @@ Windows 上,优先使用 npm launcher 或 `gradlew run --args="..."`,避免直�
 .\gradlew.bat clean buildVerification
 .\gradlew.bat :modules:ontology-cli:shadowJar
 node tools/npm/test/launcher.test.js
-node tools/npm/bin/owl4agents.js --version    # → 0.8.4
+node tools/npm/bin/owl4agents.js --version    # → 0.9.1
 node tools/npm/bin/owl4agents.js --help
 ```
 
-绿色运行表示 `BUILD SUCCESSFUL`、npm launcher 输出 `Results: 29 passed, 0 failed`、`--version` 打印 `0.8.4`。完整的 Gradle 套件有 900+ 个单元测试(0 失败),覆盖 80 个策展 claim 的准确率门禁(80/80)—— 运行后可在 `build/reports/tests/test/index.html` 查看报告。
+绿色运行表示 `BUILD SUCCESSFUL`、npm launcher 输出 `Results: 29 passed, 0 failed`、`--version` 打印 `0.9.1`。完整的 Gradle 套件有 900+ 个单元测试(0 失败),覆盖 80 个策展 claim 的准确率门禁(80/80)—— 运行后可在 `build/reports/tests/test/index.html` 查看报告。
 
 ---
 

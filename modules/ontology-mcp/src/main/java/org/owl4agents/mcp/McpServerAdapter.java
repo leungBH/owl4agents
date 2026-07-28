@@ -308,7 +308,7 @@ public class McpServerAdapter {
  * {@link #loadVersion()} -> ?reads the jar manifest
  * {@code Implementation-Version} attribute (production shadowJar),
  * falls back to the {@code owl4agents.version} system property (gradle
- * run, gradle test, IDE runs), then to the literal {@code "0.9.0-dev"}.
+ * run, gradle test, IDE runs), then to the literal {@code "0.9.1-dev"}.
  * Single source of truth -> ?read by both stdio and HTTP transports
  * (including the `GET /mcp` SSE path).
  */
@@ -327,7 +327,7 @@ public class McpServerAdapter {
  *       {@code build.gradle.kts} {@code test} task). Works for
  *       {@code gradle run}, {@code gradle test}, and IDE runs where the
  *       manifest is not set.</li>
- *   <li>Literal {@code "0.9.0-dev"} fallback so the field is never null.</li>
+ *   <li>Literal {@code "0.9.1-dev"} fallback so the field is never null.</li>
  * </ol>
  */
  private static String loadVersion() {
@@ -348,7 +348,7 @@ public class McpServerAdapter {
  if (sysProp != null && !sysProp.isBlank()) {
  return sysProp;
  }
- return "0.9.0-dev";
+ return "0.9.1-dev";
  }
 
  /**

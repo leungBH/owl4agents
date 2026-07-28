@@ -2,19 +2,17 @@
 
 **Local OWL ontology runtime, reasoner integration, SPARQL query layer, and readonly MCP server for LLM agents.**
 
-`owl4agents` turns a folder of OWL/RDF files into a queryable local knowledge base. It loads ontologies, runs OWL reasoners (HermiT / ELK / Openllet), executes SPARQL, and exposes the result as a 56-tool readonly MCP server that any LLM agent (Claude Desktop, Trae IDE, Cursor, ...) can plug into without ever leaving your machine.
+`owl4agents` turns a folder of OWL/RDF files into a queryable local knowledge base. It loads ontologies, runs OWL reasoners (HermiT / ELK / Openllet), executes SPARQL, and exposes the result as a 64-tool readonly MCP server that any LLM agent (Claude Desktop, Trae IDE, Cursor, ...) can plug into without ever leaving your machine.
 
-> **v0.8** adds the MCP Streamable HTTP transport (SSE on `GET /mcp`, `Mcp-Session-Id` round-trip, content negotiation). The v0.7 plain-JSON HTTP transport is preserved as the no-regression baseline; stdio and wire-format parity are unchanged.
+> **v0.9.1** reorganizes the project structure to follow CONVENTIONS.md (merged `doc/` into `docs/`, moved scripts to `tools/`, cleaned up 84 root-level log files and junk directories). All file references in documentation and configs updated. See [CHANGELOG.md](CHANGELOG.md) §"0.9.1".
 >
-> **v0.8.4** (recommended) optimizes claim verification performance via 7 decisions: reasoner classification state tracking (skip redundant `precomputeInferences`), profile caching, per-request ontology single loading, `EntitySignatureCache` for O(1) entity signature lookups, asserted axiom indexing (SubClassOf + DisjointClasses), in-memory inferred hierarchy index, and `OntologyCache` 5s TTL window. Pizza hot path ~85ms → ~30-40ms. See [CHANGELOG.md](CHANGELOG.md) §"0.8.4".
+> **v0.9.0** fixes per-ontology `EntitySignatureCache` cross-ontology eviction (D1), precise cache invalidation on ontology reload (D2), and reserved predicate skip in entity detection (D3). Breaking change: `aggregateStatus` vocabulary `"verified"` → `"supported"` (D4); out-of-scope pre-check simplified to signature-only OR logic (D6). See [CHANGELOG.md](CHANGELOG.md) §"0.9.0".
+>
+> **v0.8.7** adds 8 new readonly MCP tools (SHACL validation, ToolCall contracts, Pipeline validation) bringing the total from 56 → 64, plus 3 new CLI commands (`shacl-validate`, `shacl-register`, `toolcall-validate`) bringing the total from 47 → 50. See [CHANGELOG.md](CHANGELOG.md) §"0.8.7".
 >
 > **v0.8.5** replaces structural proxy verdicts with exact consistency checks (`O ∪ {α} is inconsistent`). The 5-stage pipeline (scope → source consistency → entailment → exact consistency → verdict) produces semantically correct verdicts for all 15 test fixtures. Breaking change: `ClaimVerificationResult` schema v2 adds `executionStatus` (COMPLETED/TIMEOUT/ERROR) and makes `semanticVerdict` nullable. See [MIGRATION.md](docs/MIGRATION.md) for the v1 → v2 migration guide.
 >
 > **v0.8.5 Known Limitations:** (1) Java interrupt may not reliably stop reasoners on timeout — `future.cancel(true)` interrupts the thread, but HermiT/ELK may continue running in the background; future work may use an independent JVM worker for reliable cancellation. (2) Windows `parkNanos` has ~1ms timer resolution — sub-millisecond timeouts may not work reliably; use `Duration.ZERO` for immediate timeout. (3) ELK reasoner (OWL 2 EL) silently ignores OWL 2 DL constructs like `NegativeObjectPropertyAssertion` — always specify HermiT explicitly for OWL 2 DL ontologies.
->
-> **v0.8.3** fixes 7 semantic accuracy issues in claim verification (R1, R2, R4-R7: OOS pre-check, disjoint proxy, EquivalentClasses complex expressions, individual-level disjointness, property hierarchy, ObjectPropertyDomain complex domains; D7: ClaimType deserialization hardening) — resolving 9 error claims from the upgrade package. See [CHANGELOG.md](CHANGELOG.md) §"0.8.3".
->
-> **v0.8.1** fixes 5 claim-verification accuracy defects from v0.8.0 (ISSUE-01…ISSUE-05) — see [CHANGELOG.md](CHANGELOG.md) §"0.8.1". The 80-curated-claim accuracy gate moved from 75/80 → 80/80. Two new claim types (`different_individuals`, `object_property_subproperty`) and an optional `expression` field on `subject` / `object` for complex class expressions are now supported.
 
 ---
 
@@ -49,14 +47,14 @@ OWL / RDF / Turtle files
         ▼
   owl4agents (Java 22 + OWL API + HermiT/ELK/Openllet + Jena ARQ)
         │
-        ├── CLI  (47 commands: import, query, reason, verify-claim, …)
-        └── MCP  (56 readonly tools over stdio, HTTP, or SSE — no writes)
+        ├── CLI  (50 commands: import, query, reason, verify-claim, shacl-validate, …)
+        └── MCP  (64 readonly tools over stdio, HTTP, or SSE — no writes)
 ```
 
 - **Local-first**: all data in `~/.owl4agents/workspaces/<name>/`; no cloud, no network call.
 - **Reproducible**: reasoner outputs are written to disk (`reasoning-report.json`, `inferred-class-hierarchy.jsonl`, ...), so two runs on the same ontology produce the same artifacts.
 - **Auditable**: every MCP tool call is appended to `mcp-tool-calls.jsonl` (atomic JSON lines).
-- **Readonly-safe by default**: the MCP server runs with `--readonly`, exposing only the 56 read/verify tools. Mutations (import, delete) only happen via the CLI.
+- **Readonly-safe by default**: the MCP server runs with `--readonly`, exposing only the 64 read/verify tools. Mutations (import, delete) only happen via the CLI.
 - **Standard protocols**: MCP `2025-03-26` Streamable HTTP, JSON-RPC 2.0, SPARQL 1.1, OWL 2 (DL/EL/QL/RL).
 
 ---
@@ -134,7 +132,7 @@ init … --workspace <name>` and `import` commands to run it.
 +--------------------+                            |  ┌────────┐  ┌────────┐   |
         │                                         |  │ CLI    |  │ MCP    |   |
         │  $env:OWL4AGENTS_HOME = ...             |  │(Picocli|  │(JSON-  |   |
-        ▼                                         |│  │ 47    │  │ RPC +  │   │|
+        ▼                                         |│  │ 50    │  │ RPC +  │   |
 ~/.owl4agents/workspaces/                          |  │ cmds)  |  │ SSE)   |   |
 └── default/                                       |  └───┬────┘  └───┬────┘   |
     ├── catalog.json                                |      │           │       |
@@ -168,7 +166,7 @@ node tools/npm/bin/owl4agents.js mcp-config --client generic
 node tools/npm/bin/owl4agents.js mcp-config --client cursor
 
 # Trae IDE — produces a config whose URL ends in /mcp so Trae issues
-# both POST /mcp and GET /mcp (SSE) against the v0.8 server.
+# both POST /mcp and GET /mcp (SSE) against the v0.9 server.
 node tools/npm/bin/owl4agents.js mcp-config --client trae
 
 # Override the workspace root, e.g. point at D:\owl4agents-workspace.
@@ -210,11 +208,11 @@ On Windows, prefer the npm launcher or `gradlew run --args="..."` over `java -ja
 .\gradlew.bat clean buildVerification
 .\gradlew.bat :modules:ontology-cli:shadowJar
 node tools/npm/test/launcher.test.js
-node tools/npm/bin/owl4agents.js --version    # → 0.8.4
+node tools/npm/bin/owl4agents.js --version    # → 0.9.1
 node tools/npm/bin/owl4agents.js --help
 ```
 
-A green run reports `BUILD SUCCESSFUL`, `Results: 29 passed, 0 failed` for the npm launcher, and `--version` prints `0.8.4`. The full Gradle suite has 900+ unit tests (0 failures) covering the 80 curated claim accuracy gate (80/80) — see `build/reports/tests/test/index.html` after a run.
+A green run reports `BUILD SUCCESSFUL`, `Results: 29 passed, 0 failed` for the npm launcher, and `--version` prints `0.9.1`. The full Gradle suite has 900+ unit tests (0 failures) covering the 80 curated claim accuracy gate (80/80) — see `build/reports/tests/test/index.html` after a run.
 
 ---
 

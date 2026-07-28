@@ -39,7 +39,7 @@ Or use the Windows wrapper on Windows:
 {
   "mcpServers": {
     "owl4agents": {
-      "command": "bin\\owl4agents-mcp.cmd",
+      "command": "tools\\bin\\owl4agents-mcp.cmd",
       "cwd": "<your-owl4agents-repo-path>"
     }
   }
@@ -77,7 +77,7 @@ When the MCP server starts, it responds to the `initialize` request with:
   "capabilities": { "tools": {} },
   "serverInfo": {
     "name": "owl4agents",
-    "version": "0.8.4"
+    "version": "0.9.1"
   }
 }
 ```
@@ -168,7 +168,7 @@ into the JSON config. The IDE will open a long-lived `GET /mcp` SSE
 stream, send `initialize` to receive a `Mcp-Session-Id`, and use that
 id on every subsequent `POST /mcp` request. If the server is older
 than v0.8.0, Trae IDE will fail to connect with `SSE error: Non-200
-status code (405)` — upgrade to v0.8.0 or later to fix it (v0.8.4 is
+status code (405)` — upgrade to v0.8.0 or later to fix it (v0.9.1 is
 recommended for the latest claim-verification accuracy and performance improvements).
 
 ### v0.8.1 Claim Types
