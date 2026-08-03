@@ -605,10 +605,10 @@ curl.exe -sS -X POST http://127.0.0.1:8091/mcp `
 ```
 
 ```json
-{"jsonrpc":"2.0","id":1,"result":{"protocolVersion":"2025-06-18","capabilities":{"tools":{}},"serverInfo":{"name":"owl4agents","version":"0.8.4"}}}
+{"jsonrpc":"2.0","id":1,"result":{"protocolVersion":"2025-06-18","capabilities":{"tools":{}},"serverInfo":{"name":"owl4agents","version":"0.9.1"}}}
 ```
 
-`serverInfo.version` 应该是 `"0.8.4"`。会话是匿名的(`initialize` 不返回 `Mcp-Session-Id`);后续调用在 plain HTTP 传输上不需要 session id。
+`serverInfo.version` 应该是 `"0.9.1"`。会话是匿名的(`initialize` 不返回 `Mcp-Session-Id`);后续调用在 plain HTTP 传输上不需要 session id。
 
 ```powershell
 curl.exe -sS -X POST http://127.0.0.1:8091/mcp `
@@ -1493,7 +1493,7 @@ node tools/npm/bin/owl4agents.js smoke
 ### 4.45 `--version` / `--help`
 
 ```powershell
-node tools/npm/bin/owl4agents.js --version    # → 0.8.4
+node tools/npm/bin/owl4agents.js --version    # → 0.9.1
 node tools/npm/bin/owl4agents.js --help       # → 完整命令列表
 ```
 

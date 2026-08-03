@@ -606,10 +606,10 @@ curl.exe -sS -X POST http://127.0.0.1:8091/mcp `
 ```
 
 ```json
-{"jsonrpc":"2.0","id":1,"result":{"protocolVersion":"2025-06-18","capabilities":{"tools":{}},"serverInfo":{"name":"owl4agents","version":"0.8.4"}}}
+{"jsonrpc":"2.0","id":1,"result":{"protocolVersion":"2025-06-18","capabilities":{"tools":{}},"serverInfo":{"name":"owl4agents","version":"0.9.1"}}}
 ```
 
-The `serverInfo.version` should be `"0.8.4"`. The session is anonymous (no `Mcp-Session-Id` returned for `initialize`); subsequent calls don't need a session id on the plain HTTP transport.
+The `serverInfo.version` should be `"0.9.1"`. The session is anonymous (no `Mcp-Session-Id` returned for `initialize`); subsequent calls don't need a session id on the plain HTTP transport.
 
 ```powershell
 curl.exe -sS -X POST http://127.0.0.1:8091/mcp `
@@ -1494,7 +1494,7 @@ node tools/npm/bin/owl4agents.js smoke
 ### 4.45 `--version` / `--help`
 
 ```powershell
-node tools/npm/bin/owl4agents.js --version    # → 0.8.4
+node tools/npm/bin/owl4agents.js --version    # → 0.9.1
 node tools/npm/bin/owl4agents.js --help       # → full command list
 ```
 
