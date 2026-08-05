@@ -168,6 +168,10 @@ public enum ErrorCode {
     REASONER_EXPLANATION_UNSUPPORTED_FOR_LARGE_ONTOLOGY("REASONER_EXPLANATION_UNSUPPORTED_FOR_LARGE_ONTOLOGY",
         "Explanation requested on large ontology (classCount > 20K). Openllet would OOM. Disable explanation, use a smaller ontology, or explicitly specify reasoner=openllet (accepting OOM risk)."),
 
+    // v0.9.1 P1-1 fix: unknown tool name (previously mis-reported as READONLY_VIOLATION)
+    TOOL_NOT_FOUND("TOOL_NOT_FOUND",
+        "The requested tool name is not registered on this server."),
+
     // v0.8.7 mcp-write-tools error codes
     INVALID_IMPORT_ARGUMENTS("INVALID_IMPORT_ARGUMENTS",
         "ontology_import requires either content_base64 or file_path (at least one must be provided)."),
@@ -206,7 +210,31 @@ public enum ErrorCode {
 
     // v0.8.7 post-release fix: reasoner incompatible with ontology size
     REASONER_INCOMPATIBLE_WITH_ONTOLOGY_SIZE("REASONER_INCOMPATIBLE_WITH_ONTOLOGY_SIZE",
-        "The explicitly selected reasoner is incompatible with the ontology size (classCount exceeds the safe threshold). Use 'auto' or a different reasoner.");
+        "The explicitly selected reasoner is incompatible with the ontology size (classCount exceeds the safe threshold). Use 'auto' or a different reasoner."),
+
+    // v0.9.1 mcp-write-tools-expansion: transactional write tool error codes.
+    // ENTITY_NOT_FOUND (v0.1) is reused for ontology_edit_entity's missing-entity case.
+    COMMIT_SHACL_VIOLATION("COMMIT_SHACL_VIOLATION",
+        "Commit blocked by a SHACL severity=Violation result; the transaction remains open for repair or rollback."),
+    TRANSACTION_NOT_FOUND("TRANSACTION_NOT_FOUND",
+        "The transaction_id does not exist, was rolled back, or has expired. Returned uniformly so no existence or state is leaked."),
+    TRANSACTION_CONFLICT("TRANSACTION_CONFLICT",
+        "The committed state changed since the transaction was seeded; rollback and re-apply edits against the new committed state."),
+    VERSION_NOT_FOUND("VERSION_NOT_FOUND",
+        "The version_id does not exist for this ontology."),
+    MERGE_SOURCE_INVALID("MERGE_SOURCE_INVALID",
+        "The merge source is neither a registered ontology_id nor a valid file within the allowed roots."),
+    INVALID_AXIOM_ARGUMENTS("INVALID_AXIOM_ARGUMENTS",
+        "The axiom JSON is not a valid OWL axiom (missing axiomType or malformed structural fields)."),
+    AXIOM_NOT_FOUND("AXIOM_NOT_FOUND",
+        "The axiom to remove is not present in the transaction's staging ontology."),
+    CLASS_ALREADY_EXISTS("CLASS_ALREADY_EXISTS",
+        "The class IRI already exists in the transaction's staging ontology."),
+    INVALID_EDIT_ARGUMENTS("INVALID_EDIT_ARGUMENTS",
+        "At least one of label / comment / annotations must be provided to ontology_edit_entity."),
+    // v0.9.1 P1-3 fix: commit persistence failure (previously mis-reported as INVALID_ARGUMENTS)
+    COMMIT_PERSIST_FAILED("COMMIT_PERSIST_FAILED",
+        "Commit failed to persist the staging ontology to the workspace canonical file.");
 
     private final String code;
     private final String defaultMessage;

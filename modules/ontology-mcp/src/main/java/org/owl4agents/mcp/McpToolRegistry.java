@@ -92,16 +92,31 @@ public class McpToolRegistry {
         // v0.8.7 Pipeline readonly tools (toolcall-validation-pipeline spec "Pipeline MCP Tools")
         "ontology_validate_tool_call",
         "ontology_explain_tool_call",
-        "ontology_preview_tool_call_effects"
+        "ontology_preview_tool_call_effects",
+        // v0.9.1 mcp-write-tools-expansion: 3 new readonly tools registered in
+        // BOTH readonly and write modes (observe committed state only).
+        "ontology_diff",
+        "ontology_version_history",
+        "ontology_audit_log"
     );
 
     /**
-     * v0.8.7 mcp-write-tools: write tools registered by the mcp-write-tools
-     * capability. Currently only ontology_import. In write mode
-     * (--readonly=false) these are added to the readonly set.
+     * v0.8.7 mcp-write-tools + v0.9.1 expansion: write tools registered by
+     * the mcp-write-tools capability. In write mode (--readonly=false) these
+     * are added to the readonly set. v0.9.1 adds 8 transactional write tools
+     * alongside the v0.8.7 ontology_import.
      */
     private static final List<String> WRITE_TOOLS = List.of(
-        "ontology_import"
+        "ontology_import",
+        // v0.9.1 transactional write tools
+        "ontology_add_axiom",
+        "ontology_remove_axiom",
+        "ontology_edit_entity",
+        "ontology_create_class",
+        "ontology_merge",
+        "ontology_commit",
+        "ontology_rollback",
+        "ontology_rollback_to_version"
     );
 
     /**
@@ -117,6 +132,16 @@ public class McpToolRegistry {
      */
     public boolean isWriteTool(String toolName) {
         return WRITE_TOOLS.contains(toolName);
+    }
+
+    /**
+     * v0.9.1 P1-1 fix: Check if a tool name is registered in EITHER the
+     * readonly or the write tool set. Used by {@code handleToolCall} to
+     * distinguish "unknown tool" (TOOL_NOT_FOUND) from "valid write tool
+     * called in readonly mode" (READONLY_VIOLATION).
+     */
+    public boolean isKnownTool(String toolName) {
+        return isReadonlyTool(toolName) || isWriteTool(toolName);
     }
 
     /**
@@ -156,6 +181,84 @@ public class McpToolRegistry {
         importSchema.put("overwrite", Map.of("type", "boolean", "description", "If true and ontology_id exists, replace the existing entry (default false)", "default", false));
         schemas.add(toolSchema("ontology_import", "Import an OWL/RDF ontology into the workspace catalog (write tool, requires --readonly=false)",
             importSchema));
+
+        // v0.9.1 mcp-write-tools-expansion: 8 transactional write tools.
+        // All accept a caller-supplied transaction_id (UUID); lazy creation
+        // on first write. Staged changes are invisible to readonly tools
+        // until ontology_commit.
+        Map<String, Object> addAxiomSchema = new LinkedHashMap<>();
+        addAxiomSchema.put("ontology_id", stringParam("Target ontology ID"));
+        addAxiomSchema.put("transaction_id", stringParam("Caller-supplied UUID; lazily created on first use"));
+        addAxiomSchema.put("axiom", objectParam("Single OWL axiom JSON (axiomType + structural fields)"));
+        addAxiomSchema.put("author", stringParam("Optional caller identity for audit (default 'mcp')"));
+        schemas.add(toolSchema("ontology_add_axiom",
+            "Stage a single OWL axiom onto a transaction without modifying the committed ontology (write tool).",
+            addAxiomSchema));
+
+        Map<String, Object> removeAxiomSchema = new LinkedHashMap<>();
+        removeAxiomSchema.put("ontology_id", stringParam("Target ontology ID"));
+        removeAxiomSchema.put("transaction_id", stringParam("Caller-supplied UUID"));
+        removeAxiomSchema.put("axiom", objectParam("The OWL axiom JSON to remove from the staging ontology"));
+        removeAxiomSchema.put("author", stringParam("Optional caller identity for audit (default 'mcp')"));
+        schemas.add(toolSchema("ontology_remove_axiom",
+            "Remove a single OWL axiom from a transaction's staging ontology (write tool). Returns AXIOM_NOT_FOUND if absent.",
+            removeAxiomSchema));
+
+        Map<String, Object> editEntitySchema = new LinkedHashMap<>();
+        editEntitySchema.put("ontology_id", stringParam("Target ontology ID"));
+        editEntitySchema.put("transaction_id", stringParam("Caller-supplied UUID"));
+        editEntitySchema.put("entity", stringParam("Entity IRI to edit"));
+        editEntitySchema.put("label", stringParam("Optional new rdfs:label literal"));
+        editEntitySchema.put("comment", stringParam("Optional new rdfs:comment literal"));
+        editEntitySchema.put("annotations", objectParam("Optional map of annotation IRI to literal value"));
+        editEntitySchema.put("author", stringParam("Optional caller identity for audit (default 'mcp')"));
+        schemas.add(toolSchema("ontology_edit_entity",
+            "Edit an entity's label/comment/annotations within a transaction (write tool). At least one edit field required.",
+            editEntitySchema));
+
+        Map<String, Object> createClassSchema = new LinkedHashMap<>();
+        createClassSchema.put("ontology_id", stringParam("Target ontology ID"));
+        createClassSchema.put("transaction_id", stringParam("Caller-supplied UUID"));
+        createClassSchema.put("class", stringParam("Class IRI to declare"));
+        createClassSchema.put("super", objectParam("Optional list of superclass IRIs (default owl:Thing)"));
+        createClassSchema.put("author", stringParam("Optional caller identity for audit (default 'mcp')"));
+        schemas.add(toolSchema("ontology_create_class",
+            "Declare a new class with optional superclasses within a transaction (write tool). Returns CLASS_ALREADY_EXISTS if present.",
+            createClassSchema));
+
+        Map<String, Object> mergeSchema = new LinkedHashMap<>();
+        mergeSchema.put("ontology_id", stringParam("Target ontology ID"));
+        mergeSchema.put("transaction_id", stringParam("Caller-supplied UUID"));
+        mergeSchema.put("source", stringParam("Registered ontology_id or server-local file_path to merge from"));
+        mergeSchema.put("author", stringParam("Optional caller identity for audit (default 'mcp')"));
+        schemas.add(toolSchema("ontology_merge",
+            "Stage all axioms from a source ontology into a target transaction (write tool). Source subject to path traversal protection.",
+            mergeSchema));
+
+        Map<String, Object> commitSchema = new LinkedHashMap<>();
+        commitSchema.put("ontology_id", stringParam("Target ontology ID"));
+        commitSchema.put("transaction_id", stringParam("Caller-supplied UUID"));
+        commitSchema.put("message", stringParam("Optional commit message recorded in version history"));
+        commitSchema.put("author", stringParam("Optional caller identity for audit (default 'mcp')"));
+        schemas.add(toolSchema("ontology_commit",
+            "Validate staged changes with SHACL (operator-registered shapes), persist on success, create a version snapshot, append audit. Violation keeps the transaction open.",
+            commitSchema));
+
+        Map<String, Object> rollbackSchema = new LinkedHashMap<>();
+        rollbackSchema.put("ontology_id", stringParam("Target ontology ID"));
+        rollbackSchema.put("transaction_id", stringParam("Caller-supplied UUID"));
+        schemas.add(toolSchema("ontology_rollback",
+            "Discard all staged changes in a transaction and release the staging ontology (write tool).",
+            rollbackSchema));
+
+        Map<String, Object> rollbackToVersionSchema = new LinkedHashMap<>();
+        rollbackToVersionSchema.put("ontology_id", stringParam("Target ontology ID"));
+        rollbackToVersionSchema.put("version_id", stringParam("Target VersionSnapshot ID to restore"));
+        rollbackToVersionSchema.put("author", stringParam("Optional caller identity for audit (default 'mcp')"));
+        schemas.add(toolSchema("ontology_rollback_to_version",
+            "Restore the committed ontology to a prior version snapshot by creating a NEW version (history is append-only). Returns VERSION_NOT_FOUND if absent.",
+            rollbackToVersionSchema));
+
         return schemas;
     }
 
@@ -392,6 +495,33 @@ public class McpToolRegistry {
             "post-state as Turtle, and release the overlay. The workspace ontology is never modified. " +
             "Readonly.",
             previewToolCallEffectsSchema));
+
+        // v0.9.1 mcp-write-tools-expansion: 3 new readonly tools registered in
+        // BOTH readonly and write modes (observe committed state only).
+        Map<String, Object> diffSchema = new LinkedHashMap<>();
+        diffSchema.put("ontology_id", stringParam("Ontology ID"));
+        diffSchema.put("from", stringParam("Diff source: 'committed' (default) or a versionId or 'transaction:<id>'"));
+        diffSchema.put("to", stringParam("Diff target: 'committed' or a versionId or 'transaction:<id>'"));
+        schemas.add(toolSchema("ontology_diff",
+            "Structural diff (added/removed axiom lists) between two committed versions, or between committed state and a transaction's staged state (readonly; transaction:<id> requires holding that id).",
+            diffSchema));
+
+        Map<String, Object> versionHistorySchema = new LinkedHashMap<>();
+        versionHistorySchema.put("ontology_id", stringParam("Ontology ID"));
+        versionHistorySchema.put("limit", intParam("Max versions to return (capped at 200)", 50));
+        schemas.add(toolSchema("ontology_version_history",
+            "List version snapshots for an ontology (versionId, createdAt, author, axiomCount, entityCount, contentChecksum, parentVersionId, changeSummary) newest-first (readonly).",
+            versionHistorySchema));
+
+        Map<String, Object> auditLogSchema = new LinkedHashMap<>();
+        auditLogSchema.put("ontology_id", stringParam("Ontology ID"));
+        auditLogSchema.put("from", stringParam("Optional ISO-8601 lower timestamp bound (inclusive)"));
+        auditLogSchema.put("to", stringParam("Optional ISO-8601 upper timestamp bound (inclusive)"));
+        auditLogSchema.put("op", stringParam("Optional operation filter (add_axiom, commit, rollback, ...)"));
+        auditLogSchema.put("transaction", stringParam("Optional transaction_id filter"));
+        schemas.add(toolSchema("ontology_audit_log",
+            "Return audit entries (who/when/what/before/after) filtered by time range, operation, and transaction (readonly). Reads current + rotated audit files.",
+            auditLogSchema));
 
         return schemas;
     }

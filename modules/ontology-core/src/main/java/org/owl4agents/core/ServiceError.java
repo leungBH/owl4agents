@@ -60,6 +60,17 @@ public record ServiceError(
             Map.of("operationType", operationType, "mode", "readonly"));
     }
 
+    /**
+     * v0.9.1 P1-1 fix: construct a TOOL_NOT_FOUND error for an unregistered
+     * tool name. Replaces the prior practice of returning READONLY_VIOLATION
+     * for unknown tools, which was misleading.
+     */
+    public static ServiceError toolNotFound(String toolName) {
+        return new ServiceError(ErrorCode.TOOL_NOT_FOUND,
+            "Tool '" + toolName + "' is not registered on this server.",
+            Map.of("toolName", toolName));
+    }
+
     public static ServiceError fileAccessDenied(String requestedPath, String reason) {
         return new ServiceError(ErrorCode.FILE_ACCESS_DENIED,
             "File path '" + requestedPath + "' is not accessible: " + reason,

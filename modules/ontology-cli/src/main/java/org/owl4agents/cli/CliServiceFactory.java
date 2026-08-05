@@ -70,6 +70,13 @@ public class CliServiceFactory {
     private ShapeRegistry shapeRegistry;
     private ShaclValidationService shaclValidationService;
     private ToolContractRegistry toolContractRegistry;
+    // v0.9.1 mcp-write-tools-expansion: lazy-initialized services for the
+    // 8 transactional write tools + 3 readonly observation tools.
+    private org.owl4agents.reasoner.TemporaryOntologyFactory temporaryOntologyFactory;
+    private org.owl4agents.reasoner.write.VersionHistoryStore versionHistoryStore;
+    private org.owl4agents.reasoner.write.AuditLog auditLog;
+    private org.owl4agents.reasoner.write.WriteTransactionService writeTransactionService;
+    private org.owl4agents.reasoner.write.OntologyEditService ontologyEditService;
 
     public CliServiceFactory(String workspaceName, String homeDirectory) {
         this.workspaceName = workspaceName;
@@ -342,17 +349,24 @@ public class CliServiceFactory {
 
     /**
      * Get the shared {@link ShapeRegistry} instance (lazy-initialized).
-     * Used by the Pipeline CLI for stage 7 SHACL validation.
+     * Used by the Pipeline CLI for stage 7 SHACL validation and by v0.9.1
+     * SHACL-on-commit (via {@link org.owl4agents.mcp.WriteToolsHandler}).
+     *
+     * <p>Resolves the shapes directory from the {@link HomeDirectoryResolver}
+     * so that {@code owl4agents.home} system property / {@code OWL4AGENTS_HOME}
+     * env var are respected. This enables test isolation (parity tests set
+     * {@code owl4agents.home} to a temp directory).</p>
      */
     public ShapeRegistry getShapeRegistry() {
         if (shapeRegistry == null) {
-            shapeRegistry = new FileShapeRegistry();
+            Path shapesDir = getHomeResolver().resolveHomeDirectory()
+                .resolve(".owl4agents").resolve("shapes");
+            shapeRegistry = new FileShapeRegistry(shapesDir.resolve("registry.json"));
             // Issue #4: seed a sample SHACL shape file on first startup
             // so new users have a working starting point. The seeder does
             // NOT auto-register the shape set; the user must run
             // shacl-register to register it.
-            SampleShapeSeeder.seedIfEmpty(
-                Path.of(System.getProperty("user.home"), ".owl4agents", "shapes"));
+            SampleShapeSeeder.seedIfEmpty(shapesDir);
         }
         return shapeRegistry;
     }
@@ -386,6 +400,80 @@ public class CliServiceFactory {
             toolContractRegistry.reloadAll();
         }
         return toolContractRegistry;
+    }
+
+    // ── v0.9.1 mcp-write-tools-expansion CLI service accessors ──
+
+    /**
+     * v0.9.1: Get the shared {@link org.owl4agents.reasoner.TemporaryOntologyFactory}
+     * instance (lazy-initialized). Used by {@link #getWriteTransactionService()}
+     * to create isolated staging ontologies per transaction.
+     */
+    public org.owl4agents.reasoner.TemporaryOntologyFactory getTemporaryOntologyFactory() {
+        if (temporaryOntologyFactory == null) {
+            temporaryOntologyFactory = new org.owl4agents.reasoner.TemporaryOntologyFactory();
+        }
+        return temporaryOntologyFactory;
+    }
+
+    /**
+     * v0.9.1: Get the shared {@link org.owl4agents.reasoner.write.VersionHistoryStore}
+     * instance (lazy-initialized). Storage root is
+     * {@code <workspace>/ontologies/<id>/versions/}.
+     */
+    public org.owl4agents.reasoner.write.VersionHistoryStore getVersionHistoryStore() {
+        if (versionHistoryStore == null) {
+            String workspaceBasePath = getHomeResolver().resolveHomeDirectory()
+                .resolve("workspaces").toString();
+            versionHistoryStore = new org.owl4agents.reasoner.write.VersionHistoryStore(
+                workspaceBasePath, workspaceName);
+        }
+        return versionHistoryStore;
+    }
+
+    /**
+     * v0.9.1: Get the shared {@link org.owl4agents.reasoner.write.AuditLog}
+     * instance (lazy-initialized). Storage root is
+     * {@code <workspace>/ontologies/<id>/audit.jsonl}.
+     */
+    public org.owl4agents.reasoner.write.AuditLog getAuditLog() {
+        if (auditLog == null) {
+            String workspaceBasePath = getHomeResolver().resolveHomeDirectory()
+                .resolve("workspaces").toString();
+            auditLog = new org.owl4agents.reasoner.write.AuditLog(workspaceBasePath, workspaceName);
+        }
+        return auditLog;
+    }
+
+    /**
+     * v0.9.1: Get the shared {@link org.owl4agents.reasoner.write.WriteTransactionService}
+     * instance (lazy-initialized). Wired with the shared {@link OntologyCache},
+     * a fresh {@link org.owl4agents.reasoner.TemporaryOntologyFactory}, and the
+     * shared {@link #getVersionHistoryStore()} / {@link #getAuditLog()}.
+     */
+    public org.owl4agents.reasoner.write.WriteTransactionService getWriteTransactionService() {
+        if (writeTransactionService == null) {
+            writeTransactionService = new org.owl4agents.reasoner.write.WriteTransactionService(
+                getOntologyCache(), getTemporaryOntologyFactory(),
+                getVersionHistoryStore(), getAuditLog());
+        }
+        return writeTransactionService;
+    }
+
+    /**
+     * v0.9.1: Get the shared {@link org.owl4agents.reasoner.write.OntologyEditService}
+     * instance (lazy-initialized). Wired with the shared
+     * {@link #getWriteTransactionService()}, {@link #getCatalogStore()},
+     * {@link #getHomeResolver()}, and the workspace id. {@code allowedRootsCsv}
+     * is null (defaults to the workspace {@code imports/} subdirectory).
+     */
+    public org.owl4agents.reasoner.write.OntologyEditService getOntologyEditService() {
+        if (ontologyEditService == null) {
+            ontologyEditService = new org.owl4agents.reasoner.write.OntologyEditService(
+                getWriteTransactionService(), getCatalogStore(), getHomeResolver(),
+                getWorkspaceId(), null);
+        }
+        return ontologyEditService;
     }
 
     /**

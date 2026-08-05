@@ -62,6 +62,10 @@ public class McpServerAdapter {
  // v0.8.7 mcp-write-tools: readonly flag + write tool handler.
  private final boolean readonly;
  private final OntologyImportToolHandler importHandler;
+ // v0.9.1 mcp-write-tools-expansion: saved constructor parameter for the
+ // lazy-init writeToolsHandler() (see writeToolsHandler()). Marked final,
+ // set once in the constructor body.
+ private final String allowedImportRootsCsvField;
 
  // v0.7.0: Services are eagerly initialized in the constructor in dependency
  // order (reasonerService -> ?consistencyAnalysisService -> ?semanticDeepeningService
@@ -97,6 +101,13 @@ public class McpServerAdapter {
     // toolContractRegistry(), overlayService(), shaclService(), and the
     // eagerly-initialized claimWorkflowService field.
     private org.owl4agents.toolcall.pipeline.PipelineMcpTools pipelineMcpTools;
+    // v0.9.1 mcp-write-tools-expansion: lazy-initialized WriteToolsHandler
+    // (8 transactional write tools + 3 readonly observation tools). The
+    // handler works in BOTH readonly and write modes because the 3 readonly
+    // observation tools (diff / version_history / audit_log) only inspect
+    // committed state. The 8 transactional write tools are gated by the
+    // outer `readonly` flag in handleToolCall.
+    private WriteToolsHandler writeToolsHandler;
 
  /**
  * Accessors for the 7 eagerly-initialized services. These are package-private
@@ -147,6 +158,10 @@ public class McpServerAdapter {
  this.toolRegistry = new McpToolRegistry();
  this.callLogger = new McpToolCallLogger(logFilePath);
  this.readonly = readonly;
+ // v0.9.1 mcp-write-tools-expansion: save the allowed-roots CSV so the
+ // lazy-init writeToolsHandler() can reuse the same configuration as
+ // importHandler (the v0.8.7 import handler captures it directly).
+ this.allowedImportRootsCsvField = allowedImportRootsCsv;
 
  // Initialize service layer
  String homeDir = (String) serviceContext.get("homeDir");
@@ -233,13 +248,41 @@ public class McpServerAdapter {
  Instant timestamp = Instant.now();
  String ontologyId = (String) arguments.getOrDefault("ontology_id", null);
 
- // v0.8.7 mcp-write-tools: route write tools through the dedicated handler
- // when in write mode. In readonly mode, write tools fall through to the
- // readonly rejection below — preserving v0.8.6 behavior for any
- // unsanctioned write attempt.
+ // v0.8.7 mcp-write-tools + v0.9.1 mcp-write-tools-expansion: route write
+ // tools through the dedicated handler when in write mode. In readonly mode,
+ // write tools fall through to the readonly rejection below — preserving
+ // v0.8.6 behavior for any unsanctioned write attempt.
+ //
+ // v0.9.1 split: ontology_import (auto-persist, non-transactional) goes to
+ // importHandler; the 8 transactional write tools (add_axiom, remove_axiom,
+ // edit_entity, create_class, merge, commit, rollback, rollback_to_version)
+ // go to writeToolsHandler().
  if (toolRegistry.isWriteTool(toolName)) {
-     if (!readonly && importHandler != null) {
-         Map<String, Object> writeResult = importHandler.execute(arguments);
+     if (!readonly) {
+         Map<String, Object> writeResult;
+         if ("ontology_import".equals(toolName)) {
+             if (importHandler == null) {
+                 ServiceError missing = ServiceError.readonlyViolation(toolName);
+                 callLogger.logCall(timestamp, toolName, ontologyId, "rejected", missing.code().code());
+                 return errorResponse(missing);
+             }
+             writeResult = importHandler.execute(arguments);
+             // v0.9.1 Section 6.4: record import audit + baseline VersionSnapshot.
+             // The hook swallows its own errors so it can never break the
+             // import flow. Only invoked when writeToolsHandler is available
+             // (lazy-inits on first call).
+             try {
+                 boolean importOk = !"error".equals(writeResult.get("status"));
+                 String detail = importOk ? null
+                     : ((Map<String, Object>) writeResult.get("error")).get("message").toString();
+                 writeToolsHandler().recordImportOutcome(ontologyId, importOk, detail, "mcp");
+             } catch (Exception ignored) {
+                 // Audit hook failure must not break the import response.
+             }
+         } else {
+             // v0.9.1 transactional write tool — dispatch to WriteToolsHandler.
+             writeResult = writeToolsHandler().execute(toolName, arguments);
+         }
          String writeStatus = writeResult.containsKey("error") ? "error" : "success";
          String writeErrorCode = writeResult.containsKey("error")
              ? ((Map<String, Object>) writeResult.get("error")).get("code").toString()
@@ -247,20 +290,27 @@ public class McpServerAdapter {
          callLogger.logCall(timestamp, toolName, ontologyId, writeStatus, writeErrorCode);
          return writeResult;
      }
-     // readonly mode or handler missing: reject as READONLY_VIOLATION.
+     // readonly mode: reject as READONLY_VIOLATION.
      ServiceError error = ServiceError.readonlyViolation(toolName);
      callLogger.logCall(timestamp, toolName, ontologyId, "rejected", error.code().code());
      return errorResponse(error);
  }
 
- // Check if the tool is in the v0.1 readonly tool set
- if (!toolRegistry.isReadonlyTool(toolName)) {
- ServiceError error = ServiceError.readonlyViolation(toolName);
+ // v0.9.1 P1-1 fix: distinguish "unknown tool name" (TOOL_NOT_FOUND) from
+ // "valid write tool called in readonly mode" (READONLY_VIOLATION). The
+ // prior code returned READONLY_VIOLATION for ANY tool name absent from the
+ // readonly set, mis-leading clients that typo'd a tool name or called a
+ // non-existent tool. isKnownTool() returns true iff the name appears in
+ // EITHER the readonly or write tool set.
+ if (!toolRegistry.isKnownTool(toolName)) {
+ ServiceError error = ServiceError.toolNotFound(toolName);
  callLogger.logCall(timestamp, toolName, ontologyId, "rejected", error.code().code());
  return errorResponse(error);
  }
 
- // Execute the tool call through the shared service
+ // At this point the tool IS registered. Because write tools were already
+ // routed above, only readonly tools reach here — execute through the
+ // shared service.
  Map<String, Object> result = executeReadonlyTool(toolName, arguments);
  String resultStatus = result.containsKey("error") ? "error" : "success";
  String errorCode = result.containsKey("error") ?
@@ -551,6 +601,13 @@ public class McpServerAdapter {
         case "ontology_validate_tool_call" -> { return executeValidateToolCall(arguments); }
         case "ontology_explain_tool_call" -> { return executeExplainToolCall(arguments); }
         case "ontology_preview_tool_call_effects" -> { return executePreviewToolCallEffects(arguments); }
+        // v0.9.1 mcp-write-tools-expansion: 3 readonly observation tools.
+        // These observe committed state only and run in BOTH readonly and
+        // write modes; they share the WriteToolsHandler infrastructure but
+        // never mutate state.
+        case "ontology_diff" -> { return writeToolsHandler().execute(toolName, arguments); }
+        case "ontology_version_history" -> { return writeToolsHandler().execute(toolName, arguments); }
+        case "ontology_audit_log" -> { return writeToolsHandler().execute(toolName, arguments); }
         default -> { return errorResponse(ServiceError.readonlyViolation(toolName)); }
     }
     }
@@ -2628,6 +2685,60 @@ public class McpServerAdapter {
                                     org.owl4agents.shacl.ShaclValidationService service) {
      this.shapeRegistry = registry;
      this.shaclValidationService = service;
+ }
+
+ /**
+  * v0.9.1 mcp-write-tools-expansion: lazy-initialize the WriteToolsHandler
+  * and its 4 backing services (WriteTransactionService, OntologyEditService,
+  * VersionHistoryStore, AuditLog) on first use. The handler works in BOTH
+  * readonly and write modes — its 3 readonly observation tools
+  * (ontology_diff / ontology_version_history / ontology_audit_log) are
+  * registered in READONLY_TOOLS and dispatch here from
+  * {@link #executeReadonlyTool}. The 8 transactional write tools are
+  * gated by the outer {@code readonly} flag in {@link #handleToolCall}.
+  *
+  * <p>Lifecycle: services live for the lifetime of the adapter. The
+  * WriteTransactionService starts its own TTL sweep scheduler and JVM
+  * shutdown hook — both daemon, so they don't block JVM exit.</p>
+  */
+ private synchronized WriteToolsHandler writeToolsHandler() {
+     if (writeToolsHandler == null) {
+         String workspaceBasePath = homeResolver.resolveHomeDirectory()
+             .resolve("workspaces").toString();
+         String workspaceName = "default";
+         WorkspaceId workspaceId = new WorkspaceId(workspaceName);
+
+         org.owl4agents.reasoner.TemporaryOntologyFactory tempFactory =
+             new org.owl4agents.reasoner.TemporaryOntologyFactory();
+         org.owl4agents.reasoner.write.VersionHistoryStore versionHistoryStore =
+             new org.owl4agents.reasoner.write.VersionHistoryStore(workspaceBasePath, workspaceName);
+         org.owl4agents.reasoner.write.AuditLog auditLog =
+             new org.owl4agents.reasoner.write.AuditLog(workspaceBasePath, workspaceName);
+         org.owl4agents.reasoner.write.WriteTransactionService writeTransactionService =
+             new org.owl4agents.reasoner.write.WriteTransactionService(
+                 ontologyCache, tempFactory, versionHistoryStore, auditLog);
+         org.owl4agents.reasoner.write.OntologyEditService editService =
+             new org.owl4agents.reasoner.write.OntologyEditService(
+                 writeTransactionService, catalogStore, homeResolver,
+                 workspaceId, allowedImportRootsCsvField);
+         // shaclService() and shapeRegistry are lazily initialized together
+         // by shaclService(); call it once to ensure both fields are set,
+         // then pass them to WriteToolsHandler.
+         org.owl4agents.shacl.ShaclValidationService shacl = shaclService();
+         writeToolsHandler = new WriteToolsHandler(
+             writeTransactionService, editService, versionHistoryStore, auditLog,
+             shacl, shapeRegistry, ontologyCache, catalogStore,
+             homeResolver, workspaceId, allowedImportRootsCsvField);
+     }
+     return writeToolsHandler;
+ }
+
+ /**
+  * v0.9.1: package-private accessor for tests to inject a fully-configured
+  * WriteToolsHandler (bypassing the lazy-init path).
+  */
+ synchronized void setWriteToolsHandler(WriteToolsHandler handler) {
+     this.writeToolsHandler = handler;
  }
 
  /**

@@ -75,7 +75,19 @@ import java.util.concurrent.Callable;
         ShaclValidateCommand.class,
         ShaclRegisterCommand.class,
         // v0.8.7 Pipeline CLI: toolcall-validate command
-        ToolCallValidateCommand.class
+        ToolCallValidateCommand.class,
+        // v0.9.1 mcp-write-tools-expansion: 8 transactional write + 3 readonly commands
+        AddAxiomCommand.class,
+        RemoveAxiomCommand.class,
+        EditEntityCommand.class,
+        CreateClassCommand.class,
+        MergeCommand.class,
+        CommitCommand.class,
+        RollbackCommand.class,
+        RollbackToVersionCommand.class,
+        DiffCommand.class,
+        VersionHistoryCommand.class,
+        AuditLogCommand.class
     }
 )
 public class Owl4AgentsCli implements Callable<Integer> {

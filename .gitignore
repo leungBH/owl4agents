@@ -67,6 +67,13 @@ Thumbs.db
 /results/
 /config.yaml
 
+# v0.9.1 write-tools-expansion: version snapshots and audit logs
+# (defense-in-depth even when the parent workspace dir is already ignored)
+ontologies/*/versions/*.owx
+ontologies/*/versions/versions.json
+ontologies/*/audit.jsonl
+ontologies/*/audit.*.jsonl
+
 # Smoke test temporary workspaces
 *-smoke/
 v*-smoke-*/

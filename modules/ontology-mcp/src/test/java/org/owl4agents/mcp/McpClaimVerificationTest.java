@@ -220,7 +220,7 @@ class McpClaimVerificationTest {
         }
 
         @Test
-        @DisplayName("Unknown tool names are rejected as readonly violations")
+        @DisplayName("Unknown tool names are rejected as TOOL_NOT_FOUND (v0.9.1 P1-1 fix)")
         void unknownToolRejected() {
             McpServerAdapter adapter = createAdapter();
             Map<String, Object> args = new HashMap<>();
@@ -229,7 +229,9 @@ class McpClaimVerificationTest {
             Map<String, Object> result = adapter.handleToolCall("ontology_write_claim", args);
             assertTrue(result.containsKey("error"));
             Map<String, Object> error = (Map<String, Object>) result.get("error");
-            assertEquals("READONLY_VIOLATION", error.get("code").toString());
+            // v0.9.1 P1-1: unknown tool names now return TOOL_NOT_FOUND
+            // instead of the misleading READONLY_VIOLATION.
+            assertEquals("TOOL_NOT_FOUND", error.get("code").toString());
         }
 
         @Test

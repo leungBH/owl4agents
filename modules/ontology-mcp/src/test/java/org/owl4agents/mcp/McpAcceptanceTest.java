@@ -93,6 +93,10 @@ class McpAcceptanceTest {
             Map<String, Object> result = adapter.handleToolCall("unknown_tool", Map.of());
 
             assertEquals("error", result.get("status"));
+            // v0.9.1 P1-1 fix: unknown tool names must return TOOL_NOT_FOUND,
+            // not the misleading READONLY_VIOLATION that was returned prior to the fix.
+            Map<String, Object> error = (Map<String, Object>) result.get("error");
+            assertEquals(ErrorCode.TOOL_NOT_FOUND.code(), error.get("code"));
         }
     }
 

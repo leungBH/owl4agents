@@ -22,16 +22,16 @@ import static org.junit.jupiter.api.Assertions.*;
  * the count to 64. The count is a regression marker tracked by the CI
  * version-alignment job.</p>
  */
-@DisplayName("TC-17 McpToolRegistry readonly tool count is 64 (v0.8.7)")
+@DisplayName("TC-17 McpToolRegistry readonly tool count is 67 (v0.9.1)")
 class McpToolRegistryTest {
 
     @Test
-    @DisplayName("listToolSchemas() returns exactly 64 readonly tools (v0.8.7)")
-    void toolCountRemains64() {
+    @DisplayName("listToolSchemas() returns exactly 67 readonly tools (v0.9.1: 64 v0.8.7 + 3 write-expansion readonly)")
+    void toolCountRemains67() {
         McpToolRegistry registry = new McpToolRegistry();
         List<Map<String, Object>> schemas = registry.listToolSchemas();
-        assertEquals(64, schemas.size(),
-            "Readonly tool count must be 64 in v0.8.7 (56 v0.8.6 baseline + 3 SHACL + 2 ToolCall + 3 Pipeline tools)");
+        assertEquals(67, schemas.size(),
+            "Readonly tool count must be 67 in v0.9.1 (64 v0.8.7 baseline + 3 write-expansion readonly: diff/version_history/audit_log)");
     }
 
     @Test
